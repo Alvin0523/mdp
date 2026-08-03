@@ -1,0 +1,6 @@
+[submodule "mdp_ros"]
+	path = mdp_ros
+	url = git@github.com:Alvin0523/mdp_ros.git
+[submodule "mdp_stm32"]
+	path = mdp_stm32
+	url = git@github.com:Alvin0523/mdp_stm32.git
