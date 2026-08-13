@@ -1,0 +1,19 @@
+[workspace]
+authors = ["Wei Ming <alvinwm0523@gmail.com>"]
+channels = ["conda-forge"]
+name = "mdp"
+platforms = ["linux-64","osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+serve = "zensical serve"
+build = "zensical build"
+clone-ros = "git submodule update --init mdp_ros"
+clone-stm32 = "git submodule update --init mdp_stm32"
+clone-all = "git submodule update --init --recursive"
+
+[dependencies]
+python = "=3.12"
+
+[pypi-dependencies]
+zensical = "*"
