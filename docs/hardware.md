@@ -16,7 +16,7 @@ This page documents the verified hardware components and physical specifications
 | **Steering Servo** | Model `HWZ020` (4.8V – 7.4V) | Front Ackermann steering servo (`left_joint`, `right_joint`). **Stall Torque:** 1.96 N·m (20 kg·cm). **Max Speed:** 6.54 rad/s (0.16s / 60°). **Mechanical Limits:** $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) |
 | **Motor Driver** | Dual AT8236 H-Bridge | Board-integrated motor driver (`app/src/motor.c`) |
 | **Onboard SBC (Host)** | **Raspberry Pi 4 Model B (4GB)** | Runs ROS2 Jazzy + micro-ROS Agent, connected to STM32 via USB Type-C |
-| **Camera** | **RPi Camera Module V2** | Flexi cable connected to RPi4B CSI port |
+| **Camera** | **RPi Camera Module V2** | Sony IMX219 8MP sensor connected via CSI flexi cable. Driver: `ros-jazzy-v4l2-camera` (`v4l2_camera_node` publishing `/image_raw`) + `ros-jazzy-compressed-image-transport` (`/image_raw/compressed` for streaming) + `ros-jazzy-cv-bridge` |
 | **IR Range Sensors** | **Sharp GP2Y0A21YK** (×2) | Analog IR distance sensors with 3D printed brackets |
 | **Ultrasonic Sensor** | **HC-SR04** (×1) | Distance measurement sensor |
 | **IMU Sensor** | **ICM-20948** (Onboard) | 9-DOF Motion Sensor via `I2C2` (`PB10`/`PB11`) |
@@ -28,11 +28,12 @@ This page documents the verified hardware components and physical specifications
 
 ## Physical Drivetrain Geometry & URDF Physics Parameters
 
-| Parameter | Physical Value | URDF / Controller Config | Purpose & Notes |
+| Parameter | Nominal Physical Value | URDF / Controller Config | Purpose & Notes |
 | --- | --- | --- | --- |
 | **Wheel Radius ($R$)** | `0.0325 m` (65 mm diameter) | `traction_wheels_radius: 0.0325` | Used by `ackermann_steering_controller` odometry calculation |
-| **Wheelbase ($L$)** | `0.147 m` (147 mm) | `wheelbase: 0.147` | Front-to-rear axle distance for Ackermann geometry |
-| **Track Width ($W$)** | `0.160 m` (160 mm) | `steering_track_width: 0.16`, `traction_track_width: 0.16` | Left-to-right wheel spacing |
+| **Wheelbase ($L$)** | `0.1433 m` (143.3 mm) | `wheelbase: 0.1433` | Measured front-to-rear axle center distance matching URDF CAD mesh |
+| **Steering Kingpin Width ($W_s$)** | `0.1040 m` (104 mm) | `steering_track_width: 0.104` | Distance between left and right steering kingpin pivot axes (used for Ackermann angle kinematics) |
+| **Traction Track Width ($W_t$)** | `0.1600 m` (160 mm) | `traction_track_width: 0.16` | Distance between left and right rear wheel centers |
 | **Steering Joint Limits** | $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) | `lower="-0.39" upper="0.39"` | Mechanical steering knuckle range limit in URDF |
 | **Steering Max Effort** | 1.96 N·m (Stall Torque) | `effort="10.0"` | URDF physics joint limit (prevents solver contact locking in Gazebo) |
 | **Steering Max Speed** | ~6.54 rad/s (375°/s) | `velocity="5.0"` | URDF physics max turn rate for `left_joint` & `right_joint` |

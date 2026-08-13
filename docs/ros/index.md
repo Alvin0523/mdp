@@ -26,7 +26,7 @@ mdp_ros/
     │   └── worlds/task2_arena.sdf        # Gazebo Task 2 Arena world model
     ├── mdp_control/                      # Autonomy, Vision, and Path Planning Python Nodes
     │   └── scripts/
-    │       ├── yolo_arrow_detector.py   # Ultralytics YOLO26/v8 arrow detection node
+    │       ├── yolo_arrow_detector.py   # Ultralytics YOLO26 arrow detection node
     │       ├── reeds_shepp_planner.py   # Reeds-Shepp Ackermann curve & TSP solver
     │       ├── pure_pursuit_follower.py # Waypoint tracking controller
     │       ├── task1_runner.py          # Task 1 exploration state machine

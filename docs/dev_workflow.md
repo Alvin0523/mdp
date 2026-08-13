@@ -59,7 +59,7 @@ To automatically include system architecture in proposals, ensure `openspec/conf
 
 ```yaml
 context: |
-  Read ../docs/architecture.md and ../docs/adr/ before proposing anything.
+  Read ../docs/architecture.md before proposing anything.
 ```
 
 ---
