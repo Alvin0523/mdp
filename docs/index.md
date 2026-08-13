@@ -37,6 +37,37 @@ See [Architecture](architecture.md) for how `mdp_ros` and `mdp_stm32` fit togeth
 
 2. Install the OpenSpec CLI and connect your AI tool — see [Dev Workflow & OpenSpec Setup](dev_workflow.md).
 
+Every developer — whether you're setting this repo up for the first time or joining an existing project — runs the same steps above. Nothing is machine-specific or done "once by the first person"; `pixi.toml`, `west.yml`, and `.gitmodules` fully describe the environment, so a fresh clone reproduces it identically for anyone.
+
+### New developer checklist
+
+```bash title="Root env + submodules"
+git clone --recurse-submodules <this-repo-url>
+cd mdp
+pixi install                # docs tooling + submodule helper tasks
+```
+
+```bash title="STM32 firmware (mdp_stm32)"
+cd mdp_stm32
+pixi run setup               # pack, west init/update/export, ARM SDK — one-shot
+pixi run probe                # sanity check: ST-LINK/V2 + STM32F407 detected
+cd ..
+```
+
+```bash title="ROS host software (mdp_ros)"
+cd mdp_ros
+# see mdp_ros/README.md or docs/ros/index.md for its setup task(s)
+cd ..
+```
+
+```bash title="OpenSpec (per submodule, per machine)"
+cd mdp_stm32   # and separately for mdp_ros
+openspec init
+cd ..
+```
+
+After this, `pixi run build` / `pixi run flash` inside `mdp_stm32` should work. If `pixi run setup` was interrupted partway (e.g. network drop during `west update`), just re-run `pixi run setup` — `pack` and `west-init` no-op safely, and `west update` resumes rather than re-fetching everything.
+
 ## Where to go next
 
 Roughly the order you'll actually need these, from first setup to deep reference:

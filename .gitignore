@@ -7,3 +7,6 @@ site/
 
 # vendor reference material (huge, not source) — kept locally only
 references/
+
+# eProsima Micro-XRCE-DDS-Agent (standalone, built via `pixi run agent-build` in mdp_ros — not source we maintain)
+Micro-XRCE-DDS-Agent/
