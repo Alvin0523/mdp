@@ -1,0 +1,9 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# built docs site
+site/
+
+# vendor reference material (huge, not source) — kept locally only
+references/
