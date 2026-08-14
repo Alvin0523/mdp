@@ -2,105 +2,113 @@
 icon: lucide/rocket
 ---
 
-# mdp
+# Multi-Disciplinary Project (MDP)
 
-A ROS2 + STM32 Ackermann-steered robot. This is the monorepo: it holds the docs site, a shared pixi env for tooling, and two git submodules that each do the actual work.
+> **ROS2 Jazzy + STM32 Ackermann Autonomous Robot**  
+> *College of Computing & Data Science (CCDS) — AY2026/2027 Semester 1*
 
-## Repo layout
+Welcome to the central documentation hub for the MDP Ackermann Autonomous Robot. This monorepo manages documentation, shared environment tooling (`pixi`), and two dedicated git submodules for host software (`mdp_ros`) and MCU firmware (`mdp_stm32`).
 
-```text
-mdp/
-├── docs/          this site
-├── mdp_ros/       submodule — ROS2 Jazzy / Gazebo, host-side software
-├── mdp_stm32/     submodule — Zephyr + micro-ROS firmware for the STM32 MCU
-├── references/    old prototypes and vendor docs, kept for reference only
-└── pixi.toml      root env: just docs tooling + submodule helper tasks
+---
+
+## 👥 Team Members & Roles
+
+Below is the team structure for the MDP robot development across hardware, firmware, control, and autonomy:
+
+| Member Name | Primary Role | Key Focus & Responsibilities |
+| --- | --- | --- |
+| **Member 1** | **Team Lead & System Architect** | System integration, project planning, OpenSpec workflow, and overall release coordination. |
+| **Member 2** | **ROS2 Control & Kinematics** | `mdp_ros` bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
+| **Member 3** | **Path Planning & Navigation** | Reeds-Shepp & Dubins curve planner implementation, TSP solver, and Pure Pursuit waypoint follower. |
+| **Member 4** | **Computer Vision & Perception** | RPi Camera V2 integration, Ultralytics YOLO26 arrow/symbol detection node, and image streaming. |
+| **Member 5** | **STM32 Firmware & Zephyr RTOS** | `mdp_stm32` bringup, AT8236 motor PWM driver, HWZ020 steering servo driver, and timer setup. |
+| **Member 6** | **micro-ROS & Hardware Transport** | `USART3` serial transport link, micro-ROS Agent daemon, `/joint_states` and `/imu/data` publisher. |
+| **Member 7** | **Android UI & Communications** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
+
+---
+
+## 🗺️ High-Level System Architecture
+
+The robot uses a **Host-Side Kinematics** architecture where the STM32 MCU acts as a pure hardware I/O controller, while all kinematics and sensor fusion run on the ROS2 host:
+
+```mermaid
+graph LR
+  subgraph ANDROID["Android Tablet"]
+    APP["Android Remote App<br/>(2D Arena & Controls)"]
+  end
+
+  subgraph HOST["Host (RPi4B / Host PC)"]
+    direction TB
+    ROBOTICS["ROS2 Jazzy Stack<br/>• Task 1 & 2 Autonomy<br/>• ros2_control & EKF Fusion<br/>• YOLO26 Perception"]
+    BRIDGE["android_bridge_node<br/>(pyserial RFCOMM /dev/rfcomm0)"]
+    AGENT["micro-ROS Agent"]
+    ROBOTICS <--> BRIDGE
+    ROBOTICS <--> AGENT
+  end
+
+  subgraph SIM["Gazebo Simulation"]
+    GZ["3D Physics Engine"]
+  end
+
+  subgraph MCU["STM32 MCU (mdp_stm32)"]
+    FIRMWARE["Zephyr micro-ROS Firmware<br/>• Rear Motor PWM (AT8236)<br/>• Steering Servo PWM (HWZ020)<br/>• Encoders & ICM-20948 IMU"]
+  end
+
+  APP <-->|"Bluetooth Serial (RFCOMM)"| BRIDGE
+  ROBOTICS <-->|"Sim Bridge"| GZ
+  AGENT <-->|"Serial UART (USART3 @ 115200)"| FIRMWARE
 ```
 
-See [Architecture](architecture.md) for how `mdp_ros` and `mdp_stm32` fit together.
+---
 
-## One-time setup
+## 📦 Submodule Workspaces
 
-1. Clone with submodules and install the pixi env:
+The codebase is split into two independently versioned git submodules:
 
-    ```bash title="Clone"
-    git clone --recurse-submodules <this-repo-url>
-    cd mdp
-    pixi install
-    ```
+=== "🤖 ROS Host Software (`mdp_ros`)"
 
-    ??? tip "Already cloned without `--recurse-submodules`?"
+    - **Platform:** ROS2 Jazzy (`robostack-jazzy` pixi channel) on RPi4B / Host PC.
+    - **Responsibilities:** URDF robot model, Gazebo 3D simulation, `ros2_control`, path planning (Reeds-Shepp / Dubins), YOLO26 vision, and task state machines.
+    - **Guide:** [ROS Workspace Documentation](ros/index.md)
 
-        ```bash
-        pixi run clone-all      # or clone-ros / clone-stm32 individually
-        ```
+=== "⚡ STM32 MCU Firmware (`mdp_stm32`)"
 
-2. Install the OpenSpec CLI and connect your AI tool — see [Dev Workflow & OpenSpec Setup](dev_workflow.md).
+    - **Platform:** Zephyr RTOS v4.0.0 on WHEELTEC C30D V2.1 board (STM32F407VET6 MCU).
+    - **Responsibilities:** AT8236 motor PWM driver, HWZ020 steering servo PWM, Hall encoder reading, ICM-20948 IMU reading, and micro-ROS serial transport.
+    - **Guide:** [STM32 Firmware Documentation](stm32/index.md)
 
-Every developer — whether you're setting this repo up for the first time or joining an existing project — runs the same steps above. Nothing is machine-specific or done "once by the first person"; `pixi.toml`, `west.yml`, and `.gitmodules` fully describe the environment, so a fresh clone reproduces it identically for anyone.
+---
 
-### New developer checklist
+## 🚀 Developer Setup
 
-```bash title="Root env + submodules"
+```bash title="1. Clone with submodules and install root pixi environment"
 git clone --recurse-submodules <this-repo-url>
 cd mdp
-pixi install                # docs tooling + submodule helper tasks
+pixi install
 ```
 
-```bash title="STM32 firmware (mdp_stm32)"
+```bash title="2. Set up STM32 firmware toolchain (mdp_stm32)"
 cd mdp_stm32
-pixi run setup               # pack, west init/update/export, ARM SDK — one-shot
-pixi run probe                # sanity check: ST-LINK/V2 + STM32F407 detected
+pixi run setup     # Downloads ARM SDK, fetches Zephyr modules, applies patches
+pixi run probe     # Sanity check: detect ST-LINK/V2 + STM32F407 chip
 cd ..
 ```
 
-```bash title="ROS host software (mdp_ros)"
-cd mdp_ros
-# see mdp_ros/README.md or docs/ros/index.md for its setup task(s)
-cd ..
-```
-
-```bash title="OpenSpec (per submodule, per machine)"
-cd mdp_stm32   # and separately for mdp_ros
+```bash title="3. Initialize OpenSpec CLI (Per submodule)"
+cd mdp_ros         # Repeat for mdp_stm32
 openspec init
 cd ..
 ```
 
-After this, `pixi run build` / `pixi run flash` inside `mdp_stm32` should work. If `pixi run setup` was interrupted partway (e.g. network drop during `west update`), just re-run `pixi run setup` — `pack` and `west-init` no-op safely, and `west update` resumes rather than re-fetching everything.
+---
 
-## Where to go next
+## 📚 Documentation Sitemap
 
-Roughly the order you'll actually need these, from first setup to deep reference:
-
-### Common Project Documentation
-
-1. :building_construction: [**Architecture**](architecture.md) — the target system design and what's actually implemented vs. TODO.
-2. :twisted_rightwards_arrows: [**Dev Workflow & OpenSpec Setup**](dev_workflow.md) — environment setup, OpenSpec CLI, and the day-to-day loop (branch, propose, apply, archive).
-3. :wrench: [**Hardware Components**](hardware.md) — exact board revision, encoder type, motor — for telling this robot apart from a differently-built one.
-5. :scroll: **ADRs** — permanent decision records; see [full log](adr/index.md) for context and how to add one.
-
-    | # | Decision |
-    |---|---|
-    | [0001](adr/0001-microros-transport.md) | micro-ROS for the host↔MCU transport |
-    | [0002](adr/0002-topic-based-hw-interface.md) | `topic_based_ros2_control` for the hardware interface |
-    | [0003](adr/0003-pattern-b-kinematics.md) | Kinematics on host, not MCU (Pattern B) |
-    | [0004](adr/0004-zephyr-firmware-base.md) | Keep Zephyr as the firmware base |
-
-6. :rotating_light: [**Troubleshooting**](troubleshooting.md) — known gotchas and their fixes.
-7. :books: [**References**](references.md) — external docs and what's in the local `references/` folder.
-
-### Submodule Workspaces
-
-8. :bot: [**ROS Workspace (`mdp_ros`)**](ros/index.md) — ROS2 Jazzy setup, build tasks, launch files, and Gazebo simulation.
-9. :cpu: [**STM32 Firmware (`mdp_stm32`)**](stm32/index.md) — Zephyr RTOS firmware, micro-ROS node, pinouts, and drivers.
-
-### Site Maintenance
-
-10. :pencil: [**Authoring Reference**](authoring_reference.md) — Markdown/Zensical syntax cheatsheet, for editing this docs site itself.
-
-## Docs site commands
-
-```bash title="Preview / build"
-pixi run serve    # local live-reload preview
-pixi run build    # static build
-```
+| Section | Description |
+| --- | --- |
+| 📐 [**System Architecture & ADRs**](architecture.md) | Deep-dive technical stack, sequence diagrams, sensor fusion, and architectural decisions (ADRs 0001–0006). |
+| 🔄 [**Dev Workflow & Setup**](dev_workflow.md) | OpenSpec CLI guide, `/opsx:` explore/propose/apply/archive loop, and git branch rules. |
+| 🔧 [**Hardware Components**](hardware.md) | Component list, physical specs, CAD kingpin geometry, and drivetrain parameters. |
+| 📋 [**Assessment Checklist**](assessment_checklist.md) | Official course deliverables (Module A, B, C), deadlines, and Task 1/2 requirements. |
+| 🚨 [**Troubleshooting**](troubleshooting.md) | Known issues, OpenSpec CLI fixes, micro-ROS agent build solutions, and git submodule help. |
+| 📖 [**References**](references.md) | External tool documentation links and WHEELTEC vendor file directory map. |

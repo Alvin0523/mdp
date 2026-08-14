@@ -2,228 +2,223 @@
 icon: lucide/network
 ---
 
-# System Architecture
+# System Architecture & Design Decisions
 
-This page describes the intended architecture for the robot: how the ROS2/Gazebo side (`mdp_ros`) and the STM32 firmware side (`mdp_stm32`) fit together.
+This guide documents the complete target architecture for the robot: host software stack (`mdp_ros`), MCU firmware stack (`mdp_stm32`), control & sensor fusion pipelines, development roadmap, and architectural decisions (ADRs).
 
-!!! warning "Design doc, not a status report"
-    This describes the **target** architecture. See [What's implemented vs. TODO](#whats-implemented-vs-todo) — most of this doesn't exist yet.
-
-## The stack
-
-**Host** (`mdp_ros`, `pixi`-managed, `robostack-jazzy` channel):
-
-| Tool | Reason |
-| --- | --- |
-| ROS2 Jazzy (`ros-base`) | Node graph, topics, the whole pub/sub layer everything else plugs into |
-| `xacro`, `robot_state_publisher`, `joint_state_publisher(-gui)` | Build and publish the robot's URDF/TF tree |
-| `rviz2` | Visualize URDF/TF/sensor data while developing |
-| `teleop_twist_keyboard` | Manual `/cmd_vel` input for testing before autonomy exists |
-| `ros2_control`, `ros2_controllers`, `controller_manager` | Standard controller framework — includes `ackermann_steering_controller` for car-like steering |
-| `gz_ros2_control`, `ros_gz` | Gazebo hardware_interface + host↔sim bridge |
-| `colcon`, `compilers`, `cmake`, `ninja` | Standard ROS2 build toolchain |
-
-**SBC Host** (`mdp_ros` on Raspberry Pi 4B 4GB):
-Runs ROS2 Jazzy, vision pipeline (RPi Camera V2), micro-ROS Agent, and `ros2_control` (`ackermann_steering_controller`).
-
-**Link** — micro-ROS over serial (Type-C USB-UART / `USART3` @ 115200 baud), connecting the micro-ROS Agent on RPi4B to the STM32 MCU. See [ADR 0001](adr/0001-microros-transport.md).
-
-**MCU** (`mdp_stm32`):
-
-| Tool | Reason |
-| --- | --- |
-| STM32F407VET6 (C30D V2.1 board) | Integrated controller board — AT8236 motor PWM driver for 2× MG513P3012V Hall encoder motors + HWZ020 steering servo. See [Hardware Components](hardware.md) |
-| Zephyr RTOS | Firmware base — board bring-up done. See [ADR 0004](adr/0004-zephyr-firmware-base.md) |
-| micro-ROS (rclc) | ROS2-on-MCU client library — publishes joint state & telemetry, subscribes to motor/steering commands. See [ADR 0001](adr/0001-microros-transport.md) |
-
-**Repo-level tooling** (`mdp/`, outside the robot stack itself):
-
-| Tool | Reason |
-| --- | --- |
-| `pixi` | One environment manager for docs + both submodules — no per-tool venv/conda juggling |
-| Git submodules | `mdp_ros`/`mdp_stm32` are independently developed, versioned, and released — a submodule pins an exact commit rather than always tracking latest |
-| OpenSpec | Spec-driven propose/apply/archive workflow — see [Dev Workflow & OpenSpec Setup](dev_workflow.md) |
-| Zensical | This docs site generator |
-
-## Why these choices
-
-Full rationale in each ADR — summarized here:
-
-| Choice | Instead of | ADR |
-| --- | --- | --- |
-| micro-ROS for host↔MCU transport | zenoh-pico / Pico-ROS | [0001](adr/0001-microros-transport.md) |
-| `topic_based_ros2_control` hardware_interface | custom hardware_interface | [0002](adr/0002-topic-based-hw-interface.md) |
-| Kinematics on host (`ackermann_steering_controller`) | kinematics on MCU | [0003](adr/0003-pattern-b-kinematics.md) |
-| Zephyr as firmware base, only swap the transport | rewriting firmware from scratch | [0004](adr/0004-zephyr-firmware-base.md) |
-
-## Diagram
-
-### 1. Layered Architecture: Simulation Mode vs. Real Hardware Mode
-
-```text
-========================================================================================
-                                     INPUT LAYER
-                             [pixi run teleop] / [Nav2]
-                                         │
-                                         ▼ (/cmd_vel)
-                               [ackermann_steering_controller] (ROS2 Host Controller)
-========================================================================================
-                                HARDWARE INTERFACE LAYER
-                                         │
-                       ┌─────────────────┴─────────────────┐
-                       ▼ (Simulation Mode)                 ▼ (Real Hardware Mode)
-                gz_ros2_control                       topic_based_ros2_control
-                       │                                   │
-                       │                                   │ /joint_commands & /joint_states
-                       ▼                                   ▼
-========================================================================================
-                                   EXECUTION LAYER
-              [Gazebo 3D World]                   [micro-ROS Agent] (Host)
-           (Simulated Physics & Mesh)                      │
-                                                           │ Serial UART (USB Type-C)
-                                                           ▼
-                                                  [STM32 MCU Firmware]
-                                                  - Motor PWM (AT8236)
-                                                  - Steering Servo (HWZ020)
-                                                  - Encoders & IMU
-========================================================================================
-```
-
-### 2. Host ↔ MCU Node Graph
-
-```mermaid
-flowchart TD
-  subgraph INPUT["Input Layer"]
-    TELEOP["teleop_twist_keyboard / Nav2"]
-  end
-
-  subgraph HOST["Host ROS2 Runtime (pixi env)"]
-    ASC["ackermann_steering_controller"]
-    
-    subgraph HWI["Hardware Interface Choice"]
-      GZ_HWI["gz_ros2_control<br/>(Simulation Plugin)"]
-      TB_HWI["topic_based_ros2_control<br/>(Real Hardware Plugin)"]
-    end
-
-    AGENT["micro-ROS Agent"]
-  end
-
-  subgraph TARGETS["Execution Target Layer"]
-    GZ_SIM["Gazebo 3D Simulation<br/>(mini_akm_robot.urdf)"]
-    
-    subgraph MCU["STM32F407VET6 MCU (Zephyr + rclc)"]
-      MOTORS["Dual MG513P3012V Motors<br/>(AT8236 Driver)"]
-      SERVO["HWZ020 Steering Servo"]
-      SENSORS["Hall Encoders & IMU"]
-    end
-  end
-
-  %% Connections
-  TELEOP -->|/cmd_vel| ASC
-  ASC -->|Joint Commands| GZ_HWI
-  ASC -->|Joint Commands| TB_HWI
-
-  GZ_HWI <-->|Physics Forces / States| GZ_SIM
-  TB_HWI <-->|/joint_commands & /joint_states| AGENT
-  AGENT <-->|Serial UART / USART3| MCU
-
-  MCU --> MOTORS
-  MCU --> SERVO
-  SENSORS --> MCU
-```
-
-## MDP Competition Tasks & Operational Requirements
-
-Based on the official course documentation (`Rules for the Task 1 and Task 2.docx` and `MDP assessment and system checklist.docx`):
-
-### 🎯 Task 1: Automatic Exploration & Image Recognition (6-Minute Limit)
-- **Arena:** Open 2.0m × 2.0m grid arena with 5 goal obstacles placed at supervisor-specified $(x,y)$ coordinates.
-- **Preparation (2 Mins):** Android Tablet receives obstacle coordinates and target faces via Bluetooth, sending setup to the RPi4B host.
-- **Autonomous Run:**
-  - Robot starts in Carpark Zone.
-  - Computes Hamiltonian Path to visit each obstacle (approaching within 20–50 cm).
-  - Captures images using **RPi Camera Module V2**.
-  - Runs Image Recognition model (YOLOv8 / CNN) to identify target symbol IDs.
-  - Streams real-time updates to Android Tablet via Bluetooth (`TARGET, <Obstacle_ID>, <Target_ID>`).
-  - Automatically stops within 6 minutes.
-- **RAW Image Display Rule:** Must present a tiled window on PC/Tablet displaying raw captured images with bounding boxes and identified ID labels.
-
-### ⚡ Task 2: Fastest Path Challenge (3-Minute Limit)
-- **Goal:** Robot starts from Carpark Zone, navigates automatically to Goal Obstacle.
-- **Symbol Recognition:** Goal Obstacle features a Left Arrow ($\leftarrow$) or Right Arrow ($\rightarrow$) image.
-- **Navigation:**
-  - If **Right Arrow**: Robot loops around the right side of the obstacle.
-  - If **Left Arrow**: Robot loops around the left side of the obstacle.
-- **Return & Stop:** Robot returns and automatically stops inside the Carpark Zone within 3 minutes.
-- **Penalties:** 10s penalty for touching obstacles. Disqualification for hitting carpark wall or bulldozing obstacles.
+!!! info "Target System Architecture"
+    This document outlines the target architecture. For active development status, see [Development Status & Implementation Roadmap](#5-development-status-implementation-roadmap).
 
 ---
 
-## Message flow: teleop → motor
+## 1. System Stack & Tooling
 
-One end-to-end path across the host↔MCU boundary — where integration bugs (units, topic names, QoS) actually happen.
+### Host Software (`mdp_ros` — ROS2 Jazzy on RPi4B / PC)
+
+| Component / Tool | Category | Purpose & Role |
+| --- | --- | --- |
+| **ROS2 Jazzy (`ros-base`)** | Core Middleware | Distributed node graph, topic communication layer, and DDS. |
+| **`robot_state_publisher` / `xacro`** | Robot Model | Builds and broadcasts the URDF / TF coordinate transform tree. |
+| **`ackermann_steering_controller`** | Kinematics Engine | Converts `/cmd_vel` setpoints into individual wheel speeds and steering knuckle angles. |
+| **`topic_based_ros2_control`** | Real HW Plugin | Maps `ros2_control` commands & states to ROS topics (`/joint_commands`, `/joint_states`). |
+| **`gz_ros2_control` / `ros_gz`** | Sim HW Plugin | Integrates Gazebo Sim 3D physics engine with ROS2 control. |
+| **`robot_localization` (`ekf_node`)** | Sensor Fusion | Fuses rear wheel odometry (linear velocity v_x) and ICM-20948 IMU (yaw rate ω_z, heading θ) into `/odometry/filtered`. |
+| **`android_bridge_node` (`pyserial` / RFCOMM)** | Android Bridge | ROS2 Python node parsing Classic Bluetooth RFCOMM serial (`/dev/rfcomm0`) strings into ROS2 topics (`/cmd_vel`, `/odometry/filtered`). |
+| **`micro-ROS Agent`** | Host↔MCU Bridge | C++ daemon bridging ROS2 DDS topics to the STM32 MCU over USB serial (`USART3`). |
+| **`rviz2` / Foxglove Bridge** | Visualization | Live 3D visualization of TF trees, sensor markers, camera feeds, and paths. |
+
+### MCU Firmware (`mdp_stm32` — STM32F407VET6 on WHEELTEC C30D Board)
+
+| Component | Category | Details & Responsibilities |
+| --- | --- | --- |
+| **Zephyr RTOS** | Firmware Base | Real-time multithreading, Devicetree hardware abstraction, and timers. |
+| **micro-ROS (`rclc`)** | MCU Client | Subscribes to `/joint_commands`, publishes `/joint_states` and `/imu/data`. |
+| **AT8236 Driver** | Motor PWM | Dual H-Bridge driving 2× rear `MG513P3012V` DC gear motors (Motor A & B). |
+| **HWZ020 Servo** | Steering PWM | 50 Hz PWM driver (`PB15` / TIM12_CH2) for front Ackermann steering knuckles. |
+| **Hall Encoders** | Wheel Telemetry | Quadrature timer decoding (TIM2 / TIM3) for rear wheel travel displacement. |
+| **ICM-20948 IMU** | Motion Telemetry | 9-DOF Gyro/Accel over I2C2 (`PB10`/`PB11`) providing yaw rotation feedback. |
+
+---
+
+## 2. System Data Flow & Architecture Diagram
+
+```mermaid
+graph TD
+  subgraph INPUT["Input & Command Layer"]
+    CMD["teleop_twist_keyboard / Task 1 & 2 Runners"]
+  end
+
+  subgraph HOST["Host ROS2 Runtime (mdp_ros)"]
+    ASC["ackermann_steering_controller"]
+    TB_HWI["topic_based_ros2_control (Real Hardware Plugin)"]
+    GZ_HWI["gz_ros2_control (Sim Plugin)"]
+    AGENT["micro-ROS Agent (Serial Daemon)"]
+  end
+
+  subgraph FUSION["Sensor Fusion Layer (Host)"]
+    EKF["robot_localization (ekf_node)"]
+  end
+
+  subgraph SIM["Gazebo Simulation Target"]
+    GZ_SIM["Gazebo 3D Simulation Engine"]
+  end
+
+  subgraph MCU["STM32 MCU Target (mdp_stm32)"]
+    MOTORS["2x Rear DC Motors (AT8236 Driver)"]
+    SERVO["HWZ020 Steering Servo (PB15 TIM12_CH2)"]
+    SENSORS["Hall Encoders & ICM-20948 IMU"]
+  end
+
+  CMD -->|"/cmd_vel"| ASC
+  ASC -->|"Joint Commands"| TB_HWI
+  ASC -->|"Joint Commands"| GZ_HWI
+
+  GZ_HWI -->|"Physics & States"| GZ_SIM
+  TB_HWI -->|"/joint_commands & /joint_states"| AGENT
+  AGENT -->|"Serial UART / USART3 @ 115200"| MCU
+
+  MCU --> MOTORS
+  MCU --> SERVO
+  SENSORS -->|"Encoders & IMU Data"| MCU
+
+  ASC -->|"/ackermann_steering_controller/odometry (v_x)"| EKF
+  AGENT -.->|"/imu/data (ω_z, orientation)"| EKF
+  EKF -->|"/odometry/filtered & odom->base_link TF"| CMD
+```
+
+### End-to-End Control & Telemetry Sequence
 
 ```mermaid
 sequenceDiagram
-  participant T as teleop_twist_keyboard
+  participant User as Autonomy / Teleop Node
   participant ASC as ackermann_steering_controller
   participant HWI as topic_based_ros2_control
-  participant AGENT as micro-ROS Agent (host)
-  participant MCU as rclc node (MCU)
-  participant MOT as Motor PWM (AT8236)
+  participant Agent as micro-ROS Agent (Host)
+  participant MCU as rclc Node (STM32)
+  participant HW as Motors, Servo & Sensors
+  participant EKF as robot_localization (EKF)
 
-  T->>ASC: /cmd_vel (geometry_msgs/Twist)
-  ASC->>HWI: per-joint velocity/position commands
-  HWI->>AGENT: /joint_commands (topic)
-  AGENT->>MCU: serial (micro-ROS transport)
-  MCU->>MOT: PWM duty cycle
-  MCU-->>AGENT: /joint_states (encoder feedback)
-  AGENT-->>HWI: serial (micro-ROS transport)
-  HWI-->>ASC: joint state interfaces
+  User->>ASC: /cmd_vel (Twist / TwistStamped)
+  ASC->>HWI: Joint Command Setpoints
+  HWI->>Agent: /joint_commands (sensor_msgs/JointState)
+  Agent->>MCU: Serial Packet (micro-ROS transport)
+  MCU->>HW: Actuate Motor PWM (AT8236) & Servo PWM (HWZ020)
+  
+  HW-->>MCU: Read Encoder Ticks & IMU Registers
+  MCU-->>Agent: Publish /joint_states & /imu/data
+  Agent-->>HWI: /joint_states feedback
+  HWI-->>ASC: Joint State Interfaces
+  ASC-->>EKF: /ackermann_steering_controller/odometry (linear v_x)
+  Agent-->>EKF: /imu/data (yaw rate ω_z, orientation)
+  EKF-->>User: /odometry/filtered & odom->base_link TF
 ```
 
-In Gazebo, same controller talks to `gz_ros2_control` instead of `topic_based_ros2_control`. See [ADR 0003](adr/0003-pattern-b-kinematics.md).
+---
 
-For the live node graph, run `rqt_graph` — don't hand-maintain a diagram that'll go stale.
+## 3. Sensor Fusion Pipeline (`robot_localization`)
 
-## Robot operating modes
+To prevent position and heading drift during competition runs:
 
-!!! warning "Placeholder — not designed yet"
-    No mode-switching logic exists (see [status table](#whats-implemented-vs-todo)). TODO once mode switching / e-stop is actually implemented — not before.
+1. **Wheel Odometry (v_x):** `ackermann_steering_controller` calculates forward linear velocity from rear wheel encoders (`/ackermann_steering_controller/odometry`).
+2. **IMU Heading (ω_z, θ):** The ICM-20948 IMU publishes angular velocity and rotation (`/imu/data`).
+3. **EKF Fusion (`ekf_node`):** `robot_localization` fuses both streams to output smooth, drift-free `/odometry/filtered` and updates the dynamic `odom` → `base_link` TF transform.
 
-```mermaid
-stateDiagram-v2
-  [*] --> Idle
-  Idle --> Teleop: TODO
-  Teleop --> Autonomous: TODO
-  Autonomous --> Teleop: TODO
-  Idle --> EStopped: TODO
-  Teleop --> EStopped: TODO
-  Autonomous --> EStopped: TODO
-  EStopped --> Idle: TODO
-```
+---
 
-## What's implemented vs. TODO
+## 4. Competition Requirements
 
-### `mdp_ros` (host) — build order, each step needs the one above it
+??? info "Click to expand Task 1 & Task 2 Specifications"
 
-1. [x] `mdp_description` + `mdp_bringup` — ported from `references/mdp_ws/`
-2. [x] Gazebo simulation — needs step 1
-3. [x] `topic_based_ros2_control` + `ackermann_steering_controller` wiring on host — needs step 1
+    ### 🎯 Task 1: Automatic Exploration & Image Recognition (6-Min Limit)
+    - **Arena:** 2.0m × 2.0m grid arena with 5 goal obstacles placed at supervisor-specified (x, y) coordinates.
+    - **Preparation (2 Mins):** Android Tablet receives obstacle coordinates and target faces via Bluetooth and transmits setup to RPi4B.
+    - **Autonomous Run:**
+      - Starts in Carpark Zone.
+      - Computes Hamiltonian Path / TSP Reeds-Shepp trajectory visiting all 5 targets (standoff distance: 20–50 cm).
+      - Captures images via **RPi Camera Module V2**.
+      - Runs YOLO26 image recognition to identify target symbol IDs.
+      - Streams updates to Android Tablet (`TARGET, <Obstacle_ID>, <Target_ID>`).
+      - Auto-stops within 6 minutes.
 
-### `mdp_stm32` (MCU)
+    ### ⚡ Task 2: Fastest Path Challenge (3-Min Limit)
+    - **Goal:** Robot navigates automatically from Carpark Zone to Goal Obstacle.
+    - **Symbol Recognition:** Identifies Left Arrow (←) or Right Arrow (→).
+    - **Navigation:**
+      - **Right Arrow:** Loops around the right side of the obstacle.
+      - **Left Arrow:** Loops around the left side of the obstacle.
+    - **Return & Stop:** Returns to Carpark Zone and auto-stops within 3 minutes.
 
-- [x] West workspace setup (`pixi run setup`) — done and verified; requires a pyocd-runner patch for `stm32f4_disco` since Zephyr v4.0.0 only ships `stm32cubeprogrammer`/`jlink` runners for this board upstream (applied automatically by the `west-patch` task, see `scripts/patch_pyocd_runner.sh`)
-- [x] STM32F407VET6 board overlay / Zephyr bring-up — done and **flashed + verified on real hardware** (LED blink + RTT log confirm boot)
-- [x] Motor PWM driver (AT8236) — PWM channel numbering bug fixed (`motor.c` channels were 0-indexed; Zephyr's STM32 PWM driver requires 1-indexed, matching `TIM_CHx`) and verified working over RTT
-- [!] Motor PWM driver still models 4 motors (A/B/C/D) — the WHEELTEC C30D board wiring is generic (used across Mecanum/4WD/Ackermann/etc. configs), but this course kit's Ackermann chassis only drives 2 (Motor A = rear-left, Motor B = rear-right); confirmed against vendor source (`references/WHEELTEC/.../BALANCE/balance.c`, which explicitly zeroes `MOTOR_C`/`MOTOR_D` as "Out of use" in Ackermann mode). TODO: trim `motor.c`/`motor.h`/the board overlay to 2 motors, and fix `docs/stm32/pinouts.md`'s motor table (currently mislabels A/B as Front-Left/Front-Right implying 4WD)
-- [ ] micro-ROS integration on MCU — not started; `app/west.yml` doesn't import a micro-ROS Zephyr module yet (just `cmsis`, `hal_stm32`, `picolibc`, `segger`). A local reference clone of the official [`micro-ROS/micro_ros_zephyr_module`](https://github.com/micro-ROS/micro_ros_zephyr_module) is already available at `references/micro_ros_zephyr_module/`, tested against Zephyr v4.0.0 — the exact version this workspace pins
-- [ ] Steering servo driver — stub only
-- [ ] Encoder reading — stub only
-- [ ] IMU reading — stub only
+---
 
-## Reference
+## 5. Development Status & Implementation Roadmap
 
-- Old firmware attempt (transport being replaced): `references/mdp_mcu/mdp_firmware`
-- Old host-side control architecture notes: `references/mdp_ws/docs/control-architecture.md`
-- Vendor stock firmware (reference only, not reused): `references/WHEELTEC/`
+### `mdp_ros` (Host Software)
+
+- [x] `mdp_description` + `mdp_bringup` — URDF models, meshes, launch files, and controller YAMLs
+- [x] Gazebo Simulation — `mini_akm_robot.urdf` with `gz_ros2_control`
+- [x] Real Hardware Integration — `mini_akm_real_robot.urdf` with `topic_based_ros2_control`
+- [x] Autonomy & Planning Nodes — Reeds-Shepp planner, Dubins pure pursuit follower, YOLO arrow detector, Task 1 & 2 state machines
+- [ ] `robot_localization` EKF Node — Launch configuration for fusing `/ackermann_steering_controller/odometry` + `/imu/data`
+
+### `mdp_stm32` (MCU Firmware)
+
+- [x] Zephyr Workspace Setup — `pixi run setup` with ARM SDK and pyocd runner patch
+- [x] STM32F407VET6 Board Bringup — LED blink (`PE8`) + RTT debug logging verified on physical board
+- [x] AT8236 Motor PWM Driver — 1-indexed PWM channels verified working over RTT
+- [!] micro-ROS Transport Integration — **In-Progress** (OpenSpec proposal `add-microros-transport`: host PyPI deps, `west.yml` manifest, and UART patch `scripts/patch_microros_uart.sh` complete; `rclc` executor thread pending)
+- [ ] HWZ020 Steering Servo Driver (`PB15` / TIM12_CH2) — stub only
+- [ ] Hall Encoder Driver (TIM2 / TIM3) — stub only
+- [ ] ICM-20948 IMU Driver (I2C2 `PB10`/`PB11`) — stub only
+
+---
+
+## 6. Key Architectural Decisions (ADRs)
+
+??? info "Click to expand Architectural Decision Records (ADRs 0001–0006) & Comparative Analysis Matrix"
+
+    ### 📊 Comparative Analysis Matrix
+
+    | Technology Area | Replaced / Alternative Choice | Chosen Solution | Key Architectural Advantage & Rationale |
+    | --- | --- | --- | --- |
+    | **1. Firmware RTOS Base** | Bare-Metal STM32 (FreeRTOS / STM32Cube HAL) | **Zephyr RTOS** | **Multi-MCU Portability.** Zephyr migrates seamlessly across MCU vendors (STM32, ESP32, TI, nRF) via Devicetree overlays (`.overlay`), whereas STM32Cube/FreeRTOS code is hard-locked to vendor HAL APIs. |
+    | **2. MCU Host Transport** | Custom Serial Protocol (Hand-rolled UART / Protobuf / zenoh-pico) | **micro-ROS (`rclc`)** | **Developer Efficiency & No Boilerplate.** Speaks standard ROS2 topics (`/joint_commands`, `/joint_states`, `/imu/data`) directly over serial without handwriting custom binary packet parsers or deserialization loops. |
+    | **3. Environment & Tooling** | Docker Containers / System `apt` / `uv` / Virtualenvs | **`pixi` (`robostack-jazzy`)** | **Multiplatform Environment Sync.** Pins native binary packages across Linux, macOS, and Windows (ROS2 Jazzy, Gazebo, ARM GCC SDK, `west`, `ninja`) in a single `pixi.toml` lockfile without VM overhead. |
+    | **4. Hardware Interface** | Custom C++ `hardware_interface` Driver | **`topic_based_ros2_control`** | **Avoid Custom Hardware Code.** Bridges `ros2_control` directly to ROS topics, avoiding complex custom C++ hardware drivers and unlocking ROS2's standard robotics stack in both Sim and Real HW. |
+    | **5. Middleware Framework** | ROS1 / Ad-hoc Custom Python Scripts | **ROS2 Jazzy** | **Full Robotics Stack Access.** Unlocks native Gazebo 3D simulation, standard `ackermann_steering_controller`, TF2 transform trees, and autonomous path planning pipelines out of the box. |
+    | **6. Development Workflow** | Unstructured AI Prompts & Ad-hoc Commits | **OpenSpec (`propose`/`apply`/`archive`)** | **Token-Efficient LLM Orchestration.** Optimized for modern Agentic AI / LLM workflows (Antigravity subagents). Keeps token usage lightweight, context clean, and change scope strictly bounded. |
+
+    ---
+
+    ### 📜 Decision Records
+
+    ### 0001. Zephyr RTOS Base vs. Bare-Metal STM32 (FreeRTOS / HAL)
+    - **Decision:** Use **Zephyr RTOS** v4.0.0 as the firmware base for `mdp_stm32`.
+    - **Why:** Bare-metal firmware using STM32CubeIDE HAL or FreeRTOS ties driver logic directly to vendor-specific register APIs, making code migration to other MCU platforms (e.g. ESP32, TI, nRF) difficult. Zephyr provides declarative Devicetree hardware overlays (`.overlay`) and unified driver APIs (`pwm_set_pulse_dt`), allowing the firmware to migrate across any supported MCU family without rewriting application logic.
+
+    ### 0002. micro-ROS Serial Transport vs. Custom Serial UART Protocol
+    - **Decision:** Use **micro-ROS (`rclc`)** over `USART3` serial (USB Type-C @ 115200 baud).
+    - **Why:** Custom serial protocols require handwriting, testing, and maintaining tedious binary packet framing, checksum validation, and host-side C++ deserializers. micro-ROS integrates the MCU directly into the ROS2 graph, making telemetry and control topics available out of the box with zero custom serialization boilerplate.
+
+    ### 0003. Pixi Environment Manager vs. Docker / System `apt` / `uv`
+    - **Decision:** Use **`pixi`** with the `robostack-jazzy` channel to manage the monorepo workspace.
+    - **Why:** System `apt` packages lock developers to specific Linux OS versions, Docker containers introduce filesystem and GPU rendering overhead for Gazebo/RViz2, and Python-only managers (`uv`/`venv`) cannot manage native C++ robotics packages or ARM cross-compilation SDKs. `pixi.toml` provides true multiplatform reproducibility across Linux, macOS, and Windows in a lightweight single-command workflow.
+
+    ### 0004. Hardware Interface (`topic_based_ros2_control`) & Host-Side Kinematics
+    - **Decision:** Use **`topic_based_ros2_control`** as the real-hardware plugin for `ros2_control` and run all Ackermann kinematics on the ROS2 host.
+    - **Why:** Writing custom C++ `hardware_interface` drivers requires extensive low-level C++ hardware code. `topic_based_ros2_control` bridges command and state interfaces directly to standard ROS topics (`/joint_commands` and `/joint_states`), allowing the exact same `ackermann_steering_controller` node to run seamlessly in both Gazebo Sim and Real Hardware. Furthermore, keeping kinematics on the ROS2 host allows developers to **tune parameters live (wheelbase, track width, steering limits, speed/accel limits) via ROS2 YAML files or `ros2 param set` while the robot is running—without ever having to recompile or reflash the STM32 MCU firmware over ST-LINK.**
+
+    ### 0005. ROS2 Jazzy Middleware vs. Legacy ROS1 / Custom Scripts
+    - **Decision:** Build the host software stack on **ROS2 Jazzy**.
+    - **Why:** Ad-hoc Python scripts lack standardized TF coordinate transformations, sensor fusion nodes, and simulation bridges. ROS2 Jazzy gives us immediate access to Gazebo 3D simulation (`ros_gz`), standard Ackermann controllers, Nav2/path planning tools, and DDS middleware communication.
+
+    ### 0006. OpenSpec Spec-Driven Workflow vs. Unstructured AI Prompts
+    - **Decision:** Use **OpenSpec** (`propose`, `apply`, `archive`) for AI-assisted development across submodules.
+    - **Why:** In modern development with LLM coding agents (Antigravity, Superhuman, Claude Code), orchestrating multiple subagents requires light token usage, clear context boundaries, and structured task execution. OpenSpec provides a lightweight, token-efficient framework that maintains system specs in `openspec/specs/` as the single source of truth, enforcing strict task checklists and preventing scope creep.
+
+---
+
+## 7. References & Historical Documents
+
+- **Firmware Reference:** `references/mdp_mcu/mdp_firmware`
+- **Host Control Reference:** `references/mdp_ws/docs/control-architecture.md`
+- **Vendor Reference:** `references/WHEELTEC/`

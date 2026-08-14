@@ -36,4 +36,4 @@ pixi run rtt
 
 ## System Role
 
-The MCU operates as a pure I/O controller ([Pattern B Architecture](../adr/0003-pattern-b-kinematics.md)). It receives wheel speed and steering commands via micro-ROS over serial (USART3 @ 115200 baud on `PD8`/`PD9`) and publishes raw encoder telemetry back to the Raspberry Pi 4B host.
+The MCU operates as a pure hardware I/O controller ([Host-Side Kinematics Architecture](../architecture.md#0004-hardware-interface-topic_based_ros2_control-host-side-kinematics)). It receives wheel speed and steering commands via micro-ROS over serial (USART3 @ 115200 baud on `PD8`/`PD9`) and publishes raw encoder telemetry back to the Raspberry Pi 4B host.

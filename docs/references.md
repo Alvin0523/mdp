@@ -18,6 +18,8 @@ Hover a name for a one-line description; click to open its documentation.
 | [Zephyr RTOS][ext-zephyr] | MCU firmware base for `mdp_stm32` |
 | [pixi][ext-pixi] | Environment/task manager used across this repo |
 | [Zensical][ext-zensical] | This docs site generator |
+| [Ultralytics ROS Quickstart][ext-yolo-ros] | YOLO ROS/ROS2 integration guide for object detection nodes |
+| [Ultralytics Raspberry Pi Guide][ext-yolo-rpi] | Deploying & optimizing YOLO models on Raspberry Pi / embedded hardware |
 
   [ext-openspec]: https://github.com/Fission-AI/OpenSpec "Spec-driven change workflow — propose/apply/archive"
   [ext-ros2]: https://docs.ros.org/en/jazzy/ "ROS2 Jazzy Jalisco distro docs"
@@ -27,6 +29,14 @@ Hover a name for a one-line description; click to open its documentation.
   [ext-zephyr]: https://docs.zephyrproject.org/ "Zephyr RTOS docs"
   [ext-pixi]: https://pixi.sh/ "Conda-based environment/task manager"
   [ext-zensical]: https://zensical.org/docs/ "This site's static-site generator"
+  [ext-yolo-ros]: https://docs.ultralytics.com/guides/ros-quickstart "Ultralytics YOLO ROS/ROS2 Integration Guide"
+  [ext-yolo-rpi]: https://docs.ultralytics.com/guides/raspberry-pi "Ultralytics YOLO Raspberry Pi Deployment Guide"
+
+---
+
+## MDP Course Assessment Documents
+
+- 📄 [**MDP Assessment and System Checklist (AY26/27 Sem 1)**](attachments/MDP%20assessment%20and%20system%20checklist.pdf) — Official course checklist defining functional specifications for Mobile Robot (Module A), Path Planning (Module B), and Android Remote Controller (Module C).
 
 ---
 

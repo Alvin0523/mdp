@@ -49,13 +49,7 @@ nav = [
   { "Architecture" = "architecture.md" },
   { "Dev Workflow & Setup" = "dev_workflow.md" },
   { "Hardware Components" = "hardware.md" },
-  { "ADRs" = [
-    { "ADRs" = "adr/index.md" },
-    { "0001 — micro-ROS transport" = "adr/0001-microros-transport.md" },
-    { "0002 — topic-based hw interface" = "adr/0002-topic-based-hw-interface.md" },
-    { "0003 — kinematics on host" = "adr/0003-pattern-b-kinematics.md" },
-    { "0004 — Zephyr firmware base" = "adr/0004-zephyr-firmware-base.md" },
-  ] },
+  { "Assessment Checklist" = "assessment_checklist.md" },
   { "Troubleshooting" = "troubleshooting.md" },
   { "References" = "references.md" },
   { "ROS Workspace" = [

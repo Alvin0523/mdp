@@ -62,4 +62,4 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
     pixi run clone-all
     ```
 
-    See [index](index.md#one-time-setup).
+    See [Developer Setup](index.md#developer-setup).

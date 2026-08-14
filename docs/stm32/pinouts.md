@@ -15,24 +15,27 @@ Verified pin allocations and hardware peripheral assignments for the WHEELTEC C3
 | `USART2` | `PD5` (TX2), `PD6` (RX2) | Bluetooth / Wireless Module Interface | 9600 / 115200 |
 | `CAN1` | `PD0` (RX), `PD1` (TX) | Onboard CAN Bus Transceiver (VP230) | — |
 
+> [!NOTE]
+> **Ackermann Drivetrain Layout:** The MDP Ackermann course kit drives **2 Rear Wheels** (Motor A = Rear Left, Motor B = Rear Right) with Hall Encoders on TIM2 & TIM3. Front wheels are unpowered, free-rolling steering knuckles actuated by **1 HWZ020 Steering Servo** (`PB15` / TIM12_CH2).
+
 ## Motor PWM Outputs (AT8236 Driver)
 
-| Motor Channel | Location | PWM Pins | Hardware Timer |
-| --- | --- | --- | --- |
-| **Motor A** | Front Left (FL) | `PB8`, `PB9` | TIM10_CH1 (`PB8`), TIM11_CH1 (`PB9`) |
-| **Motor B** | Front Right (FR) | `PE5`, `PE6` | TIM9_CH1 (`PE5`), TIM9_CH2 (`PE6`) |
-| **Motor C** | Rear Left (BL) | `PE9`, `PE11` | TIM1_CH1 (`PE9`), TIM1_CH2 (`PE11`) |
-| **Motor D** | Rear Right (BR) | `PE13`, `PE14` | TIM1_CH3 (`PE13`), TIM1_CH4 (`PE14`) |
-| **Motor Enable** | Drivers | `PD3` | Digital Output (`HIGH` = Enabled) |
+| Motor Channel | Physical Drivetrain Location | PWM Pins | Hardware Timer | Status / Notes |
+| --- | --- | --- | --- | --- |
+| **Motor A** | Rear Left (BL) | `PB8`, `PB9` | TIM10_CH1 (`PB8`), TIM11_CH1 (`PB9`) | **Active** (Rear-Left Drive Motor) |
+| **Motor B** | Rear Right (BR) | `PE5`, `PE6` | TIM9_CH1 (`PE5`), TIM9_CH2 (`PE6`) | **Active** (Rear-Right Drive Motor) |
+| **Motor C** | — | `PE9`, `PE11` | TIM1_CH1 (`PE9`), TIM1_CH2 (`PE11`) | *Unused* (Unpowered Front Wheels) |
+| **Motor D** | — | `PE13`, `PE14` | TIM1_CH3 (`PE13`), TIM1_CH4 (`PE14`) | *Unused* (Unpowered Front Wheels) |
+| **Motor Enable** | Drivers | `PD3` | Digital Output | Active `HIGH` = Drivers Enabled |
 
-## Wheel Encoders (GMR Quadrature)
+## Wheel Encoders (Hall Encoders)
 
-| Encoder Channel | Location | Pins | Hardware Timer (Quadrature Mode) |
-| --- | --- | --- | --- |
-| **Encoder A** | Front Left (FL) | `PA15` (A), `PB3` (B) | TIM2_CH1 / CH2 |
-| **Encoder B** | Front Right (FR) | `PB4` (A), `PB5` (B) | TIM3_CH1 / CH2 |
-| **Encoder C** | Rear Left (BL) | `PB6` (A), `PB7` (B) | TIM4_CH1 / CH2 |
-| **Encoder D** | Rear Right (BR) | `PA0` (A), `PA1` (B) | TIM5_CH1 / CH2 |
+| Encoder Channel | Location | Pins | Hardware Timer (Quadrature Mode) | Status / Notes |
+| --- | --- | --- | --- | --- |
+| **Encoder A** | Rear Left (BL) | `PA15` (A), `PB3` (B) | TIM2_CH1 / CH2 | **Active** (Rear-Left Encoder) |
+| **Encoder B** | Rear Right (BR) | `PB4` (A), `PB5` (B) | TIM3_CH1 / CH2 | **Active** (Rear-Right Encoder) |
+| **Encoder C** | — | `PB6` (A), `PB7` (B) | TIM4_CH1 / CH2 | *Unused* |
+| **Encoder D** | — | `PA0` (A), `PA1` (B) | TIM5_CH1 / CH2 | *Unused* |
 
 ## Steering Servo & Sensors
 

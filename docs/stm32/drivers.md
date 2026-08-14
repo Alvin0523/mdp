@@ -11,14 +11,14 @@ Overview of device drivers and sensor interfaces running on the STM32 MCU inside
 | Driver / Module | Target Hardware | Status | File Path |
 | --- | --- | --- | --- |
 | **Motor PWM Driver** | AT8236 Dual Full-Bridge (2 Rear Motors) | Implemented :white_check_mark: | `app/src/motor.c` |
-| **micro-ROS Transport** | USART3 @ 115200 (`PD8`/`PD9`) | TODO :hourglass_flowing_sand: | `app/src/main.c` |
+| **micro-ROS Transport** | USART3 @ 115200 (`PD8`/`PD9`) | In-Progress Proposal :warning: | `app/src/main.c` (`add-microros-transport`) |
 | **Steering Servo** | HWZ020 Servo PWM (50 Hz on `PB15`) | Stub :hourglass_flowing_sand: | `app/src/servo.c` |
 | **Hall Encoders** | Hall Encoders on 2× `MG513P3012V` Motors | Stub :hourglass_flowing_sand: | `app/src/encoder.c` |
 | **IMU Sensor** | ICM-20948 (I2C2 `PB10`/`PB11`) | Stub :hourglass_flowing_sand: | `app/src/imu.c` |
 
 ## AT8236 Motor Driver (`motor.c`)
 
-Drives the 2 rear DC motors (`MG513P3012V`) via PWM duty cycles using Zephyr's `pwm_set_pulse_dt` API. Reused from earlier firmware bring-up per [ADR 0004](../adr/0004-zephyr-firmware-base.md).
+Drives the 2 rear DC motors (`MG513P3012V`) via PWM duty cycles using Zephyr's `pwm_set_pulse_dt` API. Reused from earlier firmware bring-up per [ADR 0001](../architecture.md#0001-zephyr-rtos-base-vs-bare-metal-stm32-freertos-hal).
 
 ## Hall Encoder Driver (`encoder.c`)
 
