@@ -140,3 +140,39 @@ When issuing `/opsx:propose`, include 3 key elements:
 the current zenoh-pico demo per ADR 0001. Scope: transport + rclc node wiring only.
 Do not touch motor.c or encoders — those are separate TODO items."
 ```
+
+---
+
+## 7. Troubleshooting & Common Fixes
+
+Real issues encountered during development and their verified resolutions:
+
+### :gear: OpenSpec CLI Issues
+
+??? question "`openspec update --tools claude` fails: `error: unknown option '--tools'`"
+
+    That flag was removed in a CLI update. Tool selection is now an interactive picker on both `openspec init` and `openspec update` — run the command with no flag and pick from the list.
+
+??? question "Not sure whether to run `init` or `update`"
+
+    | Command | Use it for |
+    | --- | --- |
+    | `openspec init` | First time setting up your local `.claude/` adapter (new machine, new teammate, fresh clone). Safe to re-run; never touches `config.yaml`/`specs/`/`changes/`. |
+    | `openspec update` | Refreshing an adapter you *already* have, after upgrading the CLI. Can't create one from scratch. |
+
+### :satellite: micro-ROS Agent & `fmt` Library Wall
+
+??? question "`ros2 run micro_ros_agent ...` fails with `fmt`/`spdlog` errors"
+
+    The ROS2 `micro_ros_agent` colcon package's CMake SuperBuild pins an old (`v2.4.3`, ~2022) `Micro-XRCE-DDS-Agent` that fails against modern `fmt 12.x`.
+
+    **Fix**: Do not build the ROS2-wrapped colcon package. Build the standalone `Micro-XRCE-DDS-Agent` directly from [eProsima's repo](https://github.com/eProsima/Micro-XRCE-DDS-Agent) (`v3.0.1`). Use `pixi run agent-build` and `pixi run agent` in `mdp_ros`.
+
+### :twisted_rightwards_arrows: Git Submodules
+
+??? question "Cloned the repo but `mdp_ros/`/`mdp_stm32/` submodules are empty"
+
+    Run:
+    ```bash
+    pixi run clone-all
+    ```
