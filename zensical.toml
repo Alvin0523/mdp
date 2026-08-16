@@ -45,24 +45,26 @@ Copyright &copy; 2026 The authors
 #
 # Read more: https://zensical.org/docs/setup/navigation/
 nav = [
-  { "Home" = "index.md" },
-  { "Architecture" = "architecture.md" },
-  { "Dev Workflow & Setup" = "dev_workflow.md" },
-  { "Hardware Components" = "hardware.md" },
-  { "Assessment Checklist" = "assessment_checklist.md" },
-  { "Troubleshooting" = "troubleshooting.md" },
-  { "References" = "references.md" },
-  { "ROS Workspace" = [
-    { "Overview" = "ros/index.md" },
+  { "System Overview" = [
+    { "Home" = "index.md" },
+    { "Architecture Guide" = "architecture.md" },
+    { "Assessment & Checklist" = "assessment_checklist.md" },
+  ] },
+  { "ROS 2 Autonomy Stack" = [
+    { "Overview & Nodes" = "ros/index.md" },
     { "Launch & Interfaces" = "ros/launch.md" },
-    { "Gazebo Simulation" = "ros/simulation.md" },
+    { "Gazebo 3D Simulation" = "ros/simulation.md" },
   ] },
-  { "STM32 Firmware" = [
-    { "Overview" = "stm32/index.md" },
-    { "Pinouts & Peripherals" = "stm32/pinouts.md" },
-    { "Drivers & Sensors" = "stm32/drivers.md" },
+  { "Hardware & Firmware" = [
+    { "Hardware Specs & Wiring" = "hardware.md" },
+    { "STM32 Firmware Overview" = "stm32/index.md" },
+    { "Pinout Allocations" = "stm32/pinouts.md" },
+    { "Drivers & Peripherals" = "stm32/drivers.md" },
   ] },
-  { "Authoring Reference" = "authoring_reference.md" },
+  { "Development & Resources" = [
+    { "Dev Workflow & Setup" = "dev_workflow.md" },
+    { "References & Datasheets" = "references.md" },
+  ] },
 ]
 
 # With the "extra_css" option you can add your own CSS styling to customize
