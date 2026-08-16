@@ -17,13 +17,13 @@ Below is the team structure for the MDP robot development across hardware, firmw
 
 | Member Name | Primary Role | Key Focus & Responsibilities |
 | --- | --- | --- |
-| **Member 1** | **Team Lead & System Architect** | System integration, project planning, OpenSpec workflow, and overall release coordination. |
-| **Member 2** | **ROS2 Control & Kinematics** | `mdp_ros` bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
-| **Member 3** | **Path Planning & Navigation** | Reeds-Shepp & Dubins curve planner implementation, TSP solver, and Pure Pursuit waypoint follower. |
-| **Member 4** | **Computer Vision & Perception** | RPi Camera V2 integration, Ultralytics YOLO26 arrow/symbol detection node, and image streaming. |
-| **Member 5** | **STM32 Firmware & Zephyr RTOS** | `mdp_stm32` bringup, AT8236 motor PWM driver, HWZ020 steering servo driver, and timer setup. |
-| **Member 6** | **micro-ROS & Hardware Transport** | `USART3` serial transport link, micro-ROS Agent daemon, `/joint_states` and `/imu/data` publisher. |
-| **Member 7** | **Android UI & Communications** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
+| **Wei Ming** | **Team Lead & RPi System Architect** | System integration, `mdp_ros` workspace bringup, release coordination, and OpenSpec workflow. |
+| **Katie** | **RPi ROS 2 Control & Kinematics** | `mdp_ros` bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
+| **Rashi** | **Algorithm & Path Planning** | A* grid search, Reeds-Shepp curve planner, TSP solver, and Pure Pursuit waypoint follower. |
+| **Kaegan** | **Computer Vision & Perception** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. |
+| **HC** | **STM32 Firmware & Zephyr RTOS** | `mdp_stm32` bringup, AT8236 motor PWM driver, HWZ020 steering servo driver, and timer setup. |
+| **SL** | **STM32 micro-ROS & Transport** | `USART3` serial transport link, micro-ROS Agent daemon, `/joint_states` and `/imu/data` publisher. |
+| **Albert** | **Android UI & Communications** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
 
 ---
 
