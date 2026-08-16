@@ -15,15 +15,13 @@ Welcome to the central documentation hub for the MDP Ackermann Autonomous Robot.
 
 Below is the team structure for the MDP robot development across hardware, firmware, control, and autonomy:
 
-| Member Name | Primary Role | Key Focus & Responsibilities |
+| Subsystem Role | Team Member(s) | Key Focus & Responsibilities |
 | --- | --- | --- |
-| **Wei Ming** | **Team Lead & RPi System Architect** | System integration, `mdp_ros` workspace bringup, release coordination, and OpenSpec workflow. |
-| **Katie** | **RPi ROS 2 Control & Kinematics** | `mdp_ros` bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
-| **Rashi** | **Algorithm & Path Planning** | A* grid search, Reeds-Shepp curve planner, TSP solver, and Pure Pursuit waypoint follower. |
-| **Kaegan** | **Computer Vision & Perception** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. |
-| **HC** | **STM32 Firmware & Zephyr RTOS** | `mdp_stm32` bringup, AT8236 motor PWM driver, HWZ020 steering servo driver, and timer setup. |
-| **SL** | **STM32 micro-ROS & Transport** | `USART3` serial transport link, micro-ROS Agent daemon, `/joint_states` and `/imu/data` publisher. |
-| **Albert** | **Android UI & Communications** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
+| **Algorithm** | **Rashi** | A* grid search, Reeds-Shepp curve planner, TSP solver, and Pure Pursuit waypoint follower. |
+| **Android** | **Albert** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
+| **Raspberry Pi** | **Wei Ming, Katie** | `mdp_ros` workspace bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
+| **STM32** | **HC, SL** | `mdp_stm32` Zephyr firmware, AT8236 motor PWM, HWZ020 steering servo, encoders, IMU, and micro-ROS serial transport. |
+| **Vision** | **Kaegan** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. |
 
 ---
 
