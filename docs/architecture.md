@@ -20,20 +20,19 @@ This guide documents the complete target architecture for the robot: host softwa
 | **ROS2 Jazzy (`ros-base`)** | Core Middleware | Distributed node graph, topic communication layer, and DDS. |
 | **`robot_state_publisher` / `xacro`** | Robot Model | Builds and broadcasts the URDF / TF coordinate transform tree. |
 | **`ackermann_steering_controller`** | Kinematics Engine | Converts `/cmd_vel` setpoints into individual wheel speeds and steering knuckle angles. |
-| **`topic_based_ros2_control`** | Real HW Plugin | Maps `ros2_control` commands & states to ROS topics (`/joint_commands`, `/joint_states`). |
+| **Custom `HardwareInterface` (`C++`)** | Real HW Plugin | Direct USB Serial (`/dev/ttyACM0`) driver reading/writing binary packets to STM32. |
 | **`gz_ros2_control` / `ros_gz`** | Sim HW Plugin | Integrates Gazebo Sim 3D physics engine with ROS2 control. |
-| **`robot_localization` (`ekf_node`)** | Sensor Fusion | Fuses rear wheel odometry (linear velocity v_x) and ICM-20948 IMU (yaw rate ω_z, heading θ) into `/odometry/filtered`. |
+| **`robot_localization` (`ekf_node`)** | Sensor Fusion | Fuses rear wheel odometry (linear velocity v_x) and ICM-20948 IMU into `/odometry/filtered`. |
 | **`android_bridge_node` (`pyserial` / RFCOMM)** | Android Bridge | ROS2 Python node parsing Classic Bluetooth RFCOMM serial (`/dev/rfcomm0`) strings into ROS2 topics (`/cmd_vel`, `/odometry/filtered`). |
-| **`micro-ROS Agent`** | Host↔MCU Bridge | C++ daemon bridging ROS2 DDS topics to the STM32 MCU over USB serial (`USART3`). |
 | **`rviz2` / Foxglove Bridge** | Visualization | Live 3D visualization of TF trees, sensor markers, camera feeds, and paths. |
 
 ### MCU Firmware (`mdp_stm32` — STM32F407VET6 on WHEELTEC C30D Board)
 
 | Component | Category | Details & Responsibilities |
 | --- | --- | --- |
-| **Zephyr RTOS** | Firmware Base | Real-time multithreading, Devicetree hardware abstraction, and timers. |
-| **micro-ROS (`rclc`)** | MCU Client | Subscribes to `/joint_commands`, publishes `/joint_states` and `/imu/data`. |
-| **AT8236 Driver** | Motor PWM | Dual H-Bridge driving 2× rear `MG513P3012V` DC gear motors (Motor A & B). |
+| **PlatformIO + STM32 HAL** | Firmware Base | Lightweight C firmware with STM32Cube HAL drivers and ST-LINK uploading. |
+| **USB CDC / UART Serial** | MCU Transport | Reads 12-byte binary command packets and replies with 12-byte encoder/sensor feedback. |
+| **AT8236 Driver** | Motor PWM | Dual H-Bridge driving 2× rear `MG513P3012V` DC gear motors (TIM1/TIM9/TIM10/TIM11). |
 | **HWZ020 Servo** | Steering PWM | 50 Hz PWM driver (`PB15` / TIM12_CH2) for front Ackermann steering knuckles. |
 | **Hall Encoders** | Wheel Telemetry | Quadrature timer decoding (TIM2 / TIM3) for rear wheel travel displacement. |
 | **ICM-20948 IMU** | Motion Telemetry | 9-DOF Gyro/Accel over I2C2 (`PB10`/`PB11`) providing yaw rotation feedback. |
@@ -50,9 +49,8 @@ graph TD
 
   subgraph HOST["Host ROS2 Runtime (mdp_ros)"]
     ASC["ackermann_steering_controller"]
-    TB_HWI["topic_based_ros2_control (Real Hardware Plugin)"]
+    REAL_HWI["Custom C++ HardwareInterface (Real HW Plugin)"]
     GZ_HWI["gz_ros2_control (Sim Plugin)"]
-    AGENT["micro-ROS Agent (Serial Daemon)"]
   end
 
   subgraph FUSION["Sensor Fusion Layer (Host)"]
@@ -63,26 +61,26 @@ graph TD
     GZ_SIM["Gazebo 3D Simulation Engine"]
   end
 
-  subgraph MCU["STM32 MCU Target (mdp_stm32)"]
+  subgraph MCU["STM32 MCU Target (mdp_stm32 PlatformIO + HAL)"]
     MOTORS["2x Rear DC Motors (AT8236 Driver)"]
     SERVO["HWZ020 Steering Servo (PB15 TIM12_CH2)"]
     SENSORS["Hall Encoders & ICM-20948 IMU"]
   end
 
   CMD -->|"/cmd_vel"| ASC
-  ASC -->|"Joint Commands"| TB_HWI
+  ASC -->|"Joint Command Handles"| REAL_HWI
   ASC -->|"Joint Commands"| GZ_HWI
 
   GZ_HWI -->|"Physics & States"| GZ_SIM
-  TB_HWI -->|"/joint_commands & /joint_states"| AGENT
-  AGENT -->|"Serial UART / USART3 @ 115200"| MCU
+  REAL_HWI -->|"Direct USB CDC / Serial Packet @ /dev/ttyACM0"| MCU
 
   MCU --> MOTORS
   MCU --> SERVO
-  SENSORS -->|"Encoders & IMU Data"| MCU
+  SENSORS -->|"Encoders & IMU Telemetry Packet"| MCU
+  MCU -->|"Direct USB CDC / Serial Feedback Packet"| REAL_HWI
 
   ASC -->|"/ackermann_steering_controller/odometry (v_x)"| EKF
-  AGENT -.->|"/imu/data (ω_z, orientation)"| EKF
+  REAL_HWI -.->|"/imu/data (ω_z, orientation)"| EKF
   EKF -->|"/odometry/filtered & odom->base_link TF"| CMD
 ```
 
@@ -92,24 +90,21 @@ graph TD
 sequenceDiagram
   participant User as Autonomy / Teleop Node
   participant ASC as ackermann_steering_controller
-  participant HWI as topic_based_ros2_control
-  participant Agent as micro-ROS Agent (Host)
-  participant MCU as rclc Node (STM32)
+  participant HWI as Custom C++ HardwareInterface
+  participant MCU as STM32 Firmware (PlatformIO + HAL)
   participant HW as Motors, Servo & Sensors
   participant EKF as robot_localization (EKF)
 
   User->>ASC: /cmd_vel (Twist / TwistStamped)
-  ASC->>HWI: Joint Command Setpoints
-  HWI->>Agent: /joint_commands (sensor_msgs/JointState)
-  Agent->>MCU: Serial Packet (micro-ROS transport)
+  ASC->>HWI: Joint Command Handles (speed, steer angle)
+  HWI->>MCU: Direct USB Serial Binary Packet (12 Bytes)
   MCU->>HW: Actuate Motor PWM (AT8236) & Servo PWM (HWZ020)
   
   HW-->>MCU: Read Encoder Ticks & IMU Registers
-  MCU-->>Agent: Publish /joint_states & /imu/data
-  Agent-->>HWI: /joint_states feedback
-  HWI-->>ASC: Joint State Interfaces
+  MCU-->>HWI: Direct USB Serial Feedback Packet (12 Bytes)
+  HWI-->>ASC: Update Joint State Handles (encoder pos, steer angle)
   ASC-->>EKF: /ackermann_steering_controller/odometry (linear v_x)
-  Agent-->>EKF: /imu/data (yaw rate ω_z, orientation)
+  HWI-->>EKF: /imu/data (yaw rate ω_z, orientation)
   EKF-->>User: /odometry/filtered & odom->base_link TF
 ```
 
@@ -180,40 +175,40 @@ To prevent position and heading drift during competition runs:
 
     | Technology Area | Replaced / Alternative Choice | Chosen Solution | Key Architectural Advantage & Rationale |
     | --- | --- | --- | --- |
-    | **1. Firmware RTOS Base** | Bare-Metal STM32 (FreeRTOS / STM32Cube HAL) | **Zephyr RTOS** | **Multi-MCU Portability.** Zephyr migrates seamlessly across MCU vendors (STM32, ESP32, TI, nRF) via Devicetree overlays (`.overlay`), whereas STM32Cube/FreeRTOS code is hard-locked to vendor HAL APIs. |
-    | **2. MCU Host Transport** | Custom Serial Protocol (Hand-rolled UART / Protobuf / zenoh-pico) | **micro-ROS (`rclc`)** | **Developer Efficiency & No Boilerplate.** Speaks standard ROS2 topics (`/joint_commands`, `/joint_states`, `/imu/data`) directly over serial without handwriting custom binary packet parsers or deserialization loops. |
-    | **3. Environment & Tooling** | Docker Containers / System `apt` / `uv` / Virtualenvs | **`pixi` (`robostack-jazzy`)** | **Multiplatform Environment Sync.** Pins native binary packages across Linux, macOS, and Windows (ROS2 Jazzy, Gazebo, ARM GCC SDK, `west`, `ninja`) in a single `pixi.toml` lockfile without VM overhead. |
-    | **4. Hardware Interface** | Custom C++ `hardware_interface` Driver | **`topic_based_ros2_control`** | **Avoid Custom Hardware Code.** Bridges `ros2_control` directly to ROS topics, avoiding complex custom C++ hardware drivers and unlocking ROS2's standard robotics stack in both Sim and Real HW. |
+    | **1. Firmware Framework** | Zephyr RTOS / Heavy Middleware | **PlatformIO + STM32 HAL** | **Lightweight & High Performance.** Raw STM32 HAL C code compiled via PlatformIO provides fast, deterministic USB CDC interrupts (< 10 KB FLASH), avoiding RTOS overhead. |
+    | **2. MCU Host Transport** | micro-ROS / XRCE-DDS | **Direct USB Serial (CDC/UART)** | **Deterministic & Sub-Millisecond.** Transmits 12-byte raw binary packets directly over USB serial without DDS middleware or daemon overhead. |
+    | **3. Environment & Tooling** | Docker Containers / System `apt` / `uv` / Virtualenvs | **`pixi` (`robostack-jazzy`)** | **Multiplatform Environment Sync.** Pins native binary packages across Linux, macOS, and Windows (ROS2 Jazzy, Gazebo, PlatformIO, `ninja`) in a single `pixi.toml` lockfile without VM overhead. |
+    | **4. Hardware Interface** | `topic_based_ros2_control` / micro-ROS | **Custom C++ `HardwareInterface`** | **Direct Memory-to-Wire Transfer.** Opens `/dev/ttyACM0` directly in C++, removing intermediate ROS topic bridges and process hops. |
     | **5. Middleware Framework** | ROS1 / Ad-hoc Custom Python Scripts | **ROS2 Jazzy** | **Full Robotics Stack Access.** Unlocks native Gazebo 3D simulation, standard `ackermann_steering_controller`, TF2 transform trees, and autonomous path planning pipelines out of the box. |
-    | **6. Development Workflow** | Unstructured AI Prompts & Ad-hoc Commits | **OpenSpec (`propose`/`apply`/`archive`)** | **Token-Efficient LLM Orchestration.** Optimized for modern Agentic AI / LLM workflows (Antigravity subagents). Keeps token usage lightweight, context clean, and change scope strictly bounded. |
+    | **6. Development Workflow** | Unstructured AI Prompts & Ad-hoc Commits | **Standard Git / Optional OpenSpec** | **Flexible & Simple.** Developers can use standard Git branches/commits directly, or optionally use OpenSpec (`propose`/`apply`/`archive`) when delegating structured specs to AI coding agents. |
 
     ---
 
     ### 📜 Decision Records
 
-    ### 0001. Zephyr RTOS Base vs. Bare-Metal STM32 (FreeRTOS / HAL)
-    - **Decision:** Use **Zephyr RTOS** v4.0.0 as the firmware base for `mdp_stm32`.
-    - **Why:** Bare-metal firmware using STM32CubeIDE HAL or FreeRTOS ties driver logic directly to vendor-specific register APIs, making code migration to other MCU platforms (e.g. ESP32, TI, nRF) difficult. Zephyr provides declarative Devicetree hardware overlays (`.overlay`) and unified driver APIs (`pwm_set_pulse_dt`), allowing the firmware to migrate across any supported MCU family without rewriting application logic.
+    ### 0001. PlatformIO + STM32 HAL Firmware Framework
+    - **Decision:** Use **PlatformIO with STM32Cube HAL** as the firmware base for `mdp_stm32`.
+    - **Why:** Full RTOS abstractions like Zephyr add unnecessary footprint and toolchain complexity for low-level motor drivers. PlatformIO with STM32 HAL provides native, lightweight C code with zero-overhead hardware timers (`TIM1`, `TIM9`, `TIM10`, `TIM11`, `TIM12`) and fast USB CDC serial interrupts.
 
-    ### 0002. micro-ROS Serial Transport vs. Custom Serial UART Protocol
-    - **Decision:** Use **micro-ROS (`rclc`)** over `USART3` serial (USB Type-C @ 115200 baud).
-    - **Why:** Custom serial protocols require handwriting, testing, and maintaining tedious binary packet framing, checksum validation, and host-side C++ deserializers. micro-ROS integrates the MCU directly into the ROS2 graph, making telemetry and control topics available out of the box with zero custom serialization boilerplate.
+    ### 0002. Direct USB Serial Protocol vs. micro-ROS Middleware
+    - **Decision:** Use a **Direct 12-Byte Binary Packet Protocol** over USB CDC / UART (`/dev/ttyACM0` @ 115200 baud).
+    - **Why:** micro-ROS introduces DDS middleware framing, `rclc` executor threads, and an external `micro_ros_agent` process on the RPi. Direct serial binary packets provide sub-millisecond execution, zero daemon management, and trivial debugging.
 
     ### 0003. Pixi Environment Manager vs. Docker / System `apt` / `uv`
     - **Decision:** Use **`pixi`** with the `robostack-jazzy` channel to manage the monorepo workspace.
-    - **Why:** System `apt` packages lock developers to specific Linux OS versions, Docker containers introduce filesystem and GPU rendering overhead for Gazebo/RViz2, and Python-only managers (`uv`/`venv`) cannot manage native C++ robotics packages or ARM cross-compilation SDKs. `pixi.toml` provides true multiplatform reproducibility across Linux, macOS, and Windows in a lightweight single-command workflow.
+    - **Why:** System `apt` packages lock developers to specific Linux OS versions, Docker containers introduce filesystem and GPU rendering overhead for Gazebo/RViz2, and Python-only managers (`uv`/`venv`) cannot manage native C++ robotics packages or cross-compilation SDKs. `pixi.toml` provides true multiplatform reproducibility across Linux, macOS, and Windows in a lightweight single-command workflow.
 
-    ### 0004. Hardware Interface (`topic_based_ros2_control`) & Host-Side Kinematics
-    - **Decision:** Use **`topic_based_ros2_control`** as the real-hardware plugin for `ros2_control` and run all Ackermann kinematics on the ROS2 host.
-    - **Why:** Writing custom C++ `hardware_interface` drivers requires extensive low-level C++ hardware code. `topic_based_ros2_control` bridges command and state interfaces directly to standard ROS topics (`/joint_commands` and `/joint_states`), allowing the exact same `ackermann_steering_controller` node to run seamlessly in both Gazebo Sim and Real Hardware. Furthermore, keeping kinematics on the ROS2 host allows developers to **tune parameters live (wheelbase, track width, steering limits, speed/accel limits) via ROS2 YAML files or `ros2 param set` while the robot is running—without ever having to recompile or reflash the STM32 MCU firmware over ST-LINK.**
+    ### 0004. Custom C++ `HardwareInterface` Driver
+    - **Decision:** Write a **Custom C++ `hardware_interface::SystemInterface`** plugin (`mdp_hardware/MDPWheelHardware`) for `ros2_control`.
+    - **Why:** `topic_based_ros2_control` introduces extra ROS topic hops and requires `micro_ros_agent`. A custom C++ `HardwareInterface` opens `/dev/ttyACM0` directly, executing binary I/O synchronously within `controller_manager` for maximum real-time determinism. Live tuning of Ackermann parameters (wheelbase, track width, speed limits) is preserved via ROS 2 YAML files.
 
     ### 0005. ROS2 Jazzy Middleware vs. Legacy ROS1 / Custom Scripts
     - **Decision:** Build the host software stack on **ROS2 Jazzy**.
     - **Why:** Ad-hoc Python scripts lack standardized TF coordinate transformations, sensor fusion nodes, and simulation bridges. ROS2 Jazzy gives us immediate access to Gazebo 3D simulation (`ros_gz`), standard Ackermann controllers, Nav2/path planning tools, and DDS middleware communication.
 
-    ### 0006. OpenSpec Spec-Driven Workflow vs. Unstructured AI Prompts
-    - **Decision:** Use **OpenSpec** (`propose`, `apply`, `archive`) for AI-assisted development across submodules.
-    - **Why:** In modern development with LLM coding agents (Antigravity, Superhuman, Claude Code), orchestrating multiple subagents requires light token usage, clear context boundaries, and structured task execution. OpenSpec provides a lightweight, token-efficient framework that maintains system specs in `openspec/specs/` as the single source of truth, enforcing strict task checklists and preventing scope creep.
+    ### 0006. Standard Development Workflow (Optional OpenSpec)
+    - **Decision:** Use standard **Git workflow** as the primary process, with **OpenSpec** (`propose`, `apply`, `archive`) as an optional helper for AI-assisted task specification.
+    - **Why:** Keeps the codebase accessible and easy for all team members to contribute using standard Git commands (`git commit`, `git push`), while allowing optional spec tracking when using AI agentic workflows.
 
 ---
 

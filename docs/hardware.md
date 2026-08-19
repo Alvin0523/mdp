@@ -10,12 +10,12 @@ This page documents the verified hardware components and physical specifications
 
 | Component | Course Specification | Physical & URDF Physics Details |
 | --- | --- | --- |
-| **Control Board** | **WHEELTEC C30D V2.1** | STM32F407VET6 MCU mounted on acrylic protector plate |
+| **Control Board** | **WHEELTEC C30D V2.1 / V2.2** | STM32F407VET6 MCU (168 MHz CPU, 8 MHz HSE external crystal oscillator) |
 | **Drive Motors** | `MG513P3012V` (×2) | 12V DC geared motors (1:30 reduction ratio), 330 RPM max speed, driving rear wheels (`lb_joint`, `rb_joint`) |
 | **Wheel Encoders** | **Hall Encoders** (2.54mm pitch, 6-pin) | 2 units mounted on drive motors (Model: `MG513P3012V`) |
 | **Steering Servo** | Model `HWZ020` (4.8V – 7.4V) | Front Ackermann steering servo (`left_joint`, `right_joint`). **Stall Torque:** 1.96 N·m (20 kg·cm). **Max Speed:** 6.54 rad/s (0.16s / 60°). **Mechanical Limits:** $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) |
-| **Motor Driver** | Dual AT8236 H-Bridge | Board-integrated motor driver (`app/src/motor.c`) |
-| **Onboard SBC (Host)** | **Raspberry Pi 4 Model B (4GB)** | Runs ROS2 Jazzy + micro-ROS Agent, connected to STM32 via USB Type-C |
+| **Motor Driver** | Dual AT8236 H-Bridge | Board-integrated motor driver (`src/motor.c`) |
+| **Onboard SBC (Host)** | **Raspberry Pi 4 Model B (4GB)** | Runs ROS2 Jazzy + ros2_control hardware interface over USB serial (`USART3` @ 115200 baud) |
 | **Camera** | **RPi Camera Module V2** | Sony IMX219 8MP sensor connected via CSI flexi cable. Driver: `ros-jazzy-v4l2-camera` (`v4l2_camera_node` publishing `/image_raw`) + `ros-jazzy-compressed-image-transport` (`/image_raw/compressed` for streaming) + `ros-jazzy-cv-bridge` |
 | **IR Range Sensors** | **Sharp GP2Y0A21YK** (×2) | Analog IR distance sensors with 3D printed brackets |
 | **Ultrasonic Sensor** | **HC-SR04** (×1) | Distance measurement sensor |
@@ -23,6 +23,11 @@ This page documents the verified hardware components and physical specifications
 | **Debugger** | **ST-LINK/V2 (SWD)** | Connected via 4-pin header: 3.3V (Red), SWCLK (Black - PA14), GND (Blue), SWDIO (Yellow - PA13) |
 | **Battery Pack** | 12.6 V 3400 mAh Li-ion Pack | 3× NCR18650B cells (12.6V max, right-angle DC connector) |
 | **Tablet / UI** | Samsung Galaxy Tab A7 Lite (SM-T220) | User control / Android app tablet interface |
+
+> [!IMPORTANT]
+> **External Crystal (`HSE_VALUE = 8000000L`):**  
+> The WHEELTEC C30D board uses an **8.000 MHz external quartz crystal**. ST HAL defaults to `25000000L` (25 MHz) if not explicitly specified, which causes USART baud rate miscalculations and garbled serial output. Always include `-D HSE_VALUE=8000000L` in `platformio.ini` `build_flags`.
+
 
 ---
 
