@@ -54,6 +54,7 @@ nav = [
     { "Overview & Nodes" = "ros/index.md" },
     { "Launch & Interfaces" = "ros/launch.md" },
     { "Gazebo 3D Simulation" = "ros/simulation.md" },
+    { "Real Hardware Tuning Guide" = "ros/real_hardware_tuning.md" },
   ] },
   { "Hardware & Firmware" = [
     { "Hardware Specs & Wiring" = "hardware.md" },

@@ -56,7 +56,7 @@ Per [ADR 0007](../architecture.md#0007-imu-fused-odometry-via-robot_localization
 - **TF ownership changed**: `ackermann_controller.yaml` now sets `enable_odom_tf: false` — `ekf_node` is the sole publisher of `odom→base_footprint` TF in sim, avoiding two nodes competing for the same transform. `task2_runner.py`'s pose estimate (via TF lookup) is unaffected in code, but now reflects the fused estimate rather than raw wheel odometry.
 - Both `sim.launch.py` and `task2_sim.launch.py` launch `ekf_node`.
 
-Real hardware is **not yet wired up** — `real_controller.yaml` still has `enable_odom_tf: true` and `real.launch.py` does not launch an EKF node, because `mdp_stm32` firmware has no IMU or encoder publishing yet (still stubs, see `docs/architecture.md` Section 5). A matching `src/mdp_bringup/config/ekf_real.yaml` (`base_link_frame: base_link`, matching `real_controller.yaml`'s `base_frame_id`) is prepared so activating it later is a drop-in once that firmware exists.
+Real hardware is **not yet wired up** — `real_controller.yaml` still has `enable_odom_tf: true` and `real.launch.py` does not launch an EKF node, because `mdp_stm32` firmware has no IMU or encoder publishing yet (still stubs, see `docs/architecture.md` Section 5). A matching `src/mdp_bringup/config/ekf_real.yaml` (`base_link_frame: base_link`, matching `real_controller.yaml`'s `base_frame_id`) is prepared so activating it later is a drop-in once that firmware exists — see the [Real Hardware Tuning Guide](real_hardware_tuning.md) for the activation steps and friction-tuning procedure.
 
 ---
 

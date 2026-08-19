@@ -56,7 +56,18 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
     `ackermann_steering_controller`'s odometry (which drives `odom→base_footprint` TF) is a pure two-parameter bicycle-model estimate from `wheelbase` and `steering_track_width` — it has no term for the front wheels' kingpin-to-wheel-center offset (`lf_joint`/`rf_joint` origin, ~30mm lateral). Under real friction (`mu1: 2.0` on `lf_link`/`rf_link`) that offset wheel scrubs against the ground while turning, so the physical body in Gazebo turns less than the idealized formula predicts. Straight-line motion is unaffected — it only depends on `wheel_radius * traction_wheel_angular_velocity`, no steering geometry involved — which is why translation matches exactly while rotation drifts.
 
-    This is not a sim bug to "fix" by detuning `mu1`/`mu2` — the same wheel-only odometry runs unchanged on real hardware and has the identical blind spot there, just invisible without a ground-truth reference. Tune friction to match measured real wheel grip only. The actual fix for the heading drift is IMU-fused odometry via `robot_localization` (see `openspec/changes/2026-08-13-ekf-sensor-fusion/proposal.md` in `mdp_ros`), not friction tuning.
+    This is not a sim bug to "fix" by detuning `mu1`/`mu2` — the same wheel-only odometry runs unchanged on real hardware and has the identical blind spot there, just invisible without a ground-truth reference. Tune friction to match measured real wheel grip only (see the [Real Hardware Tuning Guide](ros/real_hardware_tuning.md#1-tuning-gazebo-wheel-friction-mu1-mu2-against-real-grip)). The actual fix for the heading drift is IMU-fused odometry via `robot_localization`, implemented in sim per [ADR 0007](architecture.md#0007-imu-fused-odometry-via-robot_localization-ekf) — not friction tuning.
+
+??? question "Robot in Gazebo drives on its own with no teleop running, or won't stop when you press `k`"
+
+    `/cmd_vel` is a plain ROS topic on your `ROS_DOMAIN_ID` — it isn't scoped to whichever launch file you happen to be looking at. Two ways this bites you:
+
+    1. **A leftover node from a previous launch is still publishing.** Killing `gz sim`/`ros2 launch` processes doesn't necessarily kill every node they spawned (e.g. `task2_runner.py`, `yolo_arrow_detector.py` from `task2_sim.launch.py` can survive as orphaned processes after the parent launch is killed) — and an autonomy node like `task2_runner` will happily keep publishing `/cmd_vel` into *any* Gazebo instance you spin up afterward, sim or otherwise, since it's just watching the topic. Same story for a `ros2 topic pub` you forgot was running.
+    2. **`teleop_twist_keyboard` latches, it doesn't hold-to-drive.** Pressing `i` sets a forward speed and it keeps republishing that speed every cycle until you press `k` (stop) or another key — there's no "release" event. If you Ctrl+C'd or closed that terminal without pressing `k` first, and left the process running (e.g. in a background pane), it keeps driving.
+
+    **Diagnose**: `ros2 node list` (look for autonomy/task nodes you didn't mean to have running) and `ros2 topic hz /cmd_vel` / `ros2 topic echo /cmd_vel` (confirms something is actually publishing and at what rate). `ros2 topic info /cmd_vel -v` shows publisher node names directly.
+
+    **Fix**: `ps aux | grep -E "task2_runner|yolo_arrow_detector|teleop"` and kill the specific stray PIDs rather than blindly `pkill`-ing everything ROS-related, which can also kill launches you still need (e.g. Foxglove bridge).
 
 ## :twisted_rightwards_arrows: Git / submodules
 
