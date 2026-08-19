@@ -42,6 +42,7 @@ This page documents the verified hardware components and physical specifications
 | **Steering Joint Limits** | $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) | `lower="-0.39" upper="0.39"` | Mechanical steering knuckle range limit in URDF |
 | **Steering Max Effort** | 1.96 N·m (Stall Torque) | `effort="10.0"` | URDF physics joint limit (prevents solver contact locking in Gazebo) |
 | **Steering Max Speed** | ~6.54 rad/s (375°/s) | `velocity="5.0"` | URDF physics max turn rate for `left_joint` & `right_joint` |
+| **Front Wheel Friction ($\mu_1$ / $\mu_2$)** | *unmeasured — provisional* | `mu1: 2.0`, `mu2: 0.4` on `lf_link`/`rf_link` | **Must be tuned against measured real wheel-to-floor grip when available, never detuned just to make Gazebo's visible turning match `/tf`** — the controller's odometry ignores the front wheels' kingpin-to-contact offset, so some TF/visual mismatch under turning is expected model error, not a friction bug. See [troubleshooting](troubleshooting.md). |
 
 ---
 

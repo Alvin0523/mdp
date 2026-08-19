@@ -149,11 +149,12 @@ To prevent position and heading drift during competition runs:
 
 ### `mdp_ros` (Host Software)
 
-- [x] `mdp_description` + `mdp_bringup` — URDF models, meshes, launch files, and controller YAMLs
-- [x] Gazebo Simulation — `mini_akm_robot.urdf` with `gz_ros2_control`
-- [x] Real Hardware Integration — `mini_akm_real_robot.urdf` with `topic_based_ros2_control`
+- [x] `mdp_description` + `mdp_bringup` — unified `mini_akm_robot.urdf.xacro` (sim/real gated by an `is_sim` arg), meshes, launch files, and controller YAMLs
+- [x] Gazebo Simulation — `mini_akm_robot.urdf.xacro` (`is_sim:=true`) with `gz_ros2_control`
+- [x] Real Hardware Integration — `mini_akm_robot.urdf.xacro` (`is_sim:=false`) with `topic_based_ros2_control`
 - [x] Autonomy & Planning Nodes — Reeds-Shepp planner, Dubins pure pursuit follower, YOLO arrow detector, Task 1 & 2 state machines
-- [ ] `robot_localization` EKF Node — Launch configuration for fusing `/ackermann_steering_controller/odometry` + `/imu/data`
+- [x] `robot_localization` EKF Node (sim) — fuses `/ackermann_steering_controller/odometry` + simulated `/imu/data`, sole publisher of `odom→base_footprint` TF in sim (`enable_odom_tf: false` on the controller)
+- [ ] `robot_localization` EKF Node (real) — `ekf_real.yaml` prepared but not launched; blocked on `mdp_stm32` encoder/IMU/micro-ROS integration below
 
 ### `mdp_stm32` (MCU Firmware)
 
@@ -169,7 +170,7 @@ To prevent position and heading drift during competition runs:
 
 ## 6. Key Architectural Decisions (ADRs)
 
-??? info "Click to expand Architectural Decision Records (ADRs 0001–0006) & Comparative Analysis Matrix"
+??? info "Click to expand Architectural Decision Records (ADRs 0001–0007) & Comparative Analysis Matrix"
 
     ### 📊 Comparative Analysis Matrix
 
@@ -209,6 +210,10 @@ To prevent position and heading drift during competition runs:
     ### 0006. Standard Development Workflow (Optional OpenSpec)
     - **Decision:** Use standard **Git workflow** as the primary process, with **OpenSpec** (`propose`, `apply`, `archive`) as an optional helper for AI-assisted task specification.
     - **Why:** Keeps the codebase accessible and easy for all team members to contribute using standard Git commands (`git commit`, `git push`), while allowing optional spec tracking when using AI agentic workflows.
+
+    ### 0007. IMU-Fused Odometry via `robot_localization` EKF
+    - **Decision:** Fuse `ackermann_steering_controller`'s wheel odometry with IMU yaw/yaw-rate through a `robot_localization` `ekf_node`, which becomes the sole publisher of `odom→base_footprint` TF (`enable_odom_tf: false` on the controller). Implemented and launched in simulation now; a matching `ekf_real.yaml` is prepared but not launched on real hardware yet.
+    - **Why:** `ackermann_steering_controller`'s odometry is a two-parameter bicycle-model estimate (`wheelbase`, `steering_track_width`) with no term for the front wheels' kingpin-to-wheel-center offset (see `docs/hardware.md` drivetrain table and `docs/troubleshooting.md`). Under real friction this makes wheel-only heading drift from the true turn rate — worst during sharp turns, which is exactly what Task 2's slalom needs most. This is a real limitation, not a sim artifact: it will affect real hardware identically once encoders exist there. Fusing an IMU corrects it with the same node graph and config shape on both platforms, rather than a per-platform hack. Real-hardware activation is blocked on `mdp_stm32` firmware (encoder, IMU, and micro-ROS integration are still stubs — see Section 5 above); `ekf_real.yaml` exists so wiring it into `real.launch.py` is a drop-in once that firmware lands.
 
 ---
 
