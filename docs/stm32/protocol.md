@@ -75,6 +75,20 @@ If the STM32 hasn't received a checksum-valid command packet within `PROTOCOL_CO
 4. **Servo:** should visibly center on boot. Real steering needs a host command (step 6).
 5. **Motors:** will **not** spin at all without an active host link — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
 
+**Automated drive/steer self-test (no host needed):** hold the `PE0` user button down while the board resets/powers on to run a scripted sequence — forward 1 wheel revolution, backward 1 wheel revolution, steer left, steer right, return to center. Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`, called once at boot before the main loop). Refuses to run if the `PD3` e-stop switch is engaged.
+
+Only `PE8` is a GPIO-controllable LED on this board (confirmed against the resource-allocation PDF — the `LED1`-`LED4` silkscreen labels on the schematic are hardwired power-rail/SWD indicators, not firmware-drivable). So each phase blinks `PE8` a distinct number of times instead of lighting separate LEDs:
+
+| Blinks | Phase |
+| --- | --- |
+| 1 | Forward, 1 wheel revolution |
+| 2 | Backward, 1 wheel revolution |
+| 3 | Steer left |
+| 4 | Steer right |
+| 5 | Done (or refused, if e-stop was engaged) |
+
+The OLED also prints the current phase. Each drive phase has a 5s safety timeout (`SELFTEST_DRIVE_TIMEOUT_MS`) in case the wheels aren't actually turning (e.g. propped up wrong, or a real motor/encoder fault) — it won't hang forever waiting for encoder ticks that never arrive.
+
 **With the ROS2 bridge running** (wheels off the ground first):
 
 ```bash
@@ -101,4 +115,5 @@ Wheels should spin slowly and the servo should turn — confirms the full STM32 
 - STM32-side firmware build has not been confirmed to compile (last verified: ROS2/`mdp_hardware_bridge` side only, via `colcon build`).
 - `PD3` e-stop polarity assumption (see above).
 - Full protocol round-trip (steps under "With the ROS2 bridge running") has not been run yet.
+- The automated self-test sequence (`selftest.c`) has not been run on physical hardware yet.
 - Servo `SERVO_ANGLE_MAX_DEG` (`servo.h`/`servo.c`) is still a placeholder, not tuned to the actual mechanical steering lock.
