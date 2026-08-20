@@ -75,7 +75,16 @@ If the STM32 hasn't received a checksum-valid command packet within `PROTOCOL_CO
 4. **Servo:** should visibly center on boot. Real steering needs a host command (step 6).
 5. **Motors:** will **not** spin at all without an active host link — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
 
-**Automated drive/steer self-test (no host needed):** hold the `PE0` user button down while the board resets/powers on to run a scripted sequence — forward 1 wheel revolution, backward 1 wheel revolution, steer left, steer right, return to center. Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`, called once at boot before the main loop). Refuses to run if the `PD3` e-stop switch is engaged.
+**Automated drive/steer self-test (no host needed):** runs a scripted sequence — forward 1 wheel revolution, backward 1 wheel revolution, steer left, steer right, return to center. Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`).
+
+`PE0` (the user button) has two *completely separate* behaviors depending on when you press it — this is not a runtime long-press:
+
+| When you press it | What happens |
+| --- | --- |
+| Board already running normally | Cycles the OLED page (unchanged EXTI-interrupt behavior, `button.c`) |
+| Held down at the exact moment the board resets/powers on | Skips normal startup, runs the self-test instead |
+
+`selftest_run_if_requested()` checks the pin's level **once**, right after peripheral init and *before* the main loop starts — it is not watching for a long-press while the firmware is already running. To trigger it: hold `PE0` down, power-cycle (or hit physical reset) *while still holding it*, and keep holding for a second or two after power returns — you'll see the LED start its 1-2-3-4-5 blink pattern once the sequence begins, at which point you can let go. Refuses to run if the `PD3` e-stop switch is engaged.
 
 Only `PE8` is a GPIO-controllable LED on this board (confirmed against the resource-allocation PDF — the `LED1`-`LED4` silkscreen labels on the schematic are hardwired power-rail/SWD indicators, not firmware-drivable). So each phase blinks `PE8` a distinct number of times instead of lighting separate LEDs:
 
