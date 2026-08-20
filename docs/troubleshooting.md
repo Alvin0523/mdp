@@ -52,6 +52,26 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
     **Fix**: don't build the ROS2-wrapped package at all. Build the standalone `Micro-XRCE-DDS-Agent` directly from [eProsima's own repo](https://github.com/eProsima/Micro-XRCE-DDS-Agent) at the current release (`v3.0.1` — plain `cmake`/`make`, no colcon/ament, no `micro_ros_msgs` dependency) — it compiles clean against `fmt 12` and still bridges into the ROS2 DDS graph (default middleware is Fast DDS). See [ROS Workspace docs](ros/index.md) for the actual commands (`pixi run agent-build` / `pixi run agent` in `mdp_ros`).
 
+## :cpu: STM32 Firmware (`mdp_stm32`)
+
+??? question "`pixi run flash` on Raspberry Pi (64-bit OS): `UnknownPackageError: ... toolchain-gccarmnoneeabi @ >=1.60301.0,<1.80000.0 ... for your system 'linux_aarch64'`"
+
+    PlatformIO's `ststm32` platform pins `toolchain-gccarmnoneeabi` to a version range that has no `linux_aarch64` (64-bit ARM, e.g. Raspberry Pi OS 64-bit) build in the registry — only newer versions (e.g. `1.90301.0`) publish an aarch64 toolchain.
+
+    **Fix**: override the toolchain version in `mdp_stm32/platformio.ini` under the board's `[env:...]` section:
+    ```ini
+    platform_packages =
+        toolchain-gccarmnoneeabi@~1.90301.0
+    ```
+    See [platform-ststm32 issue #274](https://github.com/platformio/platform-ststm32/issues/274).
+
+??? question "`pixi run flash` / `pixi run probe` fails with `Error: open failed` or `Error: reset device failed`"
+
+    Both come from OpenOCD (bundled with PlatformIO) failing to talk to the target over SWD, not a firmware bug:
+
+    - `open failed` — OpenOCD can't even open a USB connection to the ST-LINK probe itself. Check `lsusb` for the ST-LINK, reseat/replug its USB cable.
+    - `reset device failed` — the ST-LINK is reachable over USB, but the target STM32 doesn't respond to reset over SWD. Most often this just means **the target board has no power** — some ST-LINK/V2 clones supply a small 3.3V rail to the target over the SWD header (sourced from the host's USB port), which is enough to run the bare MCU + OLED + IMU, but nowhere near enough once motor/servo PWM is actually driving real actuators (H-bridge + servo current draw browns out that rail). Power the C30D board from its own supply (battery/barrel jack) rather than relying on ST-LINK-sourced power once motors/servos are in the loop.
+
 ## :twisted_rightwards_arrows: Git / submodules
 
 ??? question "Cloned the repo but `mdp_ros/`/`mdp_stm32/` are empty"
