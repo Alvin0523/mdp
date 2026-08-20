@@ -10,6 +10,7 @@ Documentation for the `mdp_stm32` submodule containing the PlatformIO/STM32Cube 
 
 - [Pinouts & Peripherals](pinouts.md) — Timer mappings, USART configuration, and verified pin assignments.
 - [Drivers & Sensors](drivers.md) — Motor PWM (AT8236), HWZ020 steering servo, Hall encoders, and ICM-20948 IMU implementation details.
+- [Serial Protocol](protocol.md) — Binary telemetry/command packet format linking this firmware to the `mdp_hardware_bridge` ROS2 node.
 
 ## Build & Flash (PlatformIO + Pixi Workflow)
 

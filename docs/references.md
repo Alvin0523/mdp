@@ -14,7 +14,7 @@ Hover a name for a one-line description; click to open its documentation.
 | [ROS2 Jazzy][ext-ros2] | Host-side ROS2 distro |
 | [ros2_control / ros2_controllers][ext-ros2control] | `ackermann_steering_controller` + hardware_interface framework, see [Architecture](architecture.md) |
 | [Gazebo][ext-gazebo] | Simulation, via `gz_ros2_control` and `ros_gz` |
-| [micro-ROS][ext-microros] | Transport linking host to the STM32 MCU |
+| [micro-ROS][ext-microros] | Originally planned host↔MCU transport; superseded by `mdp_hardware_bridge`'s custom binary protocol, see [ADR 0002](architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc) |
 | [PlatformIO][ext-platformio] | Build/flash toolchain for `mdp_stm32` (STM32Cube HAL) |
 | [pixi][ext-pixi] | Environment/task manager used across this repo |
 | [Zensical][ext-zensical] | This docs site generator |

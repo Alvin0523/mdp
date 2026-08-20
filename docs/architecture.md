@@ -24,7 +24,7 @@ This guide documents the complete target architecture for the robot: host softwa
 | **`gz_ros2_control` / `ros_gz`** | Sim HW Plugin | Integrates Gazebo Sim 3D physics engine with ROS2 control. |
 | **`robot_localization` (`ekf_node`)** | Sensor Fusion | Fuses rear wheel odometry (linear velocity v_x) and ICM-20948 IMU (yaw rate ω_z, heading θ) into `/odometry/filtered`. |
 | **`android_bridge_node` (`pyserial` / RFCOMM)** | Android Bridge | ROS2 Python node parsing Classic Bluetooth RFCOMM serial (`/dev/rfcomm0`) strings into ROS2 topics (`/cmd_vel`, `/odometry/filtered`). |
-| **`micro-ROS Agent`** | Host↔MCU Bridge | C++ daemon bridging ROS2 DDS topics to the STM32 MCU over USB serial (`USART3`). |
+| **`mdp_hardware_bridge` (`serial_bridge_node`)** | Host↔MCU Bridge | `rclcpp` node bridging `/joint_commands`, `/joint_states`, `/imu/data`, `/estop` to the STM32 MCU over the custom binary protocol on `USART3` — see [Serial Protocol](stm32/protocol.md). |
 | **`rviz2` / Foxglove Bridge** | Visualization | Live 3D visualization of TF trees, sensor markers, camera feeds, and paths. |
 
 ### MCU Firmware (`mdp_stm32` — STM32F407VET6 on WHEELTEC C30D Board)
@@ -32,7 +32,7 @@ This guide documents the complete target architecture for the robot: host softwa
 | Component | Category | Details & Responsibilities |
 | --- | --- | --- |
 | **STM32Cube HAL (bare-metal, via PlatformIO)** | Firmware Base | Vendor HAL peripheral drivers (GPIO, TIM, I2C, UART), built/flashed via PlatformIO (`pixi run build`/`flash`/`probe`). |
-| **micro-ROS (`rclc`)** | MCU Client | Subscribes to `/joint_commands`, publishes `/joint_states` and `/imu/data`. |
+| **Custom Binary Protocol** | MCU Client | Firmware sends telemetry (encoder/IMU/e-stop), receives wheel/steering commands — see [Serial Protocol](stm32/protocol.md). |
 | **AT8236 Driver** | Motor PWM | Dual H-Bridge driving 2× rear `MG513P3012V` DC gear motors (Motor A & B). |
 | **HWZ020 Servo** | Steering PWM | 50 Hz PWM driver (`PB15` / TIM12_CH2) for front Ackermann steering knuckles. |
 | **Hall Encoders** | Wheel Telemetry | Quadrature timer decoding (TIM2 / TIM3) for rear wheel travel displacement. |
@@ -52,7 +52,7 @@ graph TD
     ASC["ackermann_steering_controller"]
     TB_HWI["topic_based_ros2_control (Real Hardware Plugin)"]
     GZ_HWI["gz_ros2_control (Sim Plugin)"]
-    AGENT["micro-ROS Agent (Serial Daemon)"]
+    AGENT["mdp_hardware_bridge (serial_bridge_node)"]
   end
 
   subgraph FUSION["Sensor Fusion Layer (Host)"]
@@ -93,7 +93,7 @@ sequenceDiagram
   participant User as Autonomy / Teleop Node
   participant ASC as ackermann_steering_controller
   participant HWI as topic_based_ros2_control
-  participant Agent as micro-ROS Agent (Host)
+  participant Agent as mdp_hardware_bridge (Host)
   participant MCU as rclc Node (STM32)
   participant HW as Motors, Servo & Sensors
   participant EKF as robot_localization (EKF)
@@ -101,7 +101,7 @@ sequenceDiagram
   User->>ASC: /cmd_vel (Twist / TwistStamped)
   ASC->>HWI: Joint Command Setpoints
   HWI->>Agent: /joint_commands (sensor_msgs/JointState)
-  Agent->>MCU: Serial Packet (micro-ROS transport)
+  Agent->>MCU: CommandPacket (custom binary protocol)
   MCU->>HW: Actuate Motor PWM (AT8236) & Servo PWM (HWZ020)
   
   HW-->>MCU: Read Encoder Ticks & IMU Registers
@@ -168,10 +168,10 @@ To prevent position and heading drift during competition runs:
 - [x] Hall Encoder Driver (TIM2 / TIM3) — Implemented (`encoder_init`, delta + cumulative tick reads)
 - [x] ICM-20948 IMU Driver (I2C2 `PB10`/`PB11`) — Implemented
 - [x] Onboard Enable/E-Stop Switch (`PD3`) — Implemented (`motor_estop_engaged`); active-low polarity assumed, not yet physically verified
+- [x] Serial Protocol + `mdp_hardware_bridge` — Custom binary protocol over `USART3` implemented on both sides (see [Serial Protocol](stm32/protocol.md)); replaces the originally planned micro-ROS transport ([ADR 0002](#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)); on-hardware validation pending
 - [ ] Battery Voltage ADC (`PB0` / ADC1_CH8) — Not started; sense-resistor divider ratio not yet confirmed from schematic
 - [ ] Ultrasonic Distance Sensor (HC-SR04) Driver — Not started
 - [ ] IR Distance Sensor (Sharp GP2Y0A21YK ×2) Driver — Not started
-- [ ] micro-ROS Transport Integration — Not started
 
 ---
 
@@ -184,7 +184,7 @@ To prevent position and heading drift during competition runs:
     | Technology Area | Replaced / Alternative Choice | Chosen Solution | Key Architectural Advantage & Rationale |
     | --- | --- | --- | --- |
     | **1. Firmware RTOS Base** | Zephyr RTOS | **Bare-Metal STM32Cube HAL (via PlatformIO)** | **Faster Bring-Up & Vendor Reference Compatibility.** WHEELTEC's own stock C30D firmware (used to verify pin/timer assignments and port the motor/encoder/servo drivers) is STM32 HAL-based, not Zephyr — porting it directly and iterating via PlatformIO's build/flash/monitor tasks was far faster for the course timeline than authoring Zephyr Devicetree overlays and West manifests from scratch. Superseded [ADR 0001](#0001-stm32cube-hal-bare-metal-via-platformio-vs-zephyr-rtos) below. |
-    | **2. MCU Host Transport** | Custom Serial Protocol (Hand-rolled UART / Protobuf / zenoh-pico) | **micro-ROS (`rclc`)** | **Developer Efficiency & No Boilerplate.** Speaks standard ROS2 topics (`/joint_commands`, `/joint_states`, `/imu/data`) directly over serial without handwriting custom binary packet parsers or deserialization loops. |
+    | **2. MCU Host Transport** | micro-ROS (`rclc`) | **Custom Binary Protocol + `mdp_hardware_bridge` (`rclcpp`)** | **Avoids RTOS-Coupled Client Library on Bare-Metal HAL.** `rclc`/micro-ROS targets Zephyr/FreeRTOS environments; a hand-rolled framed protocol (sync bytes + struct + XOR checksum) is a few hundred lines on each side and still surfaces completely standard ROS2 topics to the rest of the stack via a plain `rclcpp` bridge node. Superseded [ADR 0002](#0002-custom-binary-serial-protocol-vs-micro-ros-rclc) below. |
     | **3. Environment & Tooling** | Docker Containers / System `apt` / `uv` / Virtualenvs | **`pixi` (`robostack-jazzy`)** | **Multiplatform Environment Sync.** Pins native binary packages across Linux, macOS, and Windows (ROS2 Jazzy, Gazebo, PlatformIO) in a single `pixi.toml` lockfile without VM overhead. |
     | **4. Hardware Interface** | Custom C++ `hardware_interface` Driver | **`topic_based_ros2_control`** | **Avoid Custom Hardware Code.** Bridges `ros2_control` directly to ROS topics, avoiding complex custom C++ hardware drivers and unlocking ROS2's standard robotics stack in both Sim and Real HW. |
     | **5. Middleware Framework** | ROS1 / Ad-hoc Custom Python Scripts | **ROS2 Jazzy** | **Full Robotics Stack Access.** Unlocks native Gazebo 3D simulation, standard `ackermann_steering_controller`, TF2 transform trees, and autonomous path planning pipelines out of the box. |
@@ -198,9 +198,9 @@ To prevent position and heading drift during competition runs:
     - **Decision:** Use bare-metal **STM32Cube HAL**, built and flashed via **PlatformIO** (`pixi run build`/`flash`/`probe`/`monitor`), as the firmware base for `mdp_stm32`. Supersedes the original decision to use Zephyr RTOS.
     - **Why:** Zephyr's multi-MCU portability (Devicetree overlays, unified driver APIs) wasn't worth its setup cost for a single fixed target board (WHEELTEC C30D, STM32F407VET6) on a one-semester course timeline. WHEELTEC's own vendor reference firmware for the C30D — used to verify every pin/timer assignment and port the motor PWM, encoder, and steering servo drivers — is itself STM32 HAL-based, so bare-metal HAL let that reference code be ported near-directly instead of rewritten against Zephyr's driver model and Devicetree bindings from scratch.
 
-    ### 0002. micro-ROS Serial Transport vs. Custom Serial UART Protocol
-    - **Decision:** Use **micro-ROS (`rclc`)** over `USART3` serial (USB Type-C @ 115200 baud).
-    - **Why:** Custom serial protocols require handwriting, testing, and maintaining tedious binary packet framing, checksum validation, and host-side C++ deserializers. micro-ROS integrates the MCU directly into the ROS2 graph, making telemetry and control topics available out of the box with zero custom serialization boilerplate.
+    ### 0002. Custom Binary Serial Protocol vs. micro-ROS (`rclc`)
+    - **Decision:** Use a **custom lightweight framed binary protocol** (sync bytes + fixed-size struct + XOR checksum) over `USART3` (USB Type-C @ 115200 baud), bridged into ROS2 by a plain `rclcpp` node (`mdp_hardware_bridge`). Supersedes the original decision to use micro-ROS (`rclc`).
+    - **Why:** micro-ROS's `rclc` client library and executor primarily target RTOS environments (Zephyr, FreeRTOS) with build-system integration for message type generation; porting it onto this bare-metal STM32Cube HAL/PlatformIO firmware (see [ADR 0001](#0001-stm32cube-hal-bare-metal-via-platformio-vs-zephyr-rtos)) would have been a substantial side effort on its own. A hand-rolled protocol is a few hundred lines on each side (see [Serial Protocol](stm32/protocol.md)), ships the exact fields this robot actually needs (encoder ticks, IMU, e-stop, wheel/steering setpoints), and the host-side `mdp_hardware_bridge` node still speaks completely standard ROS2 topics (`/joint_commands`, `/joint_states`, `/imu/data`) to the rest of the stack — `topic_based_ros2_control` and `robot_localization` don't know or care that micro-ROS isn't involved.
 
     ### 0003. Pixi Environment Manager vs. Docker / System `apt` / `uv`
     - **Decision:** Use **`pixi`** with the `robostack-jazzy` channel to manage the monorepo workspace.

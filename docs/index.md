@@ -20,7 +20,7 @@ Below is the team structure for the MDP robot development across hardware, firmw
 | **Algorithm** | **Rashi** | A* grid search, Reeds-Shepp curve planner, TSP solver, and Pure Pursuit waypoint follower. |
 | **Android** | **Albert** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
 | **Raspberry Pi** | **Wei Ming, Katie** | `mdp_ros` workspace bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
-| **STM32** | **HC, SL** | `mdp_stm32` PlatformIO/STM32Cube HAL firmware, AT8236 motor PWM, HWZ020 steering servo, encoders, IMU, and micro-ROS serial transport. |
+| **STM32** | **HC, SL** | `mdp_stm32` PlatformIO/STM32Cube HAL firmware, AT8236 motor PWM, HWZ020 steering servo, encoders, IMU, and custom binary serial protocol. |
 | **Vision** | **Kaegan** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. |
 
 ---
@@ -39,7 +39,7 @@ graph LR
     direction TB
     ROBOTICS["ROS2 Jazzy Stack<br/>• Task 1 & 2 Autonomy<br/>• ros2_control & EKF Fusion<br/>• YOLO26 Perception"]
     BRIDGE["android_bridge_node<br/>(pyserial RFCOMM /dev/rfcomm0)"]
-    AGENT["micro-ROS Agent"]
+    AGENT["mdp_hardware_bridge (serial_bridge_node)"]
     ROBOTICS <--> BRIDGE
     ROBOTICS <--> AGENT
   end
@@ -72,7 +72,7 @@ The codebase is split into two independently versioned git submodules:
 === "⚡ STM32 MCU Firmware (`mdp_stm32`)"
 
     - **Platform:** PlatformIO + STM32Cube HAL on WHEELTEC C30D V2.1 board (STM32F407VET6 MCU).
-    - **Responsibilities:** AT8236 motor PWM driver, HWZ020 steering servo PWM, Hall encoder reading, ICM-20948 IMU reading, and micro-ROS serial transport.
+    - **Responsibilities:** AT8236 motor PWM driver, HWZ020 steering servo PWM, Hall encoder reading, ICM-20948 IMU reading, and the custom binary serial protocol bridged by `mdp_hardware_bridge`.
     - **Guide:** [STM32 Firmware Documentation](stm32/index.md)
 
 ---

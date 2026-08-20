@@ -16,14 +16,14 @@ Overview of device drivers and sensor interfaces running on the STM32 MCU inside
 | **Enable / E-Stop Switch** | Onboard switch, `PD3` | Implemented :white_check_mark: | `src/motor.c` (`motor_estop_engaged`) |
 | **IMU Sensor** | ICM-20948 (I2C2 `PB10`/`PB11`) | Implemented :white_check_mark: | `src/imu.c` |
 | **OLED Display** | 0.96" SSD1306, bit-banged (`PD11`-`PD14`) | Implemented :white_check_mark: | `src/oled.c` |
+| **Host Serial Protocol** | USART3 @ 115200 (`PD8`/`PD9`) | Implemented :white_check_mark: | `src/usart.c`, `include/protocol.h` (see [Serial Protocol](protocol.md)) |
 | **Battery Voltage ADC** | `PB0` / ADC1_CH8 | **Not Started** :x: | — |
 | **Ultrasonic Sensor** | HC-SR04 | **Not Started** :x: | — |
 | **IR Range Sensors** | Sharp GP2Y0A21YK ×2 | **Not Started** :x: | — |
-| **micro-ROS Transport** | USART3 @ 115200 (`PD8`/`PD9`) | **Not Started** :x: | — |
 
 ## AT8236 Motor Driver (`motor.c`)
 
-Drives the 2 rear DC motors (`MG513P3012V`) via PWM on `TIM9`/`TIM10`/`TIM11` (`motor_init`, `motor_set_speed`). Pin/timer assignments verified against the WHEELTEC C30D resource-allocation PDF and ported from the vendor's Hall-encoder reference firmware.
+Drives the 2 rear DC motors (`MG513P3012V`) via PWM on `TIM9`/`TIM10`/`TIM11` (`motor_init`, `motor_set_speed`). Pin/timer assignments verified against the WHEELTEC C30D resource-allocation PDF and ported from the vendor's Hall-encoder reference firmware. `motor_set_speed_rad_s` converts a target wheel angular velocity (rad/s) to a PWM percent open-loop, using the motor's rated 330 RPM max output speed — see [Serial Protocol](protocol.md) for where that command comes from.
 
 ## Hall Encoder Driver (`encoder.c`)
 
@@ -42,4 +42,3 @@ Reads the onboard enable/e-stop switch on `PD3` (input, pull-up) via `motor_esto
 - **Battery Voltage ADC (`PB0` / ADC1_CH8):** No driver written. The sense-resistor divider ratio couldn't be confirmed from the schematic PDF text extraction (schematic is a visual layout, not linear text) — implementing this without a confirmed ratio would produce a plausible-looking but potentially wrong battery voltage reading, so it's left as a placeholder in `main.c` rather than guessed.
 - **Ultrasonic Sensor (HC-SR04):** No driver exists.
 - **IR Range Sensors (Sharp GP2Y0A21YK ×2):** No driver exists.
-- **micro-ROS Transport:** No transport integration yet on the PlatformIO/HAL firmware.
