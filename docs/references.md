@@ -15,7 +15,7 @@ Hover a name for a one-line description; click to open its documentation.
 | [ros2_control / ros2_controllers][ext-ros2control] | `ackermann_steering_controller` + hardware_interface framework, see [Architecture](architecture.md) |
 | [Gazebo][ext-gazebo] | Simulation, via `gz_ros2_control` and `ros_gz` |
 | [micro-ROS][ext-microros] | Transport linking host to the STM32 MCU |
-| [Zephyr RTOS][ext-zephyr] | MCU firmware base for `mdp_stm32` |
+| [PlatformIO][ext-platformio] | Build/flash toolchain for `mdp_stm32` (STM32Cube HAL) |
 | [pixi][ext-pixi] | Environment/task manager used across this repo |
 | [Zensical][ext-zensical] | This docs site generator |
 | [Ultralytics ROS Quickstart][ext-yolo-ros] | YOLO ROS/ROS2 integration guide for object detection nodes |
@@ -26,7 +26,7 @@ Hover a name for a one-line description; click to open its documentation.
   [ext-ros2control]: https://control.ros.org/ "Controller framework + hardware_interface plugins"
   [ext-gazebo]: https://gazebosim.org/docs "Gazebo simulator docs"
   [ext-microros]: https://micro.ros.org/ "ROS2 client library for microcontrollers"
-  [ext-zephyr]: https://docs.zephyrproject.org/ "Zephyr RTOS docs"
+  [ext-platformio]: https://docs.platformio.org/ "PlatformIO build/flash toolchain docs"
   [ext-pixi]: https://pixi.sh/ "Conda-based environment/task manager"
   [ext-zensical]: https://zensical.org/docs/ "This site's static-site generator"
   [ext-yolo-ros]: https://docs.ultralytics.com/guides/ros-quickstart "Ultralytics YOLO ROS/ROS2 Integration Guide"

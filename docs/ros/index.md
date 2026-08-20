@@ -67,4 +67,4 @@ pixi run agent-build   # one-time
 pixi run agent           # starts the serial agent on /dev/ttyUSB0 @ 115200
 ```
 
-`-b 115200` matches `mdp_stm32`'s `USART3` config (`app/boards/stm32f4_disco.overlay`) — don't change one without the other.
+`-b 115200` matches `mdp_stm32`'s `USART3` config (`platformio.ini` `monitor_speed`, `src/usart.c`) — don't change one without the other.

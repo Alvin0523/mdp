@@ -31,7 +31,7 @@ This guide documents the complete target architecture for the robot: host softwa
 
 | Component | Category | Details & Responsibilities |
 | --- | --- | --- |
-| **Zephyr RTOS** | Firmware Base | Real-time multithreading, Devicetree hardware abstraction, and timers. |
+| **STM32Cube HAL (bare-metal, via PlatformIO)** | Firmware Base | Vendor HAL peripheral drivers (GPIO, TIM, I2C, UART), built/flashed via PlatformIO (`pixi run build`/`flash`/`probe`). |
 | **micro-ROS (`rclc`)** | MCU Client | Subscribes to `/joint_commands`, publishes `/joint_states` and `/imu/data`. |
 | **AT8236 Driver** | Motor PWM | Dual H-Bridge driving 2× rear `MG513P3012V` DC gear motors (Motor A & B). |
 | **HWZ020 Servo** | Steering PWM | 50 Hz PWM driver (`PB15` / TIM12_CH2) for front Ackermann steering knuckles. |
@@ -162,13 +162,16 @@ To prevent position and heading drift during competition runs:
 
 ### `mdp_stm32` (MCU Firmware)
 
-- [x] Zephyr Workspace Setup — `pixi run setup` with ARM SDK and pyocd runner patch
-- [x] STM32F407VET6 Board Bringup — LED blink (`PE8`) + RTT debug logging verified on physical board
-- [x] AT8236 Motor PWM Driver — 1-indexed PWM channels verified working over RTT
-- [!] micro-ROS Transport Integration — **In-Progress** (OpenSpec proposal `add-microros-transport`: host PyPI deps, `west.yml` manifest, and UART patch `scripts/patch_microros_uart.sh` complete; `rclc` executor thread pending)
-- [ ] HWZ020 Steering Servo Driver (`PB15` / TIM12_CH2) — stub only
-- [ ] Hall Encoder Driver (TIM2 / TIM3) — stub only
-- [ ] ICM-20948 IMU Driver (I2C2 `PB10`/`PB11`) — stub only
+- [x] PlatformIO/STM32Cube HAL Project Bringup — LED blink (`PE8`) + `printf` serial logging over `USART3`, verified on physical board
+- [x] AT8236 Motor PWM Driver — `TIM9`/`TIM10`/`TIM11` PWM implemented (`motor_init`, `motor_set_speed`); on-hardware drive test pending (needs the board on its own power supply, see [Troubleshooting](troubleshooting.md#stm32-firmware-mdp_stm32))
+- [x] HWZ020 Steering Servo Driver (`PB15` / TIM12_CH2) — Implemented (`servo_init`, `servo_set_angle`); mechanical steering-lock angle not yet tuned
+- [x] Hall Encoder Driver (TIM2 / TIM3) — Implemented (`encoder_init`, delta + cumulative tick reads)
+- [x] ICM-20948 IMU Driver (I2C2 `PB10`/`PB11`) — Implemented
+- [x] Onboard Enable/E-Stop Switch (`PD3`) — Implemented (`motor_estop_engaged`); active-low polarity assumed, not yet physically verified
+- [ ] Battery Voltage ADC (`PB0` / ADC1_CH8) — Not started; sense-resistor divider ratio not yet confirmed from schematic
+- [ ] Ultrasonic Distance Sensor (HC-SR04) Driver — Not started
+- [ ] IR Distance Sensor (Sharp GP2Y0A21YK ×2) Driver — Not started
+- [ ] micro-ROS Transport Integration — Not started
 
 ---
 
@@ -180,9 +183,9 @@ To prevent position and heading drift during competition runs:
 
     | Technology Area | Replaced / Alternative Choice | Chosen Solution | Key Architectural Advantage & Rationale |
     | --- | --- | --- | --- |
-    | **1. Firmware RTOS Base** | Bare-Metal STM32 (FreeRTOS / STM32Cube HAL) | **Zephyr RTOS** | **Multi-MCU Portability.** Zephyr migrates seamlessly across MCU vendors (STM32, ESP32, TI, nRF) via Devicetree overlays (`.overlay`), whereas STM32Cube/FreeRTOS code is hard-locked to vendor HAL APIs. |
+    | **1. Firmware RTOS Base** | Zephyr RTOS | **Bare-Metal STM32Cube HAL (via PlatformIO)** | **Faster Bring-Up & Vendor Reference Compatibility.** WHEELTEC's own stock C30D firmware (used to verify pin/timer assignments and port the motor/encoder/servo drivers) is STM32 HAL-based, not Zephyr — porting it directly and iterating via PlatformIO's build/flash/monitor tasks was far faster for the course timeline than authoring Zephyr Devicetree overlays and West manifests from scratch. Superseded [ADR 0001](#0001-stm32cube-hal-bare-metal-via-platformio-vs-zephyr-rtos) below. |
     | **2. MCU Host Transport** | Custom Serial Protocol (Hand-rolled UART / Protobuf / zenoh-pico) | **micro-ROS (`rclc`)** | **Developer Efficiency & No Boilerplate.** Speaks standard ROS2 topics (`/joint_commands`, `/joint_states`, `/imu/data`) directly over serial without handwriting custom binary packet parsers or deserialization loops. |
-    | **3. Environment & Tooling** | Docker Containers / System `apt` / `uv` / Virtualenvs | **`pixi` (`robostack-jazzy`)** | **Multiplatform Environment Sync.** Pins native binary packages across Linux, macOS, and Windows (ROS2 Jazzy, Gazebo, ARM GCC SDK, `west`, `ninja`) in a single `pixi.toml` lockfile without VM overhead. |
+    | **3. Environment & Tooling** | Docker Containers / System `apt` / `uv` / Virtualenvs | **`pixi` (`robostack-jazzy`)** | **Multiplatform Environment Sync.** Pins native binary packages across Linux, macOS, and Windows (ROS2 Jazzy, Gazebo, PlatformIO) in a single `pixi.toml` lockfile without VM overhead. |
     | **4. Hardware Interface** | Custom C++ `hardware_interface` Driver | **`topic_based_ros2_control`** | **Avoid Custom Hardware Code.** Bridges `ros2_control` directly to ROS topics, avoiding complex custom C++ hardware drivers and unlocking ROS2's standard robotics stack in both Sim and Real HW. |
     | **5. Middleware Framework** | ROS1 / Ad-hoc Custom Python Scripts | **ROS2 Jazzy** | **Full Robotics Stack Access.** Unlocks native Gazebo 3D simulation, standard `ackermann_steering_controller`, TF2 transform trees, and autonomous path planning pipelines out of the box. |
     | **6. Development Workflow** | Unstructured AI Prompts & Ad-hoc Commits | **OpenSpec (`propose`/`apply`/`archive`)** | **Token-Efficient LLM Orchestration.** Optimized for modern Agentic AI / LLM workflows (Antigravity subagents). Keeps token usage lightweight, context clean, and change scope strictly bounded. |
@@ -191,9 +194,9 @@ To prevent position and heading drift during competition runs:
 
     ### 📜 Decision Records
 
-    ### 0001. Zephyr RTOS Base vs. Bare-Metal STM32 (FreeRTOS / HAL)
-    - **Decision:** Use **Zephyr RTOS** v4.0.0 as the firmware base for `mdp_stm32`.
-    - **Why:** Bare-metal firmware using STM32CubeIDE HAL or FreeRTOS ties driver logic directly to vendor-specific register APIs, making code migration to other MCU platforms (e.g. ESP32, TI, nRF) difficult. Zephyr provides declarative Devicetree hardware overlays (`.overlay`) and unified driver APIs (`pwm_set_pulse_dt`), allowing the firmware to migrate across any supported MCU family without rewriting application logic.
+    ### 0001. STM32Cube HAL (Bare-Metal, via PlatformIO) vs. Zephyr RTOS
+    - **Decision:** Use bare-metal **STM32Cube HAL**, built and flashed via **PlatformIO** (`pixi run build`/`flash`/`probe`/`monitor`), as the firmware base for `mdp_stm32`. Supersedes the original decision to use Zephyr RTOS.
+    - **Why:** Zephyr's multi-MCU portability (Devicetree overlays, unified driver APIs) wasn't worth its setup cost for a single fixed target board (WHEELTEC C30D, STM32F407VET6) on a one-semester course timeline. WHEELTEC's own vendor reference firmware for the C30D — used to verify every pin/timer assignment and port the motor PWM, encoder, and steering servo drivers — is itself STM32 HAL-based, so bare-metal HAL let that reference code be ported near-directly instead of rewritten against Zephyr's driver model and Devicetree bindings from scratch.
 
     ### 0002. micro-ROS Serial Transport vs. Custom Serial UART Protocol
     - **Decision:** Use **micro-ROS (`rclc`)** over `USART3` serial (USB Type-C @ 115200 baud).
@@ -219,6 +222,6 @@ To prevent position and heading drift during competition runs:
 
 ## 7. References & Historical Documents
 
-- **Firmware Reference:** `references/mdp_mcu/mdp_firmware`
+- **Firmware Reference:** `references/WHEELTEC/2.WHEELTEC R550-V550 ROS教育机器人运动底盘资料/` (C30D pinout/schematic PDFs + Hall-encoder STM32 source zip, see [References](references.md#local-references-directory-guide))
 - **Host Control Reference:** `references/mdp_ws/docs/control-architecture.md`
 - **Vendor Reference:** `references/WHEELTEC/`

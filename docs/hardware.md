@@ -14,7 +14,7 @@ This page documents the verified hardware components and physical specifications
 | **Drive Motors** | `MG513P3012V` (×2) | 12V DC geared motors (1:30 reduction ratio), 330 RPM max speed, driving rear wheels (`lb_joint`, `rb_joint`) |
 | **Wheel Encoders** | **Hall Encoders** (2.54mm pitch, 6-pin) | 2 units mounted on drive motors (Model: `MG513P3012V`) |
 | **Steering Servo** | Model `HWZ020` (4.8V – 7.4V) | Front Ackermann steering servo (`left_joint`, `right_joint`). **Stall Torque:** 1.96 N·m (20 kg·cm). **Max Speed:** 6.54 rad/s (0.16s / 60°). **Mechanical Limits:** $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) |
-| **Motor Driver** | Dual AT8236 H-Bridge | Board-integrated motor driver (`app/src/motor.c`) |
+| **Motor Driver** | Dual AT8236 H-Bridge | Board-integrated motor driver (`src/motor.c`) |
 | **Onboard SBC (Host)** | **Raspberry Pi 4 Model B (4GB)** | Runs ROS2 Jazzy + micro-ROS Agent, connected to STM32 via USB Type-C |
 | **Camera** | **RPi Camera Module V2** | Sony IMX219 8MP sensor connected via CSI flexi cable. Driver: `ros-jazzy-v4l2-camera` (`v4l2_camera_node` publishing `/image_raw`) + `ros-jazzy-compressed-image-transport` (`/image_raw/compressed` for streaming) + `ros-jazzy-cv-bridge` |
 | **IR Range Sensors** | **Sharp GP2Y0A21YK** (×2) | Analog IR distance sensors with 3D printed brackets |
@@ -44,7 +44,7 @@ This page documents the verified hardware components and physical specifications
 
 1. **Hall Encoders vs. GMR Encoders**:
    - The official MDP course kit uses **Hall Encoders** on `MG513P3012V` motors (6-pin 2.54mm pitch connector).
-   - Firmware encoder decode logic (`app/src/encoder.c`) uses Hall encoder pulse resolution.
+   - Firmware encoder decode logic (`src/encoder.c`) uses Hall encoder pulse resolution.
 
 2. **Drivetrain Layout**:
    - **2 Driven Rear Wheels** (Left Motor A, Right Motor B) + **1 Steering Servo** (`HWZ020`) controlling front wheels in an Ackermann geometry.

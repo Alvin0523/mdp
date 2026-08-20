@@ -13,7 +13,7 @@ Documentation for the `mdp_stm32` submodule containing the PlatformIO/STM32Cube 
 
 ## Build & Flash (PlatformIO + Pixi Workflow)
 
-Firmware is built with PlatformIO (`platformio.ini`). `pyocd` (for probing/flashing/RTT) and a serial helper (`tio`) are managed reproducibly via `pixi.toml`.
+Firmware is built with PlatformIO (`platformio.ini`), driven via `pixi.toml` tasks. Flashing and probing use PlatformIO's bundled OpenOCD talking to the ST-LINK/V2 over SWD; on ARM64 Linux hosts (e.g. Raspberry Pi 64-bit OS) the pinned `toolchain-gccarmnoneeabi` version needs a `platform_packages` override in `platformio.ini` (see `../troubleshooting.md`).
 
 ```bash
 cd mdp_stm32
@@ -27,8 +27,8 @@ pixi run build
 # 3. Flash firmware to the board via ST-LINK/V2
 pixi run flash
 
-# 4. Stream RTT debug logs
-pixi run rtt
+# 4. Open serial monitor (baud/port from platformio.ini)
+pixi run monitor
 ```
 
 ## System Role
