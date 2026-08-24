@@ -1,12 +1,14 @@
 # 🏎️ MDP: Autonomous Mini Ackermann Robot Platform
 
-[![Docs](https://img.shields.io/badge/Docs-Zensical-blue?logo=readthedocs)](docs/index.md)
+[![Docs](https://img.shields.io/badge/Docs-Zensical-blue?logo=readthedocs)](https://alvin0523.github.io/mdp/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-blue)](https://pixi.sh)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Linux%20ARM-blue)](https://pixi.sh)
 [![Pixi](https://img.shields.io/badge/Pixi-Package%20Manager-brightgreen?logo=conda-forge)](https://pixi.sh)
 [![ROS2](https://img.shields.io/badge/ROS2-Jazzy-22314E?logo=ros)](https://docs.ros.org/en/jazzy/)
 [![STM32](https://img.shields.io/badge/Embedded-STM32-03234C?logo=stmicroelectronics)](mdp_stm32)
 [![Robot](https://img.shields.io/badge/Robot-Mini%20Ackermann-0ea5e9)](mdp_ros)
+
+### [📖 View Full Documentation →](https://alvin0523.github.io/mdp/)
 
 > Top-level workspace for the **Multidisciplinary Project (MDP)** autonomous mini Ackermann steering robot — integrating ROS 2 Jazzy autonomy, STM32 embedded firmware, Ultralytics YOLO vision, Gazebo simulation, and Zensical documentation.
 
@@ -14,16 +16,28 @@
 
 ## 📖 About
 
-This repository serves as the central meta-workspace for the **Mini Ackermann Robot**, combining the high-level autonomy stack, low-level microcontroller firmware, DDS serial bridge, and full technical documentation into a unified [Pixi](https://pixi.sh)-managed development workflow.
+This repository serves as the central meta-workspace for the **Mini Ackermann Robot**, combining the high-level autonomy stack, low-level microcontroller firmware, a custom binary serial bridge, and full technical documentation into a unified [Pixi](https://pixi.sh)-managed development workflow.
 
 ### Submodules & Components
 
 | Component / Submodule | Role & Description | Submodule / Repository Link |
 |---|---|---|
-| [`mdp_ros/`](file:///home/wm_u26/dev/school/mdp/mdp_ros) | ROS 2 Jazzy autonomy suite: Spline path planning, adaptive Pure Pursuit, YOLO vision, Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
-| [`mdp_stm32/`](file:///home/wm_u26/dev/school/mdp/mdp_stm32) | STM32 bare-metal / FreeRTOS firmware: PWM motor control, HWZ020 servo yaw steering, encoder odometry, and Micro-XRCE-DDS | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
-| [`Micro-XRCE-DDS-Agent/`](file:///home/wm_u26/dev/school/mdp/Micro-XRCE-DDS-Agent) | XRCE-DDS serial agent bridging embedded STM32 micro-ROS topics directly to the ROS 2 domain | Client-Agent Bridge |
+| [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: `ackermann_steering_controller`, `mdp_hardware_bridge` (STM32↔host serial bridge), spline path planning, adaptive Pure Pursuit, YOLO vision, Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
+| [`mdp_stm32/`](mdp_stm32) | STM32 bare-metal (STM32Cube HAL via PlatformIO) firmware: AT8236 motor PWM, HWZ020 servo steering, Hall encoder odometry, ICM-20948 IMU, and a custom binary serial protocol over `USART3` | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
 | `docs/` | Comprehensive technical documentation site managed via [Zensical](https://zensical.org) | Built with Zensical |
+
+---
+
+## 🧰 Tech Stack
+
+| Layer | Technologies |
+|---|---|
+| **Host (`mdp_ros`)** | ROS 2 Jazzy, `ros2_control` / `ackermann_steering_controller`, `topic_based_ros2_control`, `robot_localization` (EKF), Gazebo Sim (`gz_ros2_control`), Foxglove Bridge |
+| **Firmware (`mdp_stm32`)** | STM32F407VET6, bare-metal STM32Cube HAL via PlatformIO, custom binary serial protocol |
+| **Vision & Planning** | Ultralytics YOLO26, Reeds-Shepp / Pure Pursuit path planning |
+| **Tooling** | [Pixi](https://pixi.sh) (`robostack-jazzy`), [Zensical](https://zensical.org) docs site |
+
+See [System Architecture & ADRs](https://alvin0523.github.io/mdp/architecture/) for the full breakdown and the reasoning behind each choice.
 
 ---
 
@@ -41,7 +55,6 @@ mdp/
 │   └── troubleshooting.md   # Common errors and hardware troubleshooting
 ├── mdp_ros/                 # ROS 2 Jazzy Autonomy, Vision & Simulation Stack (Git Submodule)
 ├── mdp_stm32/               # STM32 Microcontroller Firmware Stack (Git Submodule)
-├── Micro-XRCE-DDS-Agent/    # Micro-XRCE-DDS serial agent bridge
 ├── pixi.toml                # Top-level Pixi task runner & dependency environment
 └── zensical.toml            # Zensical documentation site configuration
 ```
@@ -93,7 +106,10 @@ pixi run sim-task2    # Run integrated Task 2 Gazebo simulation
 Navigate to `mdp_stm32` for microcontroller firmware compilation and flashing:
 ```bash
 cd mdp_stm32
-pixi run build        # Compile STM32 firmware
+pixi run probe         # Detect connected ST-LINK/V2 probe and STM32F4 chip
+pixi run build          # Compile STM32 firmware
+pixi run flash          # Flash firmware to the board via ST-LINK
+pixi run monitor        # Open serial monitor
 ```
 
 ---
@@ -104,9 +120,9 @@ Documentation is authored in Markdown and built with **Zensical**.
 
 - **Local Preview**: `pixi run serve` (opens documentation server locally at `http://127.0.0.1:8000`)
 - **Topics Covered**:
-  - [`docs/architecture.md`](file:///home/wm_u26/dev/school/mdp/docs/architecture.md): System architecture, DDS transport, micro-ROS integration.
-  - [`docs/hardware.md`](file:///home/wm_u26/dev/school/mdp/docs/hardware.md): Chassis dimensions, HWZ020 servo yaw limits, motor encoders.
-  - [`docs/dev_workflow.md`](file:///home/wm_u26/dev/school/mdp/docs/dev_workflow.md): Step-by-step development guidelines and test workflows.
+  - [`docs/architecture.md`](docs/architecture.md): System architecture, serial protocol, and architectural decisions.
+  - [`docs/hardware.md`](docs/hardware.md): Chassis dimensions, HWZ020 servo yaw limits, motor encoders.
+  - [`docs/dev_workflow.md`](docs/dev_workflow.md): Step-by-step development guidelines and test workflows.
 
 ---
 
