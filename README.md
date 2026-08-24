@@ -16,16 +16,28 @@
 
 ## 📖 About
 
-This repository serves as the central meta-workspace for the **Mini Ackermann Robot**, combining the high-level autonomy stack, low-level microcontroller firmware, DDS serial bridge, and full technical documentation into a unified [Pixi](https://pixi.sh)-managed development workflow.
+This repository serves as the central meta-workspace for the **Mini Ackermann Robot**, combining the high-level autonomy stack, low-level microcontroller firmware, a custom binary serial bridge, and full technical documentation into a unified [Pixi](https://pixi.sh)-managed development workflow.
 
 ### Submodules & Components
 
 | Component / Submodule | Role & Description | Submodule / Repository Link |
 |---|---|---|
-| [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: Spline path planning, adaptive Pure Pursuit, YOLO vision, Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
-| [`mdp_stm32/`](mdp_stm32) | STM32 bare-metal / FreeRTOS firmware: PWM motor control, HWZ020 servo yaw steering, encoder odometry, and Micro-XRCE-DDS | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
-| [`Micro-XRCE-DDS-Agent/`](Micro-XRCE-DDS-Agent) | XRCE-DDS serial agent bridging embedded STM32 micro-ROS topics directly to the ROS 2 domain | Client-Agent Bridge |
+| [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: `ackermann_steering_controller`, `mdp_hardware_bridge` (STM32↔host serial bridge), spline path planning, adaptive Pure Pursuit, YOLO vision, Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
+| [`mdp_stm32/`](mdp_stm32) | STM32 bare-metal (STM32Cube HAL via PlatformIO) firmware: AT8236 motor PWM, HWZ020 servo steering, Hall encoder odometry, ICM-20948 IMU, and a custom binary serial protocol over `USART3` | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
 | `docs/` | Comprehensive technical documentation site managed via [Zensical](https://zensical.org) | Built with Zensical |
+
+---
+
+## 🧰 Tech Stack
+
+| Layer | Technologies |
+|---|---|
+| **Host (`mdp_ros`)** | ROS 2 Jazzy, `ros2_control` / `ackermann_steering_controller`, `topic_based_ros2_control`, `robot_localization` (EKF), Gazebo Sim (`gz_ros2_control`), Foxglove Bridge |
+| **Firmware (`mdp_stm32`)** | STM32F407VET6, bare-metal STM32Cube HAL via PlatformIO, custom binary serial protocol |
+| **Vision & Planning** | Ultralytics YOLO26, Reeds-Shepp / Pure Pursuit path planning |
+| **Tooling** | [Pixi](https://pixi.sh) (`robostack-jazzy`), [Zensical](https://zensical.org) docs site |
+
+See [System Architecture & ADRs](https://alvin0523.github.io/mdp/architecture/) for the full breakdown and the reasoning behind each choice.
 
 ---
 
@@ -43,7 +55,6 @@ mdp/
 │   └── troubleshooting.md   # Common errors and hardware troubleshooting
 ├── mdp_ros/                 # ROS 2 Jazzy Autonomy, Vision & Simulation Stack (Git Submodule)
 ├── mdp_stm32/               # STM32 Microcontroller Firmware Stack (Git Submodule)
-├── Micro-XRCE-DDS-Agent/    # Micro-XRCE-DDS serial agent bridge
 ├── pixi.toml                # Top-level Pixi task runner & dependency environment
 └── zensical.toml            # Zensical documentation site configuration
 ```
@@ -106,7 +117,7 @@ Documentation is authored in Markdown and built with **Zensical**.
 
 - **Local Preview**: `pixi run serve` (opens documentation server locally at `http://127.0.0.1:8000`)
 - **Topics Covered**:
-  - [`docs/architecture.md`](docs/architecture.md): System architecture, DDS transport, micro-ROS integration.
+  - [`docs/architecture.md`](docs/architecture.md): System architecture, serial protocol, and architectural decisions.
   - [`docs/hardware.md`](docs/hardware.md): Chassis dimensions, HWZ020 servo yaw limits, motor encoders.
   - [`docs/dev_workflow.md`](docs/dev_workflow.md): Step-by-step development guidelines and test workflows.
 
