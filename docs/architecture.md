@@ -163,12 +163,12 @@ To prevent position and heading drift during competition runs:
 ### `mdp_stm32` (MCU Firmware)
 
 - [x] PlatformIO/STM32Cube HAL Project Bringup — LED blink (`PE8`) + `printf` serial logging over `USART3`, verified on physical board
-- [x] AT8236 Motor PWM Driver — `TIM9`/`TIM10`/`TIM11` PWM implemented (`motor_init`, `motor_set_speed`); on-hardware drive test pending (needs the board on its own power supply, see [Troubleshooting](troubleshooting.md#stm32-firmware-mdp_stm32))
-- [x] HWZ020 Steering Servo Driver (`PB15` / TIM12_CH2) — Implemented (`servo_init`, `servo_set_angle`); mechanical steering-lock angle not yet tuned
+- [x] AT8236 Motor PWM Driver — `TIM9`/`TIM10`/`TIM11` PWM implemented (`motor_init`, `motor_set_speed`); **on-hardware drive test confirmed** (locked-antiphase drive scheme required, see [Drivers](stm32/drivers.md#at8236-motor-driver-motorc))
+- [x] HWZ020 Steering Servo Driver (`PB15` / TIM12_CH2) — Implemented (`servo_init`, `servo_set_angle`); on-hardware steering confirmed via ROS2 teleop; mechanical steering-lock angle not yet tuned
 - [x] Hall Encoder Driver (TIM2 / TIM3) — Implemented (`encoder_init`, delta + cumulative tick reads)
 - [x] ICM-20948 IMU Driver (I2C2 `PB10`/`PB11`) — Implemented
-- [x] Onboard Enable/E-Stop Switch (`PD3`) — Implemented (`motor_estop_engaged`); active-low polarity assumed, not yet physically verified
-- [x] Serial Protocol + `mdp_hardware_bridge` — Custom binary protocol over `USART3` implemented on both sides (see [Serial Protocol](stm32/protocol.md)); replaces the originally planned micro-ROS transport ([ADR 0002](#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)); on-hardware validation pending
+- [x] Onboard Enable/E-Stop Switch (`PD3`) — Implemented (`motor_estop_engaged`); active-low polarity functionally confirmed via self-test refusal behavior, not yet confirmed with a multimeter
+- [x] Serial Protocol + `mdp_hardware_bridge` — Custom binary protocol over `USART3` implemented on both sides (see [Serial Protocol](stm32/protocol.md)); replaces the originally planned micro-ROS transport ([ADR 0002](#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)); **full round-trip on-hardware validated** via `pixi run hardware` + `pixi run teleop` (two bugs found and fixed along the way — see [Launch Files](ros/launch.md#core-topic-specifications))
 - [ ] Battery Voltage ADC (`PB0` / ADC1_CH8) — Not started; sense-resistor divider ratio not yet confirmed from schematic
 - [ ] Ultrasonic Distance Sensor (HC-SR04) Driver — Not started
 - [ ] IR Distance Sensor (Sharp GP2Y0A21YK ×2) Driver — Not started

@@ -11,7 +11,7 @@ Overview of Gazebo Sim integration, `gz_ros2_control`, topic remappings, and key
 Per [ADR 0004](../architecture.md#0004-hardware-interface-topic_based_ros2_control-host-side-kinematics), both simulation and real hardware use the exact same `ackermann_steering_controller` implementation:
 
 - **Simulation Mode**: `ackermann_steering_controller` connects directly to Gazebo via `gz_ros2_control` plugin.
-- **Real Hardware Mode**: `ackermann_steering_controller` connects to `topic_based_ros2_control` which bridges topics to `micro-ROS Agent`.
+- **Real Hardware Mode**: `ackermann_steering_controller` connects to `topic_based_ros2_control` which bridges topics to `mdp_hardware_bridge` (`serial_bridge_node`) — see [ADR 0002](../architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc). The originally-planned micro-ROS Agent path was superseded by this custom binary protocol.
 
 ---
 
