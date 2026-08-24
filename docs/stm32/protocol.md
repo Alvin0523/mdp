@@ -52,11 +52,14 @@ Sent whenever `/joint_commands` updates.
 | --- | --- | --- |
 | `left_wheel_rad_s` | `float` | Target Motor A (rear left) angular velocity |
 | `right_wheel_rad_s` | `float` | Target Motor B (rear right) angular velocity |
-| `steer_rad` | `float` | Target steering angle (radians) |
+| `steer_rad` | `float` | Target steering angle (radians). **Positive = right, negative = left** — this matches `servo_set_angle()`'s convention (`mdp_stm32/src/servo.c`), which is the **opposite** sign from ROS's `left_joint`/`right_joint` (REP-103: positive = left). `mdp_hardware_bridge`'s `serial_bridge_node.cpp` negates the angle when converting in both directions — see the note in [Launch Files](../ros/launch.md#core-topic-specifications). |
 
 **rad/s -> PWM percent:** open-loop, `pct = (rad_s / 34.56) * 100`, clamped to ±100%. `34.56 rad/s` = `MG513P3012V`'s rated max output speed (330 RPM, already post-1:30-gearbox per `docs/hardware.md`). There is no closed-loop encoder-based speed regulation yet — actual speed at a given commanded rad/s varies with battery voltage and load.
 
 **One servo, two steering joints:** `ackermann_steering_controller` commands `left_joint` and `right_joint` independently (true Ackermann geometry has slightly different inner/outer wheel angles), but this chassis has only **one physical steering servo**. The bridge node averages the two commanded angles into the single `steer_rad` sent to the MCU — a small-angle approximation, not exact per-wheel Ackermann steering.
+
+!!! warning "`/joint_commands`'s `position[]`/`velocity[]` are grouped by interface type, not indexed by `name[]`"
+    The bridge's `onJointCommand()` originally indexed `msg->position[i]`/`msg->velocity[i]` using the same loop index it used for `msg->name[i]` — but `topic_based_ros2_control` publishes those as separate, shorter arrays containing only the joints that use that interface type, not one slot per `name[]` entry. This silently left the rear wheels' commanded velocity at `0.0` forever (out-of-range guard always failed for `lb_joint`/`rb_joint`), even though the packet, checksum, and everything downstream looked completely correct. Fixed with separate per-array running indices — see the full writeup in [Launch Files](../ros/launch.md#core-topic-specifications).
 
 ## Safety: stale-link fail-safe
 
@@ -119,10 +122,14 @@ Wheels should spin slowly and the servo should turn — confirms the full STM32 
 1. **"Motor ON/OFF" toggle** (near the battery/power terminal blocks) — a pure **hardware power cutoff** for the motor driver ICs. **Not GPIO-readable**, firmware cannot see it. Use it when you want motors guaranteed dead for bench work.
 2. **`PD3` enable/e-stop switch** — GPIO-readable, wired as `motor_estop_engaged()`, reflected on the OLED and `/estop`.
 
+## Verified On Hardware
+
+- STM32-side firmware builds (`pixi run build`) and flashes (`pixi run flash`) cleanly.
+- `PD3` e-stop polarity assumption — functionally confirmed (self-test correctly refuses with the quick 5-blink pattern when the switch is in the disabled position, runs normally otherwise). Not yet confirmed with a multimeter against the raw pin voltage.
+- Full protocol round-trip (`ackermann_steering_controller` → `topic_based_ros2_control` → `mdp_hardware_bridge` → STM32 → motors/servo, and telemetry back) — confirmed via `pixi run hardware` + `pixi run teleop`, after fixing two bugs found along the way: the `/joint_commands` array-indexing bug and the steering sign-convention mismatch (both described above).
+- The automated self-test sequence (`selftest.c`) — confirmed running on physical hardware, including actual wheel rotation, after fixing the motor driver's PWM scheme (see [Drivers](drivers.md#at8236-motor-driver-motorc)).
+
 ## Not Yet Verified On Hardware
 
-- STM32-side firmware build has not been confirmed to compile (last verified: ROS2/`mdp_hardware_bridge` side only, via `colcon build`).
-- `PD3` e-stop polarity assumption (see above).
-- Full protocol round-trip (steps under "With the ROS2 bridge running") has not been run yet.
-- The automated self-test sequence (`selftest.c`) has not been run on physical hardware yet.
 - Servo `SERVO_ANGLE_MAX_DEG` (`servo.h`/`servo.c`) is still a placeholder, not tuned to the actual mechanical steering lock.
+- `PD3` e-stop polarity has not been confirmed with a multimeter against the raw pin voltage (only functionally, via self-test behavior — see above).

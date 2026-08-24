@@ -25,6 +25,9 @@ Overview of device drivers and sensor interfaces running on the STM32 MCU inside
 
 Drives the 2 rear DC motors (`MG513P3012V`) via PWM on `TIM9`/`TIM10`/`TIM11` (`motor_init`, `motor_set_speed`). Pin/timer assignments verified against the WHEELTEC C30D resource-allocation PDF and ported from the vendor's Hall-encoder reference firmware. `motor_set_speed_rad_s` converts a target wheel angular velocity (rad/s) to a PWM percent open-loop, using the motor's rated 330 RPM max output speed — see [Serial Protocol](protocol.md) for where that command comes from.
 
+!!! warning "Must use locked-antiphase drive, not a naive 0%/duty% scheme"
+    `motor_drive()` uses a **locked-antiphase** scheme, ported from WHEELTEC's own vendor reference firmware (`BALANCE/balance.c`'s `Set_Pwm`): both `IN1`/`IN2` sit at ~100% duty (electrical brake) at rest, and one side is pulled down from 100% by the commanded speed magnitude to produce a direction. A simpler-looking "stopped side = 0%, driven side = duty%" scheme was tried first and left the wheels **completely dead despite correct-looking PWM commands and zero errors** — the AT8236 needs continuous switching activity on both legs to keep its internal high-side gate drive/charge-pump alive, and a leg held statically low never actually turns the output on. If you're debugging "motors don't spin but everything else looks right," check this first before suspecting wiring or power.
+
 ## Hall Encoder Driver (`encoder.c`)
 
 Reads Hall encoder ticks on the 2 rear drive motors using STM32 hardware timer encoder mode (`TIM2`/`TIM3`). Exposes both a per-call delta read (`encoder_get_delta_a`/`_b`, resets the hardware counter each call — used for a tick-rate speed estimate) and a running cumulative count (`encoder_get_count_a`/`_b`). Not yet calibrated to real distance/speed units (gear ratio and wheel diameter constants unconfirmed for this board).
