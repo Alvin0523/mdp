@@ -80,6 +80,8 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
     **Workaround that's worked reliably:** flash via ST-Link, then **physically unplug the ST-Link** before power-cycling/resetting the board to actually run the firmware. If it's still stuck, connect to the `UART1` port directly (e.g. via `pyserial`) and pulse `dtr` while holding `rts` deasserted to force a clean reset through that port's own reset line instead of the ST-Link's.
 
+    **Scriptable alternative (no cable touching):** `pixi run flash` now wraps the upload in `scripts/flash-with-unblock.sh`, which deauthorizes the ST-Link at the USB level (`pixi run stlink-block`) right after flashing — the kernel treats it as unplugged without touching the cable — and reauthorizes it (`pixi run stlink-unblock`) right before the next flash. One-time setup: `pixi run stlink-install-udev` (needs `sudo` once; installs a udev rule scoped to the ST-Link's exact VID:PID `0483:3748` so later toggles need no `sudo`). Resting state is blocked by default. Note this doesn't eliminate the final reset requirement above — after `pixi run flash` re-blocks, you still need a reset (button/power-cycle, or the `UART1` `dtr` pulse) to actually boot the newly-flashed firmware, since the upload's own internal reset happens *before* the re-block.
+
 ## :robot: ROS2 (`mdp_ros`)
 
 ??? question "`pixi run hardware`: `serial_bridge_node` dies with `Failed to open serial port /dev/ttyUSB0`"

@@ -32,6 +32,9 @@ Drives the 2 rear DC motors (`MG513P3012V`) via PWM on `TIM9`/`TIM10`/`TIM11` (`
 
 Reads Hall encoder ticks on the 2 rear drive motors using STM32 hardware timer encoder mode (`TIM2`/`TIM3`). Exposes both a per-call delta read (`encoder_get_delta_a`/`_b`, resets the hardware counter each call — used for a tick-rate speed estimate) and a running cumulative count (`encoder_get_count_a`/`_b`). Not yet calibrated to real distance/speed units (gear ratio and wheel diameter constants unconfirmed for this board).
 
+!!! note "Motor B (rear right) counts are negated to match Motor A's sign convention"
+    Motor B is mounted as a mirror image of Motor A, so its raw Hall A/B phase order comes out reversed relative to "forward" even though `motor_set_speed()` drives both sides with the same positive=forward PWM convention. `encoder_get_delta_b`/`encoder_get_count_b` negate the raw timer count before returning it, so both motors honor the "positive = forward" contract documented in `encoder.h` — without this, the rear-right encoder read negative while driving forward (visible on the OLED's `Enc R` field and in `/joint_states` telemetry).
+
 ## Steering Servo Driver (`servo.c`)
 
 Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). `SERVO_ANGLE_MAX_DEG` is a placeholder estimate — needs tuning against the actual mechanical steering-lock limit.
