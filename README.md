@@ -2,7 +2,7 @@
 
 [![Docs](https://img.shields.io/badge/Docs-Zensical-blue?logo=readthedocs)](https://alvin0523.github.io/mdp/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-blue)](https://pixi.sh)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Linux%20ARM-blue)](https://pixi.sh)
 [![Pixi](https://img.shields.io/badge/Pixi-Package%20Manager-brightgreen?logo=conda-forge)](https://pixi.sh)
 [![ROS2](https://img.shields.io/badge/ROS2-Jazzy-22314E?logo=ros)](https://docs.ros.org/en/jazzy/)
 [![STM32](https://img.shields.io/badge/Embedded-STM32-03234C?logo=stmicroelectronics)](mdp_stm32)
@@ -106,7 +106,10 @@ pixi run sim-task2    # Run integrated Task 2 Gazebo simulation
 Navigate to `mdp_stm32` for microcontroller firmware compilation and flashing:
 ```bash
 cd mdp_stm32
-pixi run build        # Compile STM32 firmware
+pixi run probe         # Detect connected ST-LINK/V2 probe and STM32F4 chip
+pixi run build          # Compile STM32 firmware
+pixi run flash          # Flash firmware to the board via ST-LINK
+pixi run monitor        # Open serial monitor
 ```
 
 ---
