@@ -182,3 +182,23 @@ Fused pose is published on `/odometry/filtered` and consumed by autonomy nodes i
 ## Not Yet Verified On Hardware
 
 - EKF fusion (`ekf.yaml`) — config-validated only (`ekf_node` runs cleanly against the params file, launch file parses); not yet run against the live serial bridge + physical IMU/encoders per the checklist above.
+
+## Known Issue: `/odometry/filtered`'s `y` and `yaw` covariance grow unbounded
+
+First real-hardware run of the EKF (stationary robot, ~5 min) showed `pose.covariance`'s `x` term behaving reasonably (~34 → ~52, slow growth) but `y` and `yaw` diverging continuously and never settling:
+
+| | t+0 | t+21s |
+| --- | --- | --- |
+| `x` covariance | 34.4 | 51.7 |
+| `y` covariance | 7.7×10¹⁰ | 5.9×10¹¹ |
+| `yaw` covariance | 2.2×10⁶ | 7.4×10⁶ |
+
+**Ruled out:**
+
+- Not a startup-transient / "hasn't converged yet" thing — covariance keeps climbing indefinitely across multiple snapshots minutes apart, never plateaus.
+- Not `ekf_node` falling behind (`Failed to meet update rate!`) — that run showed zero such warnings from `ekf_node`.
+- Not a serial/IMU dropout — `serial_bridge_node`'s diagnostic showed a steady `~3600 bytes, 25-26 OK frames, 0 bad frames` every 3s the entire run; `/imu/data` was flowing continuously.
+
+**Working theory:** `imu0_config`'s `yaw: true` isn't actually correcting the filter's yaw estimate — if it were, yaw's own covariance should plateau near the IMU's reported yaw covariance (`0.05`, set in `serial_bridge_node.cpp`'s `onTelemetry()`), not grow unboundedly. Unfused/uncorrected yaw uncertainty compounding into `y` position uncertainty through the motion model would explain why `y` is ~5 orders of magnitude worse than `x` (which *is* corrected every cycle via `vx` from wheel odometry).
+
+**Next diagnostic step (not yet done):** `ros2 topic echo /diagnostics --once` while `pixi run real` is running - `ekf_node` (`print_diagnostics: true` in `ekf.yaml`) publishes a per-input health entry (e.g. `ekf_filter_node: imu0 (/imu/data)`) that should say directly whether `imu0` is being read/accepted or timing out/rejected, rather than inferring it from covariance numbers alone.
