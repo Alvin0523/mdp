@@ -39,13 +39,13 @@ pixi run sim
 Launches host-side `topic_based_ros2_control` for physical robot operation:
 
 ```bash
-pixi run hardware
+pixi run real
 # Equivalent to: ros2 launch mdp_bringup real.launch.py
 
 # The STM32 shows up as different device names depending on host/driver
 # (e.g. /dev/ttyACM0 on some machines, /dev/ttyUSB0 on others) - override
 # with the serial_port launch argument rather than editing the launch file:
-pixi run hardware serial_port:=/dev/ttyACM0
+pixi run real serial_port:=/dev/ttyACM0
 ```
 
 - **Loads:** `mini_akm_real_robot.urdf` with `topic_based_ros2_control/TopicBasedSystem` plugin.
@@ -64,7 +64,7 @@ pixi run hardware serial_port:=/dev/ttyACM0
     `real.launch.py` remaps `/ackermann_steering_controller/reference` to `/cmd_vel` on the `controller_manager` (`ros2_control_node`) `Node(...)`. That controller's actual subscriber lives inside `ros2_control_node` itself — the `spawner` process is a short-lived CLI that just calls a service to load/activate the controller and owns none of its topics, so a `remappings=` on the spawner silently does nothing. (This is different from `sim.launch.py`, where the equivalent remap lives in the URDF's `gz_ros2_control` plugin `<ros><remapping>` block instead, since Gazebo owns that controller manager internally.)
 
 ### 3. STM32 Serial Bridge (`mdp_hardware_bridge`)
-Bridges the ROS2 graph to the STM32 MCU over the custom binary protocol on `USART3` — see [ADR 0002](../architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc) and [Serial Protocol](../stm32/protocol.md). Launched automatically as part of `pixi run hardware`; can also be run standalone:
+Bridges the ROS2 graph to the STM32 MCU over the custom binary protocol on `USART3` — see [ADR 0002](../architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc) and [Serial Protocol](../stm32/protocol.md). Launched automatically as part of `pixi run real`; can also be run standalone:
 
 ```bash
 ros2 run mdp_hardware_bridge serial_bridge_node --ros-args -p serial_port:=/dev/ttyACM0
@@ -72,7 +72,10 @@ ros2 run mdp_hardware_bridge serial_bridge_node --ros-args -p serial_port:=/dev/
 
 - **Device:** configurable via the `serial_port` parameter (default `/dev/ttyUSB0`).
 - **Baud Rate:** `115200` (matching `USART3` on WHEELTEC C30D board).
-- **Bridged Topics:** `/joint_commands` ➔ MCU Motor PWM & Servo, MCU Encoders/IMU ➔ `/joint_states`, `/imu/data`.
+- **Bridged Topics:** `/joint_commands` ➔ MCU Motor PWM & Servo, MCU Encoders/IMU ➔ `/joint_states_raw`, `/imu/data`, `/estop`, `/battery_state`.
+
+!!! warning "`/joint_states` has two writers if `joint_states_topic` isn't split from `joint_state_broadcaster`'s output"
+    `mdp_hardware_bridge` publishes the STM32's raw encoder/steering feedback on `/joint_states_raw`, which `mini_akm_real_robot.urdf`'s `TopicBasedSystem` reads as its hardware state input. `joint_state_broadcaster` then re-publishes those same values (read back out of `ros2_control`'s state interfaces) on `/joint_states` for the rest of the graph. If `TopicBasedSystem`'s `joint_states_topic` param is ever pointed at `/joint_states` directly (as it originally was), that topic gets **two independent publishers** — the bridge's raw feed (fixed order `left_joint, right_joint, lb_joint, rb_joint`) and the broadcaster's aggregated one (alphabetical order `lb_joint, left_joint, rb_joint, right_joint`) — and `ros2 topic echo /joint_states` shows messages from both interleaved, with the field order appearing to randomly swap between reads. Not a data-correctness bug (both report the same underlying values), but any consumer indexing the arrays positionally instead of matching `name[]` would break intermittently. Keep `joint_states_topic` on its own name (`/joint_states_raw`) and remap the bridge node's `Node(...)` (`remappings=[('/joint_states', '/joint_states_raw')]`) rather than editing the C++ source's hardcoded topic string.
 
 !!! note "Superseded micro-ROS Agent"
     An earlier design used the micro-ROS Agent (`pixi run agent`, standalone `Micro-XRCE-DDS-Agent`) for this same link. `mdp_hardware_bridge` replaced it ([ADR 0002](../architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)) — the `agent`/`agent-build` pixi tasks still exist but aren't part of the current `real.launch.py` path. See [ROS Workspace docs](index.md#micro-ros-agent-superseded-host-side).
@@ -86,17 +89,29 @@ ros2 run mdp_hardware_bridge serial_bridge_node --ros-args -p serial_port:=/dev/
 | **`/cmd_vel`** | `geometry_msgs/TwistStamped` or `Twist` | Input | `teleop_twist_keyboard` / Task Runners ➔ `ackermann_steering_controller` | Velocity command setpoints (linear velocity $v_x$ m/s, steering rate $\omega_z$ rad/s). |
 | **`/ackermann_steering_controller/reference`** | `geometry_msgs/TwistStamped` | Input | Remapped from `/cmd_vel` via `<ros><remapping>` in URDF | Internal setpoint reference topic for Ackermann controller. |
 | **`/joint_commands`** | `sensor_msgs/JointState` | Output | `topic_based_ros2_control` ➔ `mdp_hardware_bridge` | Hardware joint target commands (position for steering knuckles `left_joint`/`right_joint`, velocity for rear wheels `lb_joint`/`rb_joint`). |
-| **`/joint_states`** | `sensor_msgs/JointState` | Bidirectional | `gz_ros2_control` or `mdp_hardware_bridge` ➔ `joint_state_broadcaster` | Measured wheel encoder positions/velocities and steering angle feedback. |
+| **`/joint_states_raw`** | `sensor_msgs/JointState` | Internal | `mdp_hardware_bridge` ➔ `TopicBasedSystem` (real HW only) | STM32's raw encoder/steering feedback, fed into `ros2_control`'s state interfaces. Not the graph-wide topic - see warning below. |
+| **`/joint_states`** | `sensor_msgs/JointState` | Output | `joint_state_broadcaster` (real HW) / `gz_ros2_control` (sim) ➔ rest of the graph | Aggregated joint state for RViz, TF, `ackermann_steering_controller`, autonomy nodes. Single publisher on real HW - see warning below. |
 | **`/imu/data`** | `sensor_msgs/Imu` | Input | `mdp_hardware_bridge` ➔ `robot_localization` | ICM-20948 IMU orientation quaternion and angular velocity $\omega_z$. |
 | **`/odometry/filtered`** | `nav_msgs/Odometry` | Output | `robot_localization` (`ekf_node`) ➔ Autonomy Nodes | Fused, drift-free odometry combining rear wheel encoders ($v_x$) and IMU yaw ($\theta_{\text{yaw}}$). |
 | **`/tf` / `/tf_static`** | `tf2_msgs/TFMessage` | Output | `robot_state_publisher` / `ekf_node` ➔ All Nodes | Coordinate transform tree connecting `odom` ➔ `base_link` ➔ wheel/sensor links. |
 | **`/clock`** | `rosgraph_msgs/Clock` | Input | `ros_gz_bridge` ➔ All ROS Nodes | Simulation clock synchronization topic (active when `use_sim_time:=true`). |
+| **`/estop`** | `std_msgs/Bool` | Output | `mdp_hardware_bridge` | Onboard `PD3` e-stop switch state. Not yet consumed by any node - informational only. |
+| **`/battery_state`** | `sensor_msgs/BatteryState` | Output | `mdp_hardware_bridge` | Pack voltage from the STM32's ADC. Not yet consumed by any node - informational only. |
+| **`/hardware_bridge/link_ok`** | `std_msgs/Bool` | Output | `mdp_hardware_bridge` | Serial-link watchdog - false if no valid telemetry frame in the last 500ms (mirrors the MCU's own command-timeout window). Not yet consumed by any node - informational only. |
+| **`/yolo_result`** | `std_msgs/String` | Output | `yolo_arrow_detector` ➔ `task1_runner` / `task2_runner` | Detected target/arrow label string. |
+| **`/planned_path`**, **`/waypoint_markers`**, **`/robot_pose`** | `nav_msgs/Path`, `visualization_msgs/MarkerArray`, `geometry_msgs/PoseStamped` | Output | `task2_runner` | RViz-visualization-only topics for Task 2's planned route; no other node subscribes. |
 
 !!! warning "`/joint_commands` field layout - `position[]`/`velocity[]` are grouped by interface type, not indexed by `name[]`"
     `topic_based_ros2_control`'s `TopicBasedSystem` hardware plugin publishes `/joint_commands` with `name` listing **every** joint that has a command interface (`left_joint`, `right_joint`, `lb_joint`, `rb_joint`, in URDF order), but `position[]` and `velocity[]` are **separate, independently-indexed arrays** containing only the joints that actually use that interface type — `position[0..1]` are `left_joint`/`right_joint`'s angles, `velocity[0..1]` are `lb_joint`/`rb_joint`'s speeds. They are **not** one slot per `name[]` entry. A consumer that indexes `position[i]`/`velocity[i]` using the same loop index it used for `name[i]` will silently read past the end of the shorter arrays (or misalign values) for any joint after the first interface-type group — `mdp_hardware_bridge`'s `onJointCommand()` had exactly this bug (rear wheels silently never received a velocity command). Track a separate running index per array as you iterate `name[]`, incrementing it only when you actually consume a value from that specific array.
 
 !!! warning "Front-wheel steering sign convention - ROS says positive = left, the STM32 firmware says positive = right"
-    ROS's `left_joint`/`right_joint` (`axis="0 0 1"`) follow REP-103: a positive joint angle is a counter-clockwise rotation about +Z, i.e. **steering left**. `mdp_stm32`'s `servo_set_angle()` (`src/servo.c`) is documented the other way — **positive `angle_deg` = right**. Neither convention is "wrong" in isolation (ROS's matches the rest of the ROS graph; the firmware's presumably matches how the physical servo horn/linkage was tested), but `mdp_hardware_bridge` has to reconcile them: `serial_bridge_node.cpp` negates the angle in both directions (`onJointCommand()` sending `steer_rad` to the MCU, and the telemetry parser converting `pkt.steer_deg` back into `/joint_states`). If you ever touch that conversion, keep it negated both ways, or steering will visibly point the wrong direction from what was commanded.
+    ROS's `left_joint`/`right_joint` (`axis="0 0 1"`) follow REP-103: a positive joint angle is a counter-clockwise rotation about +Z, i.e. **steering left**. `mdp_stm32`'s `servo_set_angle()` (`src/servo.c`) is documented the other way — **positive `angle_deg` = right**. Neither convention is "wrong" in isolation (ROS's matches the rest of the ROS graph; the firmware's presumably matches how the physical servo horn/linkage was tested), but `mdp_hardware_bridge` has to reconcile them: `serial_bridge_node.cpp` negates the angle in both directions (`onJointCommand()` sending `steer_rad` to the MCU, and the telemetry parser converting `pkt.steer_deg` back into `/joint_states_raw`). If you ever touch that conversion, keep it negated both ways, or steering will visibly point the wrong direction from what was commanded.
+
+!!! bug "`mdp_control` topic-name mismatches found during a topic-naming audit"
+    Two nodes were publishing/subscribing to topics nobody else used, both silent (no error, no crash, the callback/subscriber just never fired):
+
+    - `task2_runner.py` subscribed to `/arrow_detection`, but `yolo_arrow_detector.py` (the only publisher of YOLO results) publishes on `/yolo_result` - the same topic `task1_runner.py` already used correctly. `arrow_callback` never fired. Fixed by pointing the subscription at `/yolo_result`.
+    - `task1_runner.py` published every command twice: once to `/cmd_vel` (correct - matches the remap both `real.launch.py` and `sim.launch.py` apply to `ackermann_steering_controller`'s reference subscription) and once to `/ackermann_steering_controller/reference` directly, which nothing subscribes to post-remap - dead traffic. `pure_pursuit_follower.py` had the same leftover pattern gone one step further: it called `self.ref_pub.publish(msg)` in `publish_cmd()` without `self.ref_pub` ever being created in `__init__` - a guaranteed `AttributeError` the first time `publish_cmd()`/`stop()` ran. Fixed by removing the dead second publish in both files; `/cmd_vel` alone is correct and sufficient.
 
 ---
 
@@ -152,7 +167,7 @@ Fused pose is published on `/odometry/filtered` and consumed by autonomy nodes i
 
 **No driving needed (wheels can be off the ground):**
 
-1. `pixi run hardware serial_port:=/dev/ttyACM0` (adjust device as needed) and confirm no node exits/crashes on startup.
+1. `pixi run real serial_port:=/dev/ttyACM0` (adjust device as needed) and confirm no node exits/crashes on startup.
 2. `ros2 topic hz /imu/data` and `ros2 topic hz /ackermann_steering_controller/odometry` — should read ~10Hz and ~50Hz respectively (matching the MCU telemetry rate and `controller_manager`'s `update_rate`). If either is 0, the EKF has nothing to fuse — go fix that input first, not the EKF config.
 3. `ros2 topic echo /odometry/filtered --once` — check `pose.pose.position`/`orientation` are real numbers, not `nan`. A `nan` here usually means `frequency`/`sensor_timeout` never saw a first message from one of the inputs.
 4. **TF ownership** — confirm `ekf_node` is the only `odom`→`base_link` broadcaster: `ros2 topic echo /tf` and check the source, or watch the terminal for `TF_REPEATED_DATA`/multiple-authority warnings, which would mean `real_controller.yaml`'s `enable_odom_tf: false` didn't take (e.g. stale `install/` from before the config change — rebuild and re-source).

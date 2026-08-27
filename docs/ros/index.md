@@ -24,18 +24,21 @@ mdp_ros/
     │   ├── meshes/mini_akm_robot_meshes/ # STL 3D model meshes
     │   ├── urdf/                         # URDF robot models (Sim & Real Hardware)
     │   └── worlds/task2_arena.sdf        # Gazebo Task 2 Arena world model
-    ├── mdp_control/                      # Autonomy, Vision, and Path Planning Python Nodes
-    │   └── scripts/
-    │       ├── yolo_arrow_detector.py   # Ultralytics YOLO26 arrow detection node
+    ├── mdp_control/                      # Autonomy & Path Planning Python Nodes
+    │   └── mdp_control/
     │       ├── reeds_shepp_planner.py   # Reeds-Shepp Ackermann curve & TSP solver
     │       ├── pure_pursuit_follower.py # Waypoint tracking controller
     │       ├── task1_runner.py          # Task 1 exploration state machine
     │       └── task2_runner.py          # Task 2 fastest path decision tree
+    ├── vision/mdp_vision/                 # Vision stack (moved out from under mdp_control)
+    │   └── mdp_vision/
+    │       ├── camera_publisher.py      # Standalone webcam publisher (pixi run vision, dev-only)
+    │       └── yolo_arrow_detector.py   # Ultralytics YOLO arrow/symbol detector
     ├── mdp_hardware_bridge/               # STM32 <-> ROS2 serial bridge (C++)
     │   ├── include/mdp_hardware_bridge/protocol.hpp  # Mirrors mdp_stm32/include/protocol.h
-    │   └── src/serial_bridge_node.cpp     # /joint_commands <-> USART3 <-> /joint_states, /imu/data, /estop
+    │   └── src/serial_bridge_node.cpp     # /joint_commands <-> USART3 <-> /joint_states_raw, /imu/data, /estop, /battery_state
     └── mdp_bringup/                      # System launch scripts & controller YAMLs
-        ├── config/                       # ROS2 Jazzy Ackermann controller YAMLs
+        ├── config/                       # Ackermann controller YAMLs, ekf.yaml
         └── launch/                       # sim.launch.py, task2_sim.launch.py, real.launch.py
 ```
 
@@ -47,26 +50,29 @@ mdp_ros/
 | --- | --- | --- |
 | `pixi run sim` | `ros2 launch mdp_bringup sim.launch.py` | Launches Gazebo Sim, spawns robot URDF, starts Ackermann controllers. |
 | `pixi run sim-task2` | `ros2 launch mdp_bringup task2_sim.launch.py` | Launches Gazebo Task 2 Arena world (`task2_arena.sdf`), YOLO detector & Task 2 runner. |
-| `pixi run hardware` | `ros2 launch mdp_bringup real.launch.py` | Launches host-side `topic_based_ros2_control` bringup for real robot, including the `mdp_hardware_bridge` serial bridge node. |
-| `pixi run agent-build` | `bash scripts/build_microxrce_agent.sh` | One-time (idempotent): clones + builds the standalone eProsima Micro-XRCE-DDS-Agent `v3.0.1` into `../Micro-XRCE-DDS-Agent`. See below for why this isn't the ROS2 `micro_ros_agent` colcon package. |
-| `pixi run agent` | `../Micro-XRCE-DDS-Agent/build/MicroXRCEAgent serial --dev /dev/ttyUSB0 -b 115200` | Launches the micro-ROS Agent daemon connecting host ROS2 to the STM32 MCU over serial. Run `pixi run agent-build` first. |
-| `pixi run task1` | `ros2 run mdp_bringup task1_runner.py` | Runs Task 1 Exploration state machine, TSP Ackermann planner, YOLO26 callback & BT relay. |
-| `pixi run task2` | `ros2 run mdp_bringup task2_runner.py` | Runs Task 2 Fastest Path decision tree node (YOLO26 arrow sweep & return). |
+| `pixi run real` | `ros2 launch mdp_bringup real.launch.py` | Launches host-side `topic_based_ros2_control` bringup for real robot, including the `mdp_hardware_bridge` serial bridge node and `robot_localization` EKF. |
+| `pixi run task1` | `ros2 run mdp_control task1_runner.py` | Runs Task 1 Exploration state machine, TSP Ackermann planner, YOLO callback & BT relay. Run alongside `pixi run real` or `pixi run sim`. |
+| `pixi run task2` | `ros2 run mdp_control task2_runner.py` | Runs Task 2 Fastest Path decision tree node (YOLO arrow sweep & return). Run alongside `pixi run real` or `pixi run sim`. |
 | `pixi run teleop` | `ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p stamped:=true` | Drives the car via keyboard with active timestamped messages. |
-| `pixi run foxglove` | `ros2 launch foxglove_bridge foxglove_bridge_launch.xml use_sim_time:=true` | Launches Foxglove WebSocket visualization bridge on port `8765`. |
-| `pixi run build` | `colcon build --symlink-install` | Compiles workspace packages (`mdp_description`, `mdp_bringup`). |
+| `pixi run vision` | `ros2 launch mdp_vision vision.launch.py` | Standalone webcam + YOLO test path (dev machine, no RPi camera needed) - separate from `pixi run real`'s `camera_ros` path. |
+| `pixi run foxglove` | `ros2 launch foxglove_bridge foxglove_bridge_launch.xml` | Launches Foxglove WebSocket visualization bridge on port `8765`. |
+| `pixi run bag` | `ros2 bag record -a -o bags/rosbag2_<timestamp>` | Records every topic into a timestamped directory under `bags/`. |
+| `pixi run build` | `colcon build --symlink-install` | Compiles all workspace packages. |
+
+!!! note "micro-ROS Agent tasks removed"
+    `agent`/`agent-build` pixi tasks existed for the originally-planned micro-ROS transport ([ADR 0002](../architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)) and have since been removed from `pixi.toml` now that `mdp_hardware_bridge` is the only host↔MCU transport. The standalone-agent build instructions below are kept as historical reference only - the commands shown won't run as `pixi run ...` anymore, see [Troubleshooting](../troubleshooting.md) for the full story if ever revisiting micro-ROS.
 
 ---
 
 ## `mdp_hardware_bridge` (host side)
 
-The actual STM32↔host transport ([ADR 0002](../architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)). `serial_bridge_node` opens `/dev/ttyUSB0` @ 115200 baud, subscribes `/joint_commands` (from `topic_based_ros2_control`) and sends it to the MCU as a `CommandPacket`, and parses `TelemetryPacket` frames from the MCU into `/joint_states`, `/imu/data`, and `/estop`. See [Serial Protocol](../stm32/protocol.md) for the packet format.
+The actual STM32↔host transport ([ADR 0002](../architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)). `serial_bridge_node` opens `/dev/ttyUSB0` @ 115200 baud, subscribes `/joint_commands` (from `topic_based_ros2_control`) and sends it to the MCU as a `CommandPacket`, and parses `TelemetryPacket` frames from the MCU into `/joint_states_raw`, `/imu/data`, `/estop`, `/battery_state`, and `/hardware_bridge/link_ok`. See [Serial Protocol](../stm32/protocol.md) for the packet format and [Launch Files](launch.md#sensor-fusion-architecture-robot_localization) for why the joint-state topic isn't named `/joint_states` directly.
 
 ```bash
 ros2 run mdp_hardware_bridge serial_bridge_node --ros-args -p serial_port:=/dev/ttyUSB0
 ```
 
-Launched automatically as part of `pixi run hardware` (`real.launch.py`).
+Launched automatically as part of `pixi run real` (`real.launch.py`).
 
 ## micro-ROS Agent (superseded, host side)
 

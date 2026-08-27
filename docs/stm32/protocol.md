@@ -129,7 +129,7 @@ Wheels should spin slowly and the servo should turn — confirms the full STM32 
 
 - STM32-side firmware builds (`pixi run build`) and flashes (`pixi run flash`) cleanly.
 - `PD3` e-stop polarity assumption — functionally confirmed (self-test correctly refuses with the quick 5-blink pattern when the switch is in the disabled position, runs normally otherwise). Not yet confirmed with a multimeter against the raw pin voltage.
-- Full protocol round-trip (`ackermann_steering_controller` → `topic_based_ros2_control` → `mdp_hardware_bridge` → STM32 → motors/servo, and telemetry back) — confirmed via `pixi run hardware` + `pixi run teleop`, after fixing two bugs found along the way: the `/joint_commands` array-indexing bug and the steering sign-convention mismatch (both described above).
+- Full protocol round-trip (`ackermann_steering_controller` → `topic_based_ros2_control` → `mdp_hardware_bridge` → STM32 → motors/servo, and telemetry back) — confirmed via `pixi run real` + `pixi run teleop`, after fixing two bugs found along the way: the `/joint_commands` array-indexing bug and the steering sign-convention mismatch (both described above).
 - The automated self-test sequence (`selftest.c`) — confirmed running on physical hardware, including actual wheel rotation, after fixing the motor driver's PWM scheme (see [Drivers](drivers.md#at8236-motor-driver-motorc)).
 
 ## Not Yet Verified On Hardware

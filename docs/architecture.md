@@ -168,7 +168,7 @@ To prevent position and heading drift during competition runs:
 - [x] Hall Encoder Driver (TIM2 / TIM3) — Implemented (`encoder_init`, delta + cumulative tick reads)
 - [x] ICM-20948 IMU Driver (I2C2 `PB10`/`PB11`) — Implemented
 - [x] Onboard Enable/E-Stop Switch (`PD3`) — Implemented (`motor_estop_engaged`); active-low polarity functionally confirmed via self-test refusal behavior, not yet confirmed with a multimeter
-- [x] Serial Protocol + `mdp_hardware_bridge` — Custom binary protocol over `USART3` implemented on both sides (see [Serial Protocol](stm32/protocol.md)); replaces the originally planned micro-ROS transport ([ADR 0002](#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)); **full round-trip on-hardware validated** via `pixi run hardware` + `pixi run teleop` (two bugs found and fixed along the way — see [Launch Files](ros/launch.md#core-topic-specifications))
+- [x] Serial Protocol + `mdp_hardware_bridge` — Custom binary protocol over `USART3` implemented on both sides (see [Serial Protocol](stm32/protocol.md)); replaces the originally planned micro-ROS transport ([ADR 0002](#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)); **full round-trip on-hardware validated** via `pixi run real` + `pixi run teleop` (two bugs found and fixed along the way — see [Launch Files](ros/launch.md#core-topic-specifications))
 - [x] Battery Voltage ADC (`PB0` / ADC1_CH8) — Implemented (`battery_init`, `battery_read_voltage`); divider ratio (11x) sourced from WHEELTEC's C30D vendor example firmware, not yet cross-checked against a multimeter on this specific board
 - [ ] Ultrasonic Distance Sensor (HC-SR04) Driver — Not started
 - [ ] IR Distance Sensor (Sharp GP2Y0A21YK ×2) Driver — Not started
