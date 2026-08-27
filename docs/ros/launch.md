@@ -11,7 +11,7 @@ Complete guide to launch scripts, controller configurations, and topic interface
 | Package | Purpose | Primary Files |
 | --- | --- | --- |
 | **`mdp_description`** | URDF robot models & STL meshes | `mini_akm_robot.urdf` (Simulation), `mini_akm_real_robot.urdf` (Real Hardware) |
-| **`mdp_bringup`** | System bringup launch scripts & controller YAMLs | `sim.launch.py`, `real.launch.py`, `ackermann_controller.yaml`, `real_controller.yaml` |
+| **`mdp_bringup`** | System bringup launch scripts & controller YAMLs | `sim.launch.py`, `real.launch.py`, `ackermann_controller.yaml`, `real_controller.yaml`, `ekf.yaml` |
 
 ---
 
@@ -55,6 +55,10 @@ pixi run hardware serial_port:=/dev/ttyACM0
   - `spawner` ➔ `joint_state_broadcaster`
   - `spawner` ➔ `ackermann_steering_controller`
   - `mdp_hardware_bridge` (`serial_bridge_node`) — the actual STM32↔host transport, see below.
+  - `robot_localization` (`ekf_node`) — fuses wheel odometry + IMU into `/odometry/filtered`, see [Sensor Fusion](#sensor-fusion-architecture-robot_localization) below.
+
+!!! note "Sim doesn't run the EKF yet"
+    `sim.launch.py` has no `/imu/data` source (no IMU sensor plugin bridged from Gazebo), so `ekf_node` is only wired into `real.launch.py` for now. Gazebo's own ground-truth state is accurate enough for sim that the EKF isn't solving a problem there yet anyway.
 
 !!! warning "The `/ackermann_steering_controller/reference` remap must go on `ros2_control_node`, not the spawner"
     `real.launch.py` remaps `/ackermann_steering_controller/reference` to `/cmd_vel` on the `controller_manager` (`ros2_control_node`) `Node(...)`. That controller's actual subscriber lives inside `ros2_control_node` itself — the `spawner` process is a short-lived CLI that just calls a service to load/activate the controller and owns none of its topics, so a `remappings=` on the spawner silently does nothing. (This is different from `sim.launch.py`, where the equivalent remap lives in the URDF's `gz_ros2_control` plugin `<ros><remapping>` block instead, since Gazebo owns that controller manager internally.)
@@ -115,7 +119,51 @@ Both simulation (`ackermann_controller.yaml`) and real hardware (`real_controlle
 
 ### Sensor Fusion Architecture (`robot_localization`)
 
-To prevent position and orientation drift during Task 1 exploration and Task 2 fastest path runs:
-- **`ackermann_steering_controller`** publishes raw wheel odometry (`/ackermann_steering_controller/odometry`).
-- **`ekf_node`** (`robot_localization` package) subscribes to linear velocity ($v_x$) from wheel odometry and yaw rate ($\omega_z$) / orientation from `/imu/data`.
-- Fused pose is published on `/odometry/filtered` and updates the dynamic `odom` ➔ `base_link` TF transform.
+Installed as `ros-jazzy-robot-localization` (`pixi.toml`, `robostack-jazzy` channel). Configured in `mdp_bringup/config/ekf.yaml`, launched as `ekf_filter_node` in `real.launch.py`.
+
+#### How an EKF fuses odometry, conceptually
+
+`ekf_node` is a generic multi-sensor Extended Kalman Filter — it doesn't know or care that one input is "wheel encoders" and another is "IMU". It just keeps a running estimate of a 15-element state vector (`x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az`) and repeats two steps:
+
+1. **Predict** — at `frequency` Hz (30Hz here), advance the state estimate using its own motion model (e.g. "if vx was 0.5 m/s and yaw was 10°, where is the robot 33ms later") and grow the uncertainty (covariance) a little, since dead-reckoning alone drifts.
+2. **Correct** — whenever a subscribed topic delivers a new message, compare what that sensor reports against the predicted state and nudge the estimate toward it, weighted by that sensor's own reported covariance (confident sensor = bigger nudge) and the filter's current uncertainty (Kalman gain).
+
+The key design choice per sensor is `<sensor>_config`: a 15-element boolean mask picking *which* of those 15 state variables that sensor is allowed to correct. This is what lets you say "trust the encoders for speed but not heading" and "trust the IMU for heading but not position" — both feed the *same* state vector, so the filter reconciles them automatically rather than you having to average anything by hand.
+
+#### This robot's specific fusion
+
+Only two of the fifteen state variables actually get outside correction here — `vx` (from wheel odometry) and `yaw`/`vyaw` (from the IMU). `x`/`y` position is **not** corrected by anything; it's purely the EKF's own integral of `vx` and `yaw` over time. That's the entire point: it replaces `ackermann_steering_controller`'s own dead-reckoned position estimate (which inherits error from the single-servo Ackermann approximation — see the warning above on `/joint_commands`) with one integrated from a heading source the STM32-side IMU derives independently of the drivetrain.
+
+| Input | Topic | Fused fields | Why only these |
+| --- | --- | --- | --- |
+| Wheel odometry | `/ackermann_steering_controller/odometry` | `vx` only | `x/y/yaw` from this source already bakes in the single-servo Ackermann approximation - not double-counted here. |
+| IMU | `/imu/data` | `yaw`, `vyaw` | Both come from the STM32's gyro-Z (see `mdp_stm32/src/imu.c`) - `yaw` is bias-corrected gyro integration, `vyaw` is the instantaneous bias-corrected rate. Roll/pitch aren't fused: the bridge sets their covariance to `1e6` (`serial_bridge_node.cpp`) since they're never estimated, and `two_d_mode: true` discards them from the state entirely regardless. |
+
+Other notable settings in `ekf.yaml`:
+
+- **`two_d_mode: true`** — locks `z, roll, pitch, vz, vroll, vpitch, az` to zero. This is a ground vehicle on a flat competition arena floor; letting those drift on noise would only hurt.
+- **`world_frame: odom`, single `ekf_node` instance** — `robot_localization`'s usual two-instance pattern (one EKF in `odom` frame fused only with continuous sensors like wheels/IMU, a second in `map` frame additionally fused with an absolute source like GPS/AMCL) collapses to just the first instance here, since there's no absolute localization source yet — Task 1/2 navigation is dead-reckoning + vision, not GPS.
+- **`publish_tf: true`** — `ekf_node` becomes the sole broadcaster of `odom` → `base_link`. `real_controller.yaml` sets `enable_odom_tf: false` on `ackermann_steering_controller` for exactly this reason — it still publishes `/ackermann_steering_controller/odometry` as the EKF's input, it just no longer broadcasts the TF itself (two nodes broadcasting the same transform is a conflict, not additive).
+- **`sensor_timeout: 0.5`** — matches the 500ms fail-safe window already used by the STM32 command timeout and the bridge's `/hardware_bridge/link_ok` watchdog, so the whole stack degrades on a consistent timescale if the serial link drops.
+
+Fused pose is published on `/odometry/filtered` and consumed by autonomy nodes in place of raw wheel odometry.
+
+#### Verification Checklist (post-bringup)
+
+**No driving needed (wheels can be off the ground):**
+
+1. `pixi run hardware serial_port:=/dev/ttyACM0` (adjust device as needed) and confirm no node exits/crashes on startup.
+2. `ros2 topic hz /imu/data` and `ros2 topic hz /ackermann_steering_controller/odometry` — should read ~10Hz and ~50Hz respectively (matching the MCU telemetry rate and `controller_manager`'s `update_rate`). If either is 0, the EKF has nothing to fuse — go fix that input first, not the EKF config.
+3. `ros2 topic echo /odometry/filtered --once` — check `pose.pose.position`/`orientation` are real numbers, not `nan`. A `nan` here usually means `frequency`/`sensor_timeout` never saw a first message from one of the inputs.
+4. **TF ownership** — confirm `ekf_node` is the only `odom`→`base_link` broadcaster: `ros2 topic echo /tf` and check the source, or watch the terminal for `TF_REPEATED_DATA`/multiple-authority warnings, which would mean `real_controller.yaml`'s `enable_odom_tf: false` didn't take (e.g. stale `install/` from before the config change — rebuild and re-source).
+5. **IMU branch in isolation** — with wheels stationary (0 encoder ticks), rotate the whole chassis by hand. `/odometry/filtered`'s yaw should track the rotation via the IMU while `vx` stays ~0. If yaw doesn't move, the IMU input isn't reaching the filter (check `/imu/data` is actually populated, not zeros — `imu_ready` must be 1).
+6. **Wheel branch in isolation** — chassis stationary/level, spin one rear wheel by hand. `/odometry/filtered`'s `twist.linear.x` should respond without a spurious yaw jump (yaw only comes from the IMU input, per the fusion table above).
+7. `ros2 run rviz2 rviz2`, add a TF display (or Odometry display on `/odometry/filtered`) — visually confirm `odom`→`base_link` moves smoothly, without snapping or jitter, as you manually rotate/roll the chassis.
+
+**Needs actual driving:**
+
+8. Drive a short known path with `pixi run teleop` (e.g. forward 1m, turn 90°, forward 1m) and compare `/odometry/filtered`'s reported displacement against a tape-measure ground truth. Some drift is expected (no absolute correction source yet — see `world_frame` note above); the goal is confirming the fused estimate is *closer* to ground truth than raw `/ackermann_steering_controller/odometry` alone, not perfect.
+
+## Not Yet Verified On Hardware
+
+- EKF fusion (`ekf.yaml`) — config-validated only (`ekf_node` runs cleanly against the params file, launch file parses); not yet run against the live serial bridge + physical IMU/encoders per the checklist above.

@@ -35,14 +35,17 @@ Sent once per firmware main-loop iteration (currently 10Hz).
 | `steer_deg` | `float` | Steering angle currently applied to the servo (deg) |
 | `accel_x/y/z` | `float` | Accelerometer, m/s^2 |
 | `gyro_x/y/z` | `float` | Gyroscope, deg/s |
-| `yaw_deg` | `float` | Complementary-filter yaw (deg) — roll/pitch are not estimated (no magnetometer fusion) |
+| `yaw_deg` | `float` | Bias-corrected gyro-Z integration (deg) — no accel/mag fusion, so it will still drift over time; roll/pitch are not estimated at all |
 | `imu_ready` | `uint8` | 1 = IMU detected and operational |
 | `estop` | `uint8` | 1 = onboard `PD3` e-stop switch engaged |
+| `battery_v` | `float` | Battery pack voltage (V), `PB0`/ADC1_CH8 |
 | `uptime_ms` | `uint32` | Firmware `HAL_GetTick()` at send time |
 
 The bridge node differentiates `enc_left`/`enc_right` against the previous packet's value and `uptime_ms` delta to compute wheel angular velocity — no separate delta field is sent.
 
 **Ticks -> radians:** `2*pi / 1560` per tick. `1560 = EncoderMultiples(4) * Hall_13(13 pulses/motor-rev) * HALL_30F(30:1 gear ratio)`, sourced from WHEELTEC's vendor reference firmware's Ackermann-car config for this exact motor (`MG513P3012V` + Hall encoder) — see `references/WHEELTEC/.../robot_select_init.h`.
+
+**ADC raw -> volts:** `raw / 4095.0 * 3.3 * 11.0` (12-bit ADC, 3.3V reference, 11x resistor-divider ratio), sourced from WHEELTEC's C30D basic-example firmware (`references/WHEELTEC/.../03-ADC采集电压值与电位器值/ADC.zip` → `bsp_adc.c`/`main.c`, `Battery_Ch = 8`) for this exact board line — the divider ratio couldn't be confirmed from the schematic PDF's visual layout, so it's taken from the vendor's own working example instead of guessed.
 
 ## Command Packet (Pi -> STM32)
 
