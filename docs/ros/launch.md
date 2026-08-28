@@ -98,7 +98,7 @@ ros2 run mdp_hardware_bridge serial_bridge_node --ros-args -p serial_port:=/dev/
 | **`/estop`** | `std_msgs/Bool` | Output | `mdp_hardware_bridge` | Onboard `PD3` e-stop switch state. Not yet consumed by any node - informational only. |
 | **`/battery_state`** | `sensor_msgs/BatteryState` | Output | `mdp_hardware_bridge` | Pack voltage from the STM32's ADC. Not yet consumed by any node - informational only. |
 | **`/hardware_bridge/link_ok`** | `std_msgs/Bool` | Output | `mdp_hardware_bridge` | Serial-link watchdog - false if no valid telemetry frame in the last 500ms (mirrors the MCU's own command-timeout window). Not yet consumed by any node - informational only. |
-| **`/yolo_result`** | `std_msgs/String` | Output | `yolo_arrow_detector` ➔ `task1_runner` / `task2_runner` | Detected target/arrow label string. |
+| **`/yolo_result`** | `std_msgs/String` | Output | `yolo_detector` ➔ `task1_runner` / `task2_runner` | Detected target/arrow label string. |
 | **`/planned_path`**, **`/waypoint_markers`**, **`/robot_pose`** | `nav_msgs/Path`, `visualization_msgs/MarkerArray`, `geometry_msgs/PoseStamped` | Output | `task2_runner` | RViz-visualization-only topics for Task 2's planned route; no other node subscribes. |
 
 !!! warning "`/joint_commands` field layout - `position[]`/`velocity[]` are grouped by interface type, not indexed by `name[]`"
@@ -110,7 +110,7 @@ ros2 run mdp_hardware_bridge serial_bridge_node --ros-args -p serial_port:=/dev/
 !!! bug "`mdp_control` topic-name mismatches found during a topic-naming audit"
     Two nodes were publishing/subscribing to topics nobody else used, both silent (no error, no crash, the callback/subscriber just never fired):
 
-    - `task2_runner.py` subscribed to `/arrow_detection`, but `yolo_arrow_detector.py` (the only publisher of YOLO results) publishes on `/yolo_result` - the same topic `task1_runner.py` already used correctly. `arrow_callback` never fired. Fixed by pointing the subscription at `/yolo_result`.
+    - `task2_runner.py` subscribed to `/arrow_detection`, but `yolo_detector.py` (the only publisher of YOLO results) publishes on `/yolo_result` - the same topic `task1_runner.py` already used correctly. `arrow_callback` never fired. Fixed by pointing the subscription at `/yolo_result`.
     - `task1_runner.py` published every command twice: once to `/cmd_vel` (correct - matches the remap both `real.launch.py` and `sim.launch.py` apply to `ackermann_steering_controller`'s reference subscription) and once to `/ackermann_steering_controller/reference` directly, which nothing subscribes to post-remap - dead traffic. `pure_pursuit_follower.py` had the same leftover pattern gone one step further: it called `self.ref_pub.publish(msg)` in `publish_cmd()` without `self.ref_pub` ever being created in `__init__` - a guaranteed `AttributeError` the first time `publish_cmd()`/`stop()` ran. Fixed by removing the dead second publish in both files; `/cmd_vel` alone is correct and sufficient.
 
 ---

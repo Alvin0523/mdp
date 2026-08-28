@@ -33,7 +33,7 @@ mdp_ros/
     ├── vision/mdp_vision/                 # Vision stack (moved out from under mdp_control)
     │   └── mdp_vision/
     │       ├── camera_publisher.py      # Standalone webcam publisher (pixi run vision, dev-only)
-    │       └── yolo_arrow_detector.py   # Ultralytics YOLO arrow/symbol detector
+    │       └── yolo_detector.py         # Ultralytics YOLO detector
     ├── mdp_hardware_bridge/               # STM32 <-> ROS2 serial bridge (C++)
     │   ├── include/mdp_hardware_bridge/protocol.hpp  # Mirrors mdp_stm32/include/protocol.h
     │   └── src/serial_bridge_node.cpp     # /joint_commands <-> USART3 <-> /joint_states_raw, /imu/data, /estop, /battery_state
