@@ -17,7 +17,7 @@ Overview of device drivers and sensor interfaces running on the STM32 MCU inside
 | **IMU Sensor** | ICM-20948 (I2C2 `PB10`/`PB11`) | Implemented :white_check_mark: | `src/imu.c` |
 | **OLED Display** | 0.96" SSD1306, bit-banged (`PD11`-`PD14`) | Implemented :white_check_mark: | `src/oled.c` |
 | **Host Serial Protocol** | USART3 @ 115200 (`PD8`/`PD9`) | Implemented :white_check_mark: | `src/usart.c`, `include/protocol.h` (see [Serial Protocol](protocol.md)) |
-| **Battery Voltage ADC** | `PB0` / ADC1_CH8 | **Not Started** :x: | — |
+| **Battery Voltage ADC** | `PB0` / ADC1_CH8 | Implemented :white_check_mark: | `src/battery.c` |
 | **Ultrasonic Sensor** | HC-SR04 | **Not Started** :x: | — |
 | **IR Range Sensors** | Sharp GP2Y0A21YK ×2 | **Not Started** :x: | — |
 
@@ -43,8 +43,11 @@ Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). `S
 
 Reads the onboard enable/e-stop switch on `PD3` (input, pull-up) via `motor_estop_engaged()`. Polarity (switch-to-GND = engaged) is assumed from the vendor reference and not yet physically verified — flip the comparison in `motor.c` if it reads backwards.
 
+## Battery Voltage ADC (`battery.c`)
+
+Reads `PB0` (`ADC1_CH8`) via `HAL_ADC` polling (`battery_init`, `battery_read_voltage`). The sense-resistor divider ratio couldn't be confirmed from the schematic PDF text extraction (schematic is a visual layout, not linear text), so instead of guessing, the conversion formula (`raw / 4095.0 * 3.3 * 11.0`) was taken from WHEELTEC's own C30D basic-example firmware (`references/WHEELTEC/.../03-ADC采集电压值与电位器值/ADC.zip`), which targets this exact board line and channel (`Battery_Ch = 8`). Not yet cross-checked against a multimeter on this specific board.
+
 ## Not Yet Implemented
 
-- **Battery Voltage ADC (`PB0` / ADC1_CH8):** No driver written. The sense-resistor divider ratio couldn't be confirmed from the schematic PDF text extraction (schematic is a visual layout, not linear text) — implementing this without a confirmed ratio would produce a plausible-looking but potentially wrong battery voltage reading, so it's left as a placeholder in `main.c` rather than guessed.
 - **Ultrasonic Sensor (HC-SR04):** No driver exists.
 - **IR Range Sensors (Sharp GP2Y0A21YK ×2):** No driver exists.

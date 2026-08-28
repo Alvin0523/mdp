@@ -21,7 +21,7 @@ Below is the team structure for the MDP robot development across hardware, firmw
 | **Android** | **Albert** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
 | **Raspberry Pi** | **Wei Ming, Katie** | `mdp_ros` workspace bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
 | **STM32** | **HC, SL** | `mdp_stm32` PlatformIO/STM32Cube HAL firmware, AT8236 motor PWM, HWZ020 steering servo, encoders, IMU, and custom binary serial protocol. |
-| **Vision** | **Kaegan** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. |
+| **Vision** | **Keagan** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. |
 
 ---
 
