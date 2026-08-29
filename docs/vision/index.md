@@ -27,7 +27,7 @@ Package: `mdp_ros/src/vision/mdp_vision` — description in `setup.py`: *"Vision
 
 Per the [Assessment & Checklist](../assessment_checklist.md), Task 1 requires detecting target
 symbols 20-50cm from the robot and identifying target IDs; Task 2 requires detecting Left/Right arrow
-symbols. See [Architecture: System Stack](../architecture.md#1-system-stack--who-talks-to-whom) for
+symbols. See [Architecture: System Stack](../architecture.md#1-system-stack-who-talks-to-whom) for
 where this sits relative to Algorithm and RPi.
 
 - **Real hardware path**: `pixi run real` uses the RPi Camera Module V2 via `camera_ros` (not

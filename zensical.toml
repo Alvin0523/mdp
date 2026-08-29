@@ -50,6 +50,10 @@ nav = [
     { "Architecture Guide" = "architecture.md" },
     { "Assessment & Checklist" = "assessment_checklist.md" },
   ] },
+  { "Quickstart" = [
+    { "Run: Simulation" = "run_sim.md" },
+    { "Run: Real Hardware" = "run_real.md" },
+  ] },
   { "Algorithm" = [
     { "Overview" = "algorithm/index.md" },
   ] },

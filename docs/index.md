@@ -25,43 +25,6 @@ for how everything talks to everything else.
 
 ---
 
-## 🗺️ High-Level System Architecture
-
-The robot uses a **Host-Side Kinematics** architecture — the STM32 MCU is a pure hardware I/O
-controller; all kinematics, sensor fusion, vision, and path planning run on the RPi host. Full detail
-(data flow diagrams, ADRs) is in the [Architecture Guide](architecture.md) — this is just the map of
-who talks to whom:
-
-```mermaid
-graph LR
-  subgraph ANDROID["Android Tablet"]
-    APP["Android Remote App<br/>(2D Arena & Controls)"]
-  end
-
-  subgraph HOST["Host (RPi4B / Host PC)"]
-    direction TB
-    ROBOTICS["ROS2 Jazzy Stack<br/>• Task 1 & 2 Autonomy (Algorithm)<br/>• ros2_control & EKF Fusion<br/>• YOLO26 Perception (Vision)"]
-    BRIDGE["android_bridge_node<br/>(planned, pyserial RFCOMM)"]
-    AGENT["mdp_hardware_bridge (serial_bridge_node)"]
-    ROBOTICS <--> BRIDGE
-    ROBOTICS <--> AGENT
-  end
-
-  subgraph SIM["Gazebo Simulation"]
-    GZ["3D Physics Engine"]
-  end
-
-  subgraph MCU["STM32 MCU (mdp_stm32)"]
-    FIRMWARE["Motor + Servo + Encoders + IMU"]
-  end
-
-  APP <-->|"Bluetooth Serial (RFCOMM)"| BRIDGE
-  ROBOTICS <-->|"Sim Bridge"| GZ
-  AGENT <-->|"Serial UART (USART3 @ 115200)"| FIRMWARE
-```
-
----
-
 ## 📦 Codebase Layout
 
 Two independently versioned git submodules hold all the actual code; Vision and Algorithm live as
@@ -125,6 +88,7 @@ Per-subteam setup (toolchain install, OpenSpec init, build/flash) lives with eac
 | --- | --- |
 | 📐 [**Architecture Guide**](architecture.md) | System stack, data-flow diagrams, and architectural decisions (ADRs 0001–0006). Who talks to whom, not implementation detail. |
 | 📋 [**Assessment & Checklist**](assessment_checklist.md) | Official course deliverables (Module A, B, C), deadlines, and Task 1/2 requirements. |
+| ▶️ [**Run: Simulation**](run_sim.md) / [**Run: Real Hardware**](run_real.md) | Commands-only runbooks to get the robot driving — sim or physical. |
 | 🔧 [**Hardware Components**](hardware.md) | Component list, physical specs, and drivetrain parameters — used by both RPi (URDF/kinematics) and STM32 (drivers). |
 | 🔄 [**Dev Workflow & Setup**](dev_workflow.md) | OpenSpec CLI guide, `/opsx:` explore/propose/apply/archive loop, and git branch rules. |
 | 🚨 [**Troubleshooting**](troubleshooting.md) | Known issues, OpenSpec CLI fixes, and git submodule help. |

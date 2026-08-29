@@ -33,7 +33,7 @@ this project's planners depend on it directly or it's a reference/spare-parts pa
 
 Per the [Assessment & Checklist](../assessment_checklist.md) Module B requirements: display the
 2.0m×2.0m arena, compute a Hamiltonian path visiting all 5 targets, and solve the TSP via Reeds-Shepp
-curves to minimize run time. See [Architecture: System Stack](../architecture.md#1-system-stack--who-talks-to-whom)
+curves to minimize run time. See [Architecture: System Stack](../architecture.md#1-system-stack-who-talks-to-whom)
 for where this sits relative to Vision and RPi.
 
 - **Inputs**: target detections from [Vision](../vision/index.md), robot pose from

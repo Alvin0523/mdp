@@ -107,7 +107,7 @@ Only `PE8` is a GPIO-controllable LED on this board (confirmed against the resou
 | --- | --- |
 | 1 | Forward, 1 wheel revolution |
 | 2 | Backward, 1 wheel revolution |
-| 3 | Full-range servo sweep, **left limit first**, then slowly ascending to the right limit (confirmed asymmetric: left 27°, right 41°) — see [Closed-Loop Control & Sensor Fusion](control_loop.md#2-servo-range-no-shortcut-in-the-vendor-firmware-either). Supersedes the old fixed ±20° steer-left/steer-right phases, which were dropped |
+| 3 | Full-range servo sweep, **left limit first**, then slowly ascending to the right limit (confirmed asymmetric: left 27°, right 41°) — see [Closed-Loop Control & Sensor Fusion](control_loop.md#2-servo-range-the-real-vendor-solution-is-an-empirically-fit-curve-not-a-linear-gain). Supersedes the old fixed ±20° steer-left/steer-right phases, which were dropped |
 | 4 | Done |
 
 Refusal (motor switch OFF) is a *separate* standalone 5-blink pattern with different timing
