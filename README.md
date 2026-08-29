@@ -22,7 +22,7 @@ This repository serves as the central meta-workspace for the **Mini Ackermann Ro
 
 | Component / Submodule | Role & Description | Submodule / Repository Link |
 |---|---|---|
-| [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: `ackermann_steering_controller`, `mdp_hardware_bridge` (STM32↔host serial bridge), spline path planning, adaptive Pure Pursuit, YOLO vision, Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
+| [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: `ackermann_steering_controller`, `mdp_bridge` (STM32 serial + Android Bluetooth bridge), `mdp_algorithm` (Reeds-Shepp/Dubins TSP planning, spline planning, Pure Pursuit), `mdp_vision` (YOLO26 detection), Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
 | [`mdp_stm32/`](mdp_stm32) | STM32 bare-metal (STM32Cube HAL via PlatformIO) firmware: AT8236 motor PWM, HWZ020 servo steering, Hall encoder odometry, ICM-20948 IMU, and a custom binary serial protocol over `USART3` | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
 | `docs/` | Comprehensive technical documentation site managed via [Zensical](https://zensical.org) | Built with Zensical |
 
@@ -34,10 +34,10 @@ This repository serves as the central meta-workspace for the **Mini Ackermann Ro
 |---|---|
 | **Host (`mdp_ros`)** | ROS 2 Jazzy, `ros2_control` / `ackermann_steering_controller`, `topic_based_ros2_control`, `robot_localization` (EKF), Gazebo Sim (`gz_ros2_control`), Foxglove Bridge |
 | **Firmware (`mdp_stm32`)** | STM32F407VET6, bare-metal STM32Cube HAL via PlatformIO, custom binary serial protocol |
-| **Vision & Planning** | Ultralytics YOLO26, Reeds-Shepp / Pure Pursuit path planning |
+| **Vision & Planning** | Ultralytics YOLO26 (`mdp_yolo`), Reeds-Shepp/Dubins TSP solver, spline planning, Pure Pursuit (`mdp_algorithm`) |
 | **Tooling** | [Pixi](https://pixi.sh) (`robostack-jazzy`), [Zensical](https://zensical.org) docs site |
 
-See [System Architecture & ADRs](https://alvin0523.github.io/mdp/architecture/) for the full breakdown and the reasoning behind each choice.
+See [System Architecture](https://alvin0523.github.io/mdp/) for the full breakdown.
 
 ---
 
@@ -47,12 +47,15 @@ See [System Architecture & ADRs](https://alvin0523.github.io/mdp/architecture/) 
 mdp/
 ├── docs/                    # Zensical documentation site & guides
 │   ├── index.md             # Site overview & quick links
-│   ├── architecture.md      # End-to-end hardware & software architecture
+│   ├── quickstart.md        # Commands-only runbook: clone, build, launch, drive (sim & real)
+│   ├── assessment_checklist.md  # Official course deliverables & Task 1/2 requirements
 │   ├── hardware.md          # Electronics, pinout & mechanical specs
 │   ├── dev_workflow.md      # Development, compilation & debugging workflows
-│   ├── ros/                 # ROS 2 autonomy stack documentation
-│   ├── stm32/               # Embedded firmware documentation
-│   └── troubleshooting.md   # Common errors and hardware troubleshooting
+│   ├── troubleshooting.md   # Common errors and hardware troubleshooting
+│   ├── references.md        # External docs links & WHEELTEC vendor file map
+│   ├── android/             # Android app interface contract
+│   ├── rpi/                 # RPi: ROS 2 launch/topics, ros2_control, EKF, Vision, Algorithm
+│   └── stm32/               # STM32: overview, firmware architecture, tuning, serial protocol
 ├── mdp_ros/                 # ROS 2 Jazzy Autonomy, Vision & Simulation Stack (Git Submodule)
 ├── mdp_stm32/               # STM32 Microcontroller Firmware Stack (Git Submodule)
 ├── pixi.toml                # Top-level Pixi task runner & dependency environment
@@ -61,68 +64,29 @@ mdp/
 
 ---
 
-## ⚡ Quick Start
+## 📚 Technical Documentation
 
-### 1. Clone Workspace & Submodules
-
-```bash
-# Clone repository recursively
-git clone --recursive https://github.com/Alvin0523/mdp.git
-cd mdp
-
-# If already cloned without submodules, run:
-pixi run clone-all
-```
-
-### 2. Install Pixi Dependencies
+Full setup, build, and run instructions live on the [documentation site](https://alvin0523.github.io/mdp/) —
+start at [Quickstart](https://alvin0523.github.io/mdp/quickstart/). To preview the docs site locally:
 
 ```bash
 pixi install
-```
-
-### 3. Top-Level Pixi Tasks
-
-| Command | Action |
-|---|---|
-| `pixi run serve` | Launch local live-reloading preview server for Zensical documentation site |
-| `pixi run build` | Build static production assets for Zensical documentation |
-| `pixi run clone-all` | Initialize and update all git submodules recursively |
-| `pixi run clone-ros` | Initialize and update `mdp_ros` submodule |
-| `pixi run clone-stm32` | Initialize and update `mdp_stm32` submodule |
-
----
-
-## 🛠️ Submodule Quick Workflows
-
-### 🏎️ ROS 2 Autonomy & Simulation (`mdp_ros`)
-Navigate to `mdp_ros` for autonomy, path planning, and simulation:
-```bash
-cd mdp_ros
-pixi run build        # Build ROS 2 workspace
-pixi run sim-task2    # Run integrated Task 2 Gazebo simulation
-```
-
-### ⚡ STM32 Embedded Firmware (`mdp_stm32`)
-Navigate to `mdp_stm32` for microcontroller firmware compilation and flashing:
-```bash
-cd mdp_stm32
-pixi run probe         # Detect connected ST-LINK/V2 probe and STM32F4 chip
-pixi run build          # Compile STM32 firmware
-pixi run flash          # Flash firmware to the board via ST-LINK
-pixi run monitor        # Open serial monitor
+pixi run serve   # live-reloading preview at http://127.0.0.1:8000
 ```
 
 ---
 
-## 📚 Technical Documentation
+## 👥 Authors
 
-Documentation is authored in Markdown and built with **Zensical**.
+**Group 14**
 
-- **Local Preview**: `pixi run serve` (opens documentation server locally at `http://127.0.0.1:8000`)
-- **Topics Covered**:
-  - [`docs/architecture.md`](docs/architecture.md): System architecture, serial protocol, and architectural decisions.
-  - [`docs/hardware.md`](docs/hardware.md): Chassis dimensions, HWZ020 servo yaw limits, motor encoders.
-  - [`docs/dev_workflow.md`](docs/dev_workflow.md): Step-by-step development guidelines and test workflows.
+- Cheong Hoi Chun
+- Lin Lihong Albert
+- Wong Wei Ming
+- Keagan Kong Kai Yi (Kaiyi)
+- Ojha Rashi
+- Wang Li Ling, Katie
+- Seah Song Li
 
 ---
 

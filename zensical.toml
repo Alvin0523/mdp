@@ -47,23 +47,34 @@ Copyright &copy; 2026 The authors
 nav = [
   { "System Overview" = [
     { "Home" = "index.md" },
-    { "Architecture Guide" = "architecture.md" },
-    { "Assessment & Checklist" = "assessment_checklist.md" },
   ] },
-  { "ROS 2 Autonomy Stack" = [
-    { "Overview & Nodes" = "ros/index.md" },
-    { "Launch & Interfaces" = "ros/launch.md" },
-    { "Gazebo 3D Simulation" = "ros/simulation.md" },
+  { "Quickstart" = "quickstart.md" },
+  { "Assessment & Checklist" = "assessment_checklist.md" },
+  { "Android" = [
+    { "Overview" = "android/index.md" },
   ] },
-  { "Hardware & Firmware" = [
-    { "Hardware Specs & Wiring" = "hardware.md" },
-    { "STM32 Firmware Overview" = "stm32/index.md" },
-    { "Pinout Allocations" = "stm32/pinouts.md" },
-    { "Drivers & Peripherals" = "stm32/drivers.md" },
+  { "Raspberry Pi" = [
+    { "Overview" = "rpi/index.md" },
+    { "ROS2" = [
+      { "Launch Files & Topics" = "rpi/ros2_jazzy.md" },
+      { "ROS2 Control" = "rpi/ros2_control.md" },
+      { "ROS2 EKF Localization" = "rpi/ros2_ekf_localization.md" },
+    ] },
+    { "Vision" = "rpi/vision.md" },
+    { "Algorithm" = "rpi/algorithm.md" },
+  ] },
+  { "STM32" = [
+    { "Overview" = "stm32/index.md" },
+    { "Firmware Architecture" = "stm32/architecture.md" },
+    { "Control Tuning & Calibration" = "stm32/tuning.md" },
+    { "Serial Protocol" = "stm32/serial_protocol.md" },
   ] },
   { "Development & Resources" = [
+    { "Hardware Specs & Wiring" = "hardware.md" },
     { "Dev Workflow & Setup" = "dev_workflow.md" },
+    { "Troubleshooting" = "troubleshooting.md" },
     { "References & Datasheets" = "references.md" },
+    { "Docs Authoring Reference" = "authoring_reference.md" },
   ] },
 ]
 
