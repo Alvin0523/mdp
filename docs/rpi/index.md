@@ -11,6 +11,15 @@ Documentation for the `mdp_ros` workspace containing ROS2 Jazzy packages, URDF r
 - [**Launch Files & Node Interfaces**](launch.md) — Launch entry points (`sim.launch.py`, `real.launch.py`), controller parameters, and topic specifications.
 - [**Gazebo Simulation & Controllers**](simulation.md) — Gazebo Sim integration, `gz_ros2_control`, joint physics limits, REP-103 joint axes, and Foxglove visualization.
 
+## Setup
+
+```bash
+cd mdp_ros
+pixi install       # ROS2 Jazzy (robostack-jazzy channel) + all Python/C++ deps, managed via pixi.toml
+```
+
+For OpenSpec CLI setup (`openspec init`) inside this submodule, see [Dev Workflow & OpenSpec Setup](../dev_workflow.md).
+
 ---
 
 ## Workspace Structure
@@ -88,3 +97,13 @@ cd mdp_ros
 pixi run agent-build   # one-time
 pixi run agent           # starts the serial agent on /dev/ttyUSB0 @ 115200
 ```
+
+## Implementation Status
+
+- [x] `mdp_description` + `mdp_bringup` — URDF models, meshes, launch files, and controller YAMLs
+- [x] Gazebo Simulation — `mini_akm_robot.urdf` with `gz_ros2_control`
+- [x] Real Hardware Integration — `mini_akm_real_robot.urdf` with `topic_based_ros2_control`
+- [x] Autonomy & Planning Nodes — Reeds-Shepp planner, Dubins pure pursuit follower, YOLO arrow detector, Task 1 & 2 state machines (see [Algorithm](../algorithm/index.md), [Vision](../vision/index.md))
+- [x] `robot_localization` EKF Node — `ekf.yaml` + `real.launch.py` wiring fusing `/ackermann_steering_controller/odometry` (v_x) + `/imu/data` (yaw, ω_z) into `/odometry/filtered`; not yet driven on physical hardware, only config-validated (see [Launch Files](launch.md#sensor-fusion-architecture-robot_localization))
+- [x] `ekf.yaml` `imu0_config` switched to fuse only `angular_velocity` (yaw rate), not `orientation` — previously fused both, double-counting the MCU's own uncorrected gyro-integrated yaw as if it were an independent measurement; not yet re-validated on physical hardware after the change. See [Closed-Loop Control & Sensor Fusion](../stm32/control_loop.md#3-imu-ros2_control-robot_localization-proper-data-flow)
+- [x] `ekf.yaml` `frequency` raised 30Hz → 100Hz to match `mdp_stm32`'s telemetry rate — not yet re-validated on hardware

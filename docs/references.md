@@ -92,3 +92,10 @@ references/WHEELTEC/
 | **C30D Schematic** | `references/WHEELTEC/2.WHEELTEC R550-V550.../4.芯片数据手册.../原理图.../STM32F407VET6控制器原理图(C30D-V2.1).pdf` | Circuit schematic diagram for C30D V2.1 board |
 | **Hall Encoder Source Zip** | `references/WHEELTEC/2.WHEELTEC R550-V550.../3.STM32.../C30D-2.0版/R550_C30D(2.0)_Mini小车STM32源码_霍尔编码器_2025.12.26.zip` | C code reference for motor PWM & Hall encoder CPR |
 | **Ackermann Kinematics** | `references/WHEELTEC/1.WHEELTEC ROS.../2.运动底盘.../8.运动学解析：阿克曼底盘/` | Kinematic formulas for Ackermann steering geometry |
+
+---
+
+## Other Historical/Legacy References
+
+- **Host Control Reference:** `references/mdp_ws/docs/control-architecture.md` — an earlier prototype's control architecture notes, kept for historical comparison.
+- **Architectural Decision Records (ADRs):** live in the [Architecture Guide](architecture.md#3-key-architectural-decisions-adrs), not here — that's *why* a decision was made, this page is *where to find vendor material*.

@@ -19,7 +19,7 @@ This page documents the verified hardware components and physical specifications
 | **Camera** | **RPi Camera Module V2** | Sony IMX219 8MP sensor connected via CSI flexi cable. Driver: `ros-jazzy-v4l2-camera` (`v4l2_camera_node` publishing `/image_raw`) + `ros-jazzy-compressed-image-transport` (`/image_raw/compressed` for streaming) + `ros-jazzy-cv-bridge` |
 | **IR Range Sensors** | **Sharp GP2Y0A21YK** (×2) | Analog IR distance sensors with 3D printed brackets |
 | **Ultrasonic Sensor** | **HC-SR04** (×1) | Distance measurement sensor |
-| **IMU Sensor** | **ICM-20948** (Onboard) | 9-DOF Motion Sensor via `I2C2` (`PB10`/`PB11`) |
+| **IMU Sensor** | **ICM-20948** (Onboard) | 9-DOF Motion Sensor via bit-banged software I2C on `PB10`/`PB11` (not the hardware `I2C2` peripheral) |
 | **Debugger** | **ST-LINK/V2 (SWD)** | Connected via 4-pin header: 3.3V (Red), SWCLK (Black - PA14), GND (Blue), SWDIO (Yellow - PA13) |
 | **Battery Pack** | 12.6 V 3400 mAh Li-ion Pack | 3× NCR18650B cells (12.6V max, right-angle DC connector) |
 | **Tablet / UI** | Samsung Galaxy Tab A7 Lite (SM-T220) | User control / Android app tablet interface |

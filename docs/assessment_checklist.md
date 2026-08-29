@@ -65,7 +65,33 @@ icon: lucide/clipboard-check
 
 ---
 
-## 3. Video Report Guidelines (Week #10 Submission — 15%)
+## 3. Task 1 & Task 2 Specifications
+
+Moved here from the architecture guide — this is what the course actually requires the robot to do,
+not architectural detail.
+
+### 🎯 Task 1: Automatic Exploration & Image Recognition (6-Min Limit)
+- **Arena:** 2.0m × 2.0m grid arena with 5 goal obstacles placed at supervisor-specified (x, y) coordinates.
+- **Preparation (2 Mins):** Android Tablet receives obstacle coordinates and target faces via Bluetooth and transmits setup to RPi4B.
+- **Autonomous Run:**
+  - Starts in Carpark Zone.
+  - Computes Hamiltonian Path / TSP Reeds-Shepp trajectory visiting all 5 targets (standoff distance: 20–50 cm).
+  - Captures images via **RPi Camera Module V2**.
+  - Runs YOLO26 image recognition to identify target symbol IDs.
+  - Streams updates to Android Tablet (`TARGET, <Obstacle_ID>, <Target_ID>`).
+  - Auto-stops within 6 minutes.
+
+### ⚡ Task 2: Fastest Path Challenge (3-Min Limit)
+- **Goal:** Robot navigates automatically from Carpark Zone to Goal Obstacle.
+- **Symbol Recognition:** Identifies Left Arrow (←) or Right Arrow (→).
+- **Navigation:**
+  - **Right Arrow:** Loops around the right side of the obstacle.
+  - **Left Arrow:** Loops around the left side of the obstacle.
+- **Return & Stop:** Returns to Carpark Zone and auto-stops within 3 minutes.
+
+---
+
+## 4. Video Report Guidelines (Week #10 Submission — 15%)
 
 !!! tip "Video Report Requirements (Max 5 Minutes)"
     - **Teamwork & Roles (20%):** Introduction of team members and individual responsibilities.

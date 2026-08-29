@@ -26,7 +26,7 @@ Both packet types start with 2 sync bytes and a type byte, so a receiver can res
 
 ## Telemetry Packet (STM32 -> Pi)
 
-Sent once per firmware main-loop iteration (currently 10Hz).
+Sent from `main.c`'s "fast" tier, **100Hz** (`FAST_PERIOD_MS`), via interrupt-driven TX (`HAL_UART_Transmit_IT`, not blocking) — matches the motor PID's own 100Hz encoder sampling 1:1, see [Closed-Loop Control & Sensor Fusion](control_loop.md#main-loop-timing-allocation) for the full rate-tier breakdown and why a blocking transmit wouldn't have been viable at this rate. Was 10Hz (tied to OLED/debug-print rate, blocking TX) before that split.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -55,18 +55,20 @@ Sent whenever `/joint_commands` updates.
 | --- | --- | --- |
 | `left_wheel_rad_s` | `float` | Target Motor A (rear left) angular velocity |
 | `right_wheel_rad_s` | `float` | Target Motor B (rear right) angular velocity |
-| `steer_rad` | `float` | Target steering angle (radians). **Positive = right, negative = left** — this matches `servo_set_angle()`'s convention (`mdp_stm32/src/servo.c`), which is the **opposite** sign from ROS's `left_joint`/`right_joint` (REP-103: positive = left). `mdp_hardware_bridge`'s `serial_bridge_node.cpp` negates the angle when converting in both directions — see the note in [Launch Files](../ros/launch.md#core-topic-specifications). |
+| `steer_rad` | `float` | Target steering angle (radians). **Positive = right, negative = left** — this matches `servo_set_angle()`'s convention (`mdp_stm32/src/servo.c`), which is the **opposite** sign from ROS's `left_joint`/`right_joint` (REP-103: positive = left). `mdp_hardware_bridge`'s `serial_bridge_node.cpp` negates the angle when converting in both directions — see the note in [Launch Files](../rpi/launch.md#core-topic-specifications). |
 
 **rad/s -> PWM percent:** open-loop, `pct = (rad_s / 34.56) * 100`, clamped to ±100%. `34.56 rad/s` = `MG513P3012V`'s rated max output speed (330 RPM, already post-1:30-gearbox per `docs/hardware.md`). There is no closed-loop encoder-based speed regulation yet — actual speed at a given commanded rad/s varies with battery voltage and load.
 
 **One servo, two steering joints:** `ackermann_steering_controller` commands `left_joint` and `right_joint` independently (true Ackermann geometry has slightly different inner/outer wheel angles), but this chassis has only **one physical steering servo**. The bridge node averages the two commanded angles into the single `steer_rad` sent to the MCU — a small-angle approximation, not exact per-wheel Ackermann steering.
 
 !!! warning "`/joint_commands`'s `position[]`/`velocity[]` are grouped by interface type, not indexed by `name[]`"
-    The bridge's `onJointCommand()` originally indexed `msg->position[i]`/`msg->velocity[i]` using the same loop index it used for `msg->name[i]` — but `topic_based_ros2_control` publishes those as separate, shorter arrays containing only the joints that use that interface type, not one slot per `name[]` entry. This silently left the rear wheels' commanded velocity at `0.0` forever (out-of-range guard always failed for `lb_joint`/`rb_joint`), even though the packet, checksum, and everything downstream looked completely correct. Fixed with separate per-array running indices — see the full writeup in [Launch Files](../ros/launch.md#core-topic-specifications).
+    The bridge's `onJointCommand()` originally indexed `msg->position[i]`/`msg->velocity[i]` using the same loop index it used for `msg->name[i]` — but `topic_based_ros2_control` publishes those as separate, shorter arrays containing only the joints that use that interface type, not one slot per `name[]` entry. This silently left the rear wheels' commanded velocity at `0.0` forever (out-of-range guard always failed for `lb_joint`/`rb_joint`), even though the packet, checksum, and everything downstream looked completely correct. Fixed with separate per-array running indices — see the full writeup in [Launch Files](../rpi/launch.md#core-topic-specifications).
 
-## Safety: stale-link fail-safe
+## Safety: stale-link fail-safe and motor switch override
 
 If the STM32 hasn't received a checksum-valid command packet within `PROTOCOL_COMMAND_TIMEOUT_MS` (500ms, `mdp_stm32/src/main.c`), it stops the motors and centers the servo regardless of the last-received setpoint — protects against a Pi crash, USB disconnect, or bridge node hang leaving the robot driving on a stale command.
+
+Independently of link freshness, the `PD3` motor ON/OFF switch also gates motor output directly in the main loop: while it's OFF, the wheels are held at 0% PWM (motors won't move) no matter what the host commands; switching it ON lets both wheels drive normally again per the host's `left_wheel_rad_s`/`right_wheel_rad_s`. Either condition alone is enough to stop the motors — the check is `stale OR switch-off`, not both required.
 
 ## Verification Checklist (post-flash bring-up)
 
@@ -83,14 +85,21 @@ If the STM32 hasn't received a checksum-valid command packet within `PROTOCOL_CO
 
 **Automated drive/steer self-test (no host needed):** runs a scripted sequence — forward 1 wheel revolution, backward 1 wheel revolution, steer left, steer right, return to center. Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`).
 
-`PE0` (the user button) has two *completely separate* behaviors depending on when you press it — this is not a runtime long-press:
+`PE0` (the user button) is dual-purpose, depending on *when* you press it and, during normal
+operation, the state of the `PD3` motor ON/OFF switch:
 
-| When you press it | What happens |
-| --- | --- |
-| Board already running normally | Cycles the OLED page (unchanged EXTI-interrupt behavior, `button.c`) |
-| Held down at the exact moment the board resets/powers on | Skips normal startup, runs the self-test instead |
+| When you press it | `PD3` state | What happens |
+| --- | --- | --- |
+| Held down at the exact moment the board resets/powers on | either | Skips normal startup, runs the self-test instead |
+| Board already running normally | Motor ON (ready) | Runs the self-test sequence (can actually drive the motors) |
+| Board already running normally | Motor OFF (disabled) | Cycles the OLED page instead (self-test would just refuse anyway) |
 
-`selftest_run_if_requested()` checks the pin's level **once**, right after peripheral init and *before* the main loop starts — it is not watching for a long-press while the firmware is already running. To trigger it: hold `PE0` down, power-cycle (or hit physical reset) *while still holding it*, and keep holding for a second or two after power returns — you'll see the LED start its 1-2-3-4-5 blink pattern once the sequence begins, at which point you can let go. Refuses to run if the `PD3` e-stop switch is engaged.
+`selftest_run_if_requested()` checks the pin's level **once**, right after peripheral init and
+*before* the main loop starts — it is not watching for a long-press while the firmware is already
+running. To trigger it: hold `PE0` down, power-cycle (or hit physical reset) *while still holding
+it*, and keep holding for a second or two after power returns — you'll see the LED start its
+1-2-3-4-5-6 blink pattern once the sequence begins, at which point you can let go. Refuses to run
+if the `PD3` motor switch is in the OFF (disabled) position.
 
 Only `PE8` is a GPIO-controllable LED on this board (confirmed against the resource-allocation PDF — the `LED1`-`LED4` silkscreen labels on the schematic are hardwired power-rail/SWD indicators, not firmware-drivable). So each phase blinks `PE8` a distinct number of times instead of lighting separate LEDs:
 
@@ -98,9 +107,12 @@ Only `PE8` is a GPIO-controllable LED on this board (confirmed against the resou
 | --- | --- |
 | 1 | Forward, 1 wheel revolution |
 | 2 | Backward, 1 wheel revolution |
-| 3 | Steer left |
-| 4 | Steer right |
-| 5 | Done (or refused, if e-stop was engaged) |
+| 3 | Full-range servo sweep, **left limit first**, then slowly ascending to the right limit (confirmed asymmetric: left 27°, right 41°) — see [Closed-Loop Control & Sensor Fusion](control_loop.md#2-servo-range-no-shortcut-in-the-vendor-firmware-either). Supersedes the old fixed ±20° steer-left/steer-right phases, which were dropped |
+| 4 | Done |
+
+Refusal (motor switch OFF) is a *separate* standalone 5-blink pattern with different timing
+(100ms on/off vs. the phases' 150ms on/off) — not part of the numbered sequence above, so it can't
+be confused with any of these phase counts.
 
 The OLED also prints the current phase. Each drive phase has a 5s safety timeout (`SELFTEST_DRIVE_TIMEOUT_MS`) in case the wheels aren't actually turning (e.g. propped up wrong, or a real motor/encoder fault) — it won't hang forever waiting for encoder ticks that never arrive.
 

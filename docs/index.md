@@ -4,30 +4,33 @@ icon: lucide/rocket
 
 # Multi-Disciplinary Project (MDP)
 
-> **ROS2 Jazzy + STM32 Ackermann Autonomous Robot**  
+> **Group 14**  
 > *College of Computing & Data Science (CCDS) — AY2026/2027 Semester 1*
 
-Welcome to the central documentation hub for the MDP Ackermann Autonomous Robot. This monorepo manages documentation, shared environment tooling (`pixi`), and two dedicated git submodules for host software (`mdp_ros`) and MCU firmware (`mdp_stm32`).
+Welcome to the central documentation hub for the MDP Ackermann Autonomous Robot. Docs are organized
+**one folder per subteam** — pick your team below, or start with the [Architecture Guide](architecture.md)
+for how everything talks to everything else.
 
 ---
 
-## 👥 Team Members & Roles
+## 👥 Team Members & Subteams
 
-Below is the team structure for the MDP robot development across hardware, firmware, control, and autonomy:
-
-| Subsystem Role | Team Member(s) | Key Focus & Responsibilities |
-| --- | --- | --- |
-| **Algorithm** | **Rashi** | A* grid search, Reeds-Shepp curve planner, TSP solver, and Pure Pursuit waypoint follower. |
-| **Android** | **Albert** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. |
-| **Raspberry Pi** | **Wei Ming, Katie** | `mdp_ros` workspace bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. |
-| **STM32** | **HC, SL** | `mdp_stm32` PlatformIO/STM32Cube HAL firmware, AT8236 motor PWM, HWZ020 steering servo, encoders, IMU, and custom binary serial protocol. |
-| **Vision** | **Keagan** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. |
+| Subteam | Team Member(s) | Key Focus & Responsibilities | Docs |
+| --- | --- | --- | --- |
+| **Algorithm** | **Rashi** | A* grid search, Reeds-Shepp curve planner, TSP solver, and Pure Pursuit waypoint follower. | [Algorithm docs](algorithm/index.md) |
+| **Android** | **Albert** | Android tablet Bluetooth serial interface, 2D arena grid GUI, obstacle setup, and status updates. | [Android docs](android/index.md) |
+| **Raspberry Pi** | **Wei Ming, Katie** | `mdp_ros` workspace bringup, `ackermann_steering_controller` setup, and `robot_localization` EKF sensor fusion. | [RPi docs](rpi/index.md) |
+| **STM32** | **HC, SL** | `mdp_stm32` PlatformIO/STM32Cube HAL firmware, motor PWM, steering servo, encoders, IMU, and the custom binary serial protocol. | [STM32 docs](stm32/index.md) |
+| **Vision** | **Keagan** | RPi Camera V2 integration, Ultralytics YOLO arrow/symbol detection node, and image streaming. | [Vision docs](vision/index.md) |
 
 ---
 
 ## 🗺️ High-Level System Architecture
 
-The robot uses a **Host-Side Kinematics** architecture where the STM32 MCU acts as a pure hardware I/O controller, while all kinematics and sensor fusion run on the ROS2 host:
+The robot uses a **Host-Side Kinematics** architecture — the STM32 MCU is a pure hardware I/O
+controller; all kinematics, sensor fusion, vision, and path planning run on the RPi host. Full detail
+(data flow diagrams, ADRs) is in the [Architecture Guide](architecture.md) — this is just the map of
+who talks to whom:
 
 ```mermaid
 graph LR
@@ -37,8 +40,8 @@ graph LR
 
   subgraph HOST["Host (RPi4B / Host PC)"]
     direction TB
-    ROBOTICS["ROS2 Jazzy Stack<br/>• Task 1 & 2 Autonomy<br/>• ros2_control & EKF Fusion<br/>• YOLO26 Perception"]
-    BRIDGE["android_bridge_node<br/>(pyserial RFCOMM /dev/rfcomm0)"]
+    ROBOTICS["ROS2 Jazzy Stack<br/>• Task 1 & 2 Autonomy (Algorithm)<br/>• ros2_control & EKF Fusion<br/>• YOLO26 Perception (Vision)"]
+    BRIDGE["android_bridge_node<br/>(planned, pyserial RFCOMM)"]
     AGENT["mdp_hardware_bridge (serial_bridge_node)"]
     ROBOTICS <--> BRIDGE
     ROBOTICS <--> AGENT
@@ -49,7 +52,7 @@ graph LR
   end
 
   subgraph MCU["STM32 MCU (mdp_stm32)"]
-    FIRMWARE["PlatformIO/STM32Cube HAL Firmware<br/>• Rear Motor PWM (AT8236)<br/>• Steering Servo PWM (HWZ020)<br/>• Encoders & ICM-20948 IMU"]
+    FIRMWARE["Motor + Servo + Encoders + IMU"]
   end
 
   APP <-->|"Bluetooth Serial (RFCOMM)"| BRIDGE
@@ -59,21 +62,28 @@ graph LR
 
 ---
 
-## 📦 Submodule Workspaces
+## 📦 Codebase Layout
 
-The codebase is split into two independently versioned git submodules:
+Two independently versioned git submodules hold all the actual code; Vision and Algorithm live as
+ROS2 packages *inside* `mdp_ros` rather than as separate submodules, and Android's app code lives in
+its own separate repo (not part of this monorepo):
 
-=== "🤖 ROS Host Software (`mdp_ros`)"
+=== "🤖 `mdp_ros` — RPi, Vision, Algorithm"
 
     - **Platform:** ROS2 Jazzy (`robostack-jazzy` pixi channel) on RPi4B / Host PC.
-    - **Responsibilities:** URDF robot model, Gazebo 3D simulation, `ros2_control`, path planning (Reeds-Shepp / Dubins), YOLO26 vision, and task state machines.
-    - **Guide:** [ROS Workspace Documentation](ros/index.md)
+    - **Contains:** URDF robot model + bringup (RPi), `mdp_control`/`wayp_plan_tools` path planning (Algorithm), `vision` package (Vision), and the STM32 hardware bridge.
+    - **Guides:** [RPi](rpi/index.md) · [Vision](vision/index.md) · [Algorithm](algorithm/index.md)
 
-=== "⚡ STM32 MCU Firmware (`mdp_stm32`)"
+=== "⚡ `mdp_stm32` — STM32"
 
     - **Platform:** PlatformIO + STM32Cube HAL on WHEELTEC C30D V2.1 board (STM32F407VET6 MCU).
-    - **Responsibilities:** AT8236 motor PWM driver, HWZ020 steering servo PWM, Hall encoder reading, ICM-20948 IMU reading, and the custom binary serial protocol bridged by `mdp_hardware_bridge`.
-    - **Guide:** [STM32 Firmware Documentation](stm32/index.md)
+    - **Contains:** Motor/servo PWM drivers, encoder + IMU reading, closed-loop wheel PID, and the custom binary serial protocol.
+    - **Guide:** [STM32](stm32/index.md)
+
+=== "📱 Android app — not in this repo"
+
+    - Built/maintained separately by the Android subteam.
+    - **Guide:** [Android](android/index.md) — documents the interface contract other subteams depend on.
 
 ---
 
@@ -85,28 +95,37 @@ cd mdp
 pixi install
 ```
 
-```bash title="2. Set up STM32 firmware toolchain (mdp_stm32)"
-cd mdp_stm32
-pixi install       # PlatformIO + toolchain, managed via pixi.toml
-pixi run probe     # Sanity check: detect ST-LINK/V2 + STM32F407 chip
-cd ..
+```bash title="2. Pull the latest changes (parent repo + both submodules)"
+pixi run update
 ```
 
-```bash title="3. Initialize OpenSpec CLI (Per submodule)"
-cd mdp_ros         # Repeat for mdp_stm32
-openspec init
-cd ..
-```
+Per-subteam setup (toolchain install, OpenSpec init, build/flash) lives with each submodule's own docs, not here:
+
+- **RPi / ROS2** (`mdp_ros`) — see [RPi docs](rpi/index.md)
+- **STM32** (`mdp_stm32`) — see [STM32 docs](stm32/index.md)
+- **OpenSpec CLI** (both submodules) — see [Dev Workflow & OpenSpec Setup](dev_workflow.md)
 
 ---
 
 ## 📚 Documentation Sitemap
 
+**By subteam:**
+
+| Subteam | Page |
+| --- | --- |
+| 🧭 Algorithm | [algorithm/index.md](algorithm/index.md) |
+| 📱 Android | [android/index.md](android/index.md) |
+| 🖥️ RPi | [rpi/index.md](rpi/index.md) · [Launch Files](rpi/launch.md) · [Gazebo Sim](rpi/simulation.md) · [Sensor Fusion](rpi/sensor_fusion.md) |
+| ⚡ STM32 | [stm32/index.md](stm32/index.md) · [Pinouts](stm32/pinouts.md) · [Drivers](stm32/drivers.md) · [Serial Protocol](stm32/protocol.md) · [Closed-Loop Control](stm32/control_loop.md) |
+| 👁️ Vision | [vision/index.md](vision/index.md) |
+
+**Cross-cutting (not one subteam's):**
+
 | Section | Description |
 | --- | --- |
-| 📐 [**System Architecture & ADRs**](architecture.md) | Deep-dive technical stack, sequence diagrams, sensor fusion, and architectural decisions (ADRs 0001–0006). |
+| 📐 [**Architecture Guide**](architecture.md) | System stack, data-flow diagrams, and architectural decisions (ADRs 0001–0006). Who talks to whom, not implementation detail. |
+| 📋 [**Assessment & Checklist**](assessment_checklist.md) | Official course deliverables (Module A, B, C), deadlines, and Task 1/2 requirements. |
+| 🔧 [**Hardware Components**](hardware.md) | Component list, physical specs, and drivetrain parameters — used by both RPi (URDF/kinematics) and STM32 (drivers). |
 | 🔄 [**Dev Workflow & Setup**](dev_workflow.md) | OpenSpec CLI guide, `/opsx:` explore/propose/apply/archive loop, and git branch rules. |
-| 🔧 [**Hardware Components**](hardware.md) | Component list, physical specs, CAD kingpin geometry, and drivetrain parameters. |
-| 📋 [**Assessment Checklist**](assessment_checklist.md) | Official course deliverables (Module A, B, C), deadlines, and Task 1/2 requirements. |
-| 🚨 [**Troubleshooting**](troubleshooting.md) | Known issues, OpenSpec CLI fixes, micro-ROS agent build solutions, and git submodule help. |
+| 🚨 [**Troubleshooting**](troubleshooting.md) | Known issues, OpenSpec CLI fixes, and git submodule help. |
 | 📖 [**References**](references.md) | External tool documentation links and WHEELTEC vendor file directory map. |

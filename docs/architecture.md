@@ -4,39 +4,62 @@ icon: lucide/network
 
 # System Architecture & Design Decisions
 
-This guide documents the complete target architecture for the robot: host software stack (`mdp_ros`), MCU firmware stack (`mdp_stm32`), control & sensor fusion pipelines, development roadmap, and architectural decisions (ADRs).
-
-!!! info "Target System Architecture"
-    This document outlines the target architecture. For active development status, see [Development Status & Implementation Roadmap](#5-development-status-implementation-roadmap).
+This guide documents the **target architecture** for the robot: system stack & tooling, the
+end-to-end data flow between the RPi host and the STM32 MCU, and the architectural decisions (ADRs)
+behind why the stack looks the way it does. It does **not** cover implementation status, per-subteam
+detail, or competition requirements — see the links at the end of each section for where that content
+actually lives now.
 
 ---
 
-## 1. System Stack & Tooling
+## 1. System Stack — who talks to whom
 
-### Host Software (`mdp_ros` — ROS2 Jazzy on RPi4B / PC)
+This is deliberately high-level: what each subsystem's *role* is and what it *communicates with*, not
+how any one of them is internally implemented (chip selection, pin assignment, PID gains, etc. all
+live in each subteam's own docs, linked below).
 
-| Component / Tool | Category | Purpose & Role |
+| Subsystem | Role | Talks to |
 | --- | --- | --- |
-| **ROS2 Jazzy (`ros-base`)** | Core Middleware | Distributed node graph, topic communication layer, and DDS. |
-| **`robot_state_publisher` / `xacro`** | Robot Model | Builds and broadcasts the URDF / TF coordinate transform tree. |
-| **`ackermann_steering_controller`** | Kinematics Engine | Converts `/cmd_vel` setpoints into individual wheel speeds and steering knuckle angles. |
-| **`topic_based_ros2_control`** | Real HW Plugin | Maps `ros2_control` commands & states to ROS topics (`/joint_commands`, `/joint_states`). |
-| **`gz_ros2_control` / `ros_gz`** | Sim HW Plugin | Integrates Gazebo Sim 3D physics engine with ROS2 control. |
-| **`robot_localization` (`ekf_node`)** | Sensor Fusion | Fuses rear wheel odometry (linear velocity v_x) and ICM-20948 IMU (yaw rate ω_z, heading θ) into `/odometry/filtered`. |
-| **`android_bridge_node` (`pyserial` / RFCOMM)** | Android Bridge | ROS2 Python node parsing Classic Bluetooth RFCOMM serial (`/dev/rfcomm0`) strings into ROS2 topics (`/cmd_vel`, `/odometry/filtered`). |
-| **`mdp_hardware_bridge` (`serial_bridge_node`)** | Host↔MCU Bridge | `rclcpp` node bridging `/joint_commands`, `/joint_states`, `/imu/data`, `/estop` to the STM32 MCU over the custom binary protocol on `USART3` — see [Serial Protocol](stm32/protocol.md). |
-| **`rviz2` / Foxglove Bridge** | Visualization | Live 3D visualization of TF trees, sensor markers, camera feeds, and paths. |
+| **Android app** | Operator UI — sends drive commands, receives status | RPi, over Bluetooth RFCOMM (see [Android](android/index.md)) |
+| **RPi host (`mdp_ros`)** | Runs ROS2, owns all kinematics + sensor fusion, bridges every other subsystem together | Android (RFCOMM), STM32 (USART3 binary protocol), Vision + Algorithm nodes (ROS topics) — see [RPi](rpi/index.md) |
+| **Vision (`mdp_ros/vision`)** | Camera-based target/arrow recognition | Publishes detections to the RPi's ROS graph — see [Vision](vision/index.md) |
+| **Algorithm (`mdp_control`, `wayp_plan_tools`)** | Path planning (Reeds-Shepp/Dubins) and Task 1 & 2 state machines | Consumes Vision output + robot pose, publishes `/cmd_vel` into the RPi's ROS graph — see [Algorithm](algorithm/index.md) |
+| **STM32 MCU (`mdp_stm32`)** | Pure hardware I/O controller — drives motors/servo, reads encoders/IMU | RPi only, over a custom binary protocol on `USART3` @ 115200 baud — see [STM32](stm32/index.md) |
 
-### MCU Firmware (`mdp_stm32` — STM32F407VET6 on WHEELTEC C30D Board)
+**Sim vs. real hardware**: the same RPi-side kinematics (`ackermann_steering_controller`) drives
+either a Gazebo simulation or the real STM32 over the same command/state interface, swapped via
+`ros2_control`'s hardware plugin — see the data flow diagram below for exactly where that split
+happens.
 
-| Component | Category | Details & Responsibilities |
-| --- | --- | --- |
-| **STM32Cube HAL (bare-metal, via PlatformIO)** | Firmware Base | Vendor HAL peripheral drivers (GPIO, TIM, I2C, UART), built/flashed via PlatformIO (`pixi run build`/`flash`/`probe`). |
-| **Custom Binary Protocol** | MCU Client | Firmware sends telemetry (encoder/IMU/e-stop), receives wheel/steering commands — see [Serial Protocol](stm32/protocol.md). |
-| **AT8236 Driver** | Motor PWM | Dual H-Bridge driving 2× rear `MG513P3012V` DC gear motors (Motor A & B). |
-| **HWZ020 Servo** | Steering PWM | 50 Hz PWM driver (`PB15` / TIM12_CH2) for front Ackermann steering knuckles. |
-| **Hall Encoders** | Wheel Telemetry | Quadrature timer decoding (TIM2 / TIM3) for rear wheel travel displacement. |
-| **ICM-20948 IMU** | Motion Telemetry | 9-DOF Gyro/Accel over I2C2 (`PB10`/`PB11`) providing yaw rotation feedback. |
+### At a glance
+
+```mermaid
+graph LR
+  subgraph ANDROID["Android Tablet"]
+    APP["Android Remote App<br/>(2D Arena & Controls)"]
+  end
+
+  subgraph HOST["Host (RPi4B / Host PC)"]
+    direction TB
+    ROBOTICS["ROS2 Jazzy Stack<br/>• Task 1 & 2 Autonomy (Algorithm)<br/>• ros2_control & EKF Fusion<br/>• YOLO26 Perception (Vision)"]
+    BRIDGE["android_bridge_node<br/>(planned, pyserial RFCOMM)"]
+    AGENT["mdp_hardware_bridge (serial_bridge_node)"]
+    ROBOTICS <--> BRIDGE
+    ROBOTICS <--> AGENT
+  end
+
+  subgraph SIM["Gazebo Simulation"]
+    GZ["3D Physics Engine"]
+  end
+
+  subgraph MCU["STM32 MCU (mdp_stm32)"]
+    FIRMWARE["Motor + Servo + Encoders + IMU"]
+  end
+
+  APP <-->|"Bluetooth Serial (RFCOMM)"| BRIDGE
+  ROBOTICS <-->|"Sim Bridge"| GZ
+  AGENT <-->|"Serial UART (USART3 @ 115200)"| FIRMWARE
+```
 
 ---
 
@@ -64,9 +87,9 @@ graph TD
   end
 
   subgraph MCU["STM32 MCU Target (mdp_stm32)"]
-    MOTORS["2x Rear DC Motors (AT8236 Driver)"]
-    SERVO["HWZ020 Steering Servo (PB15 TIM12_CH2)"]
-    SENSORS["Hall Encoders & ICM-20948 IMU"]
+    MOTORS["Rear Drive Motors"]
+    SERVO["Front Steering Servo"]
+    SENSORS["Wheel Encoders & IMU"]
   end
 
   CMD -->|"/cmd_vel"| ASC
@@ -102,9 +125,9 @@ sequenceDiagram
   ASC->>HWI: Joint Command Setpoints
   HWI->>Agent: /joint_commands (sensor_msgs/JointState)
   Agent->>MCU: CommandPacket (custom binary protocol)
-  MCU->>HW: Actuate Motor PWM (AT8236) & Servo PWM (HWZ020)
+  MCU->>HW: Actuate motors & steering servo
   
-  HW-->>MCU: Read Encoder Ticks & IMU Registers
+  HW-->>MCU: Read encoder ticks & IMU data
   MCU-->>Agent: Publish /joint_states & /imu/data
   Agent-->>HWI: /joint_states feedback
   HWI-->>ASC: Joint State Interfaces
@@ -113,69 +136,14 @@ sequenceDiagram
   EKF-->>User: /odometry/filtered & odom->base_link TF
 ```
 
----
-
-## 3. Sensor Fusion Pipeline (`robot_localization`)
-
-To prevent position and heading drift during competition runs:
-
-1. **Wheel Odometry (v_x):** `ackermann_steering_controller` calculates forward linear velocity from rear wheel encoders (`/ackermann_steering_controller/odometry`).
-2. **IMU Heading (ω_z, θ):** The ICM-20948 IMU publishes angular velocity and rotation (`/imu/data`).
-3. **EKF Fusion (`ekf_node`):** `robot_localization` fuses both streams to output smooth, drift-free `/odometry/filtered` and updates the dynamic `odom` → `base_link` TF transform.
+For the sensor fusion pipeline's own details (why EKF, what it fuses), see
+[RPi: Sensor Fusion Pipeline](rpi/sensor_fusion.md). For competition task requirements, see
+[Assessment & Checklist](assessment_checklist.md). For per-subteam implementation status, see each
+subteam's own page (linked throughout section 1 above).
 
 ---
 
-## 4. Competition Requirements
-
-??? info "Click to expand Task 1 & Task 2 Specifications"
-
-    ### 🎯 Task 1: Automatic Exploration & Image Recognition (6-Min Limit)
-    - **Arena:** 2.0m × 2.0m grid arena with 5 goal obstacles placed at supervisor-specified (x, y) coordinates.
-    - **Preparation (2 Mins):** Android Tablet receives obstacle coordinates and target faces via Bluetooth and transmits setup to RPi4B.
-    - **Autonomous Run:**
-      - Starts in Carpark Zone.
-      - Computes Hamiltonian Path / TSP Reeds-Shepp trajectory visiting all 5 targets (standoff distance: 20–50 cm).
-      - Captures images via **RPi Camera Module V2**.
-      - Runs YOLO26 image recognition to identify target symbol IDs.
-      - Streams updates to Android Tablet (`TARGET, <Obstacle_ID>, <Target_ID>`).
-      - Auto-stops within 6 minutes.
-
-    ### ⚡ Task 2: Fastest Path Challenge (3-Min Limit)
-    - **Goal:** Robot navigates automatically from Carpark Zone to Goal Obstacle.
-    - **Symbol Recognition:** Identifies Left Arrow (←) or Right Arrow (→).
-    - **Navigation:**
-      - **Right Arrow:** Loops around the right side of the obstacle.
-      - **Left Arrow:** Loops around the left side of the obstacle.
-    - **Return & Stop:** Returns to Carpark Zone and auto-stops within 3 minutes.
-
----
-
-## 5. Development Status & Implementation Roadmap
-
-### `mdp_ros` (Host Software)
-
-- [x] `mdp_description` + `mdp_bringup` — URDF models, meshes, launch files, and controller YAMLs
-- [x] Gazebo Simulation — `mini_akm_robot.urdf` with `gz_ros2_control`
-- [x] Real Hardware Integration — `mini_akm_real_robot.urdf` with `topic_based_ros2_control`
-- [x] Autonomy & Planning Nodes — Reeds-Shepp planner, Dubins pure pursuit follower, YOLO arrow detector, Task 1 & 2 state machines
-- [x] `robot_localization` EKF Node — `ekf.yaml` + `real.launch.py` wiring fusing `/ackermann_steering_controller/odometry` (v_x) + `/imu/data` (yaw, ω_z) into `/odometry/filtered`; not yet driven on physical hardware, only config-validated (see [Launch Files](ros/launch.md#sensor-fusion-architecture-robot_localization))
-
-### `mdp_stm32` (MCU Firmware)
-
-- [x] PlatformIO/STM32Cube HAL Project Bringup — LED blink (`PE8`) + `printf` serial logging over `USART3`, verified on physical board
-- [x] AT8236 Motor PWM Driver — `TIM9`/`TIM10`/`TIM11` PWM implemented (`motor_init`, `motor_set_speed`); **on-hardware drive test confirmed** (locked-antiphase drive scheme required, see [Drivers](stm32/drivers.md#at8236-motor-driver-motorc))
-- [x] HWZ020 Steering Servo Driver (`PB15` / TIM12_CH2) — Implemented (`servo_init`, `servo_set_angle`); on-hardware steering confirmed via ROS2 teleop; mechanical steering-lock angle not yet tuned
-- [x] Hall Encoder Driver (TIM2 / TIM3) — Implemented (`encoder_init`, delta + cumulative tick reads)
-- [x] ICM-20948 IMU Driver (I2C2 `PB10`/`PB11`) — Implemented
-- [x] Onboard Enable/E-Stop Switch (`PD3`) — Implemented (`motor_estop_engaged`); active-low polarity functionally confirmed via self-test refusal behavior, not yet confirmed with a multimeter
-- [x] Serial Protocol + `mdp_hardware_bridge` — Custom binary protocol over `USART3` implemented on both sides (see [Serial Protocol](stm32/protocol.md)); replaces the originally planned micro-ROS transport ([ADR 0002](#0002-custom-binary-serial-protocol-vs-micro-ros-rclc)); **full round-trip on-hardware validated** via `pixi run real` + `pixi run teleop` (two bugs found and fixed along the way — see [Launch Files](ros/launch.md#core-topic-specifications))
-- [x] Battery Voltage ADC (`PB0` / ADC1_CH8) — Implemented (`battery_init`, `battery_read_voltage`); divider ratio (11x) sourced from WHEELTEC's C30D vendor example firmware, not yet cross-checked against a multimeter on this specific board
-- [ ] Ultrasonic Distance Sensor (HC-SR04) Driver — Not started
-- [ ] IR Distance Sensor (Sharp GP2Y0A21YK ×2) Driver — Not started
-
----
-
-## 6. Key Architectural Decisions (ADRs)
+## 3. Key Architectural Decisions (ADRs)
 
 ??? info "Click to expand Architectural Decision Records (ADRs 0001–0006) & Comparative Analysis Matrix"
 
@@ -217,11 +185,3 @@ To prevent position and heading drift during competition runs:
     ### 0006. OpenSpec Spec-Driven Workflow vs. Unstructured AI Prompts
     - **Decision:** Use **OpenSpec** (`propose`, `apply`, `archive`) for AI-assisted development across submodules.
     - **Why:** In modern development with LLM coding agents (Antigravity, Superhuman, Claude Code), orchestrating multiple subagents requires light token usage, clear context boundaries, and structured task execution. OpenSpec provides a lightweight, token-efficient framework that maintains system specs in `openspec/specs/` as the single source of truth, enforcing strict task checklists and preventing scope creep.
-
----
-
-## 7. References & Historical Documents
-
-- **Firmware Reference:** `references/WHEELTEC/2.WHEELTEC R550-V550 ROS教育机器人运动底盘资料/` (C30D pinout/schematic PDFs + Hall-encoder STM32 source zip, see [References](references.md#local-references-directory-guide))
-- **Host Control Reference:** `references/mdp_ws/docs/control-architecture.md`
-- **Vendor Reference:** `references/WHEELTEC/`

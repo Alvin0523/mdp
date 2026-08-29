@@ -50,20 +50,34 @@ nav = [
     { "Architecture Guide" = "architecture.md" },
     { "Assessment & Checklist" = "assessment_checklist.md" },
   ] },
-  { "ROS 2 Autonomy Stack" = [
-    { "Overview & Nodes" = "ros/index.md" },
-    { "Launch & Interfaces" = "ros/launch.md" },
-    { "Gazebo 3D Simulation" = "ros/simulation.md" },
+  { "Algorithm" = [
+    { "Overview" = "algorithm/index.md" },
   ] },
-  { "Hardware & Firmware" = [
-    { "Hardware Specs & Wiring" = "hardware.md" },
-    { "STM32 Firmware Overview" = "stm32/index.md" },
+  { "Android" = [
+    { "Overview" = "android/index.md" },
+  ] },
+  { "RPi" = [
+    { "Overview & Nodes" = "rpi/index.md" },
+    { "Launch & Interfaces" = "rpi/launch.md" },
+    { "Gazebo 3D Simulation" = "rpi/simulation.md" },
+    { "Sensor Fusion Pipeline" = "rpi/sensor_fusion.md" },
+  ] },
+  { "STM32" = [
+    { "Overview" = "stm32/index.md" },
     { "Pinout Allocations" = "stm32/pinouts.md" },
     { "Drivers & Peripherals" = "stm32/drivers.md" },
+    { "Serial Protocol" = "stm32/protocol.md" },
+    { "Closed-Loop Control & Sensor Fusion (Planned)" = "stm32/control_loop.md" },
+  ] },
+  { "Vision" = [
+    { "Overview" = "vision/index.md" },
   ] },
   { "Development & Resources" = [
+    { "Hardware Specs & Wiring" = "hardware.md" },
     { "Dev Workflow & Setup" = "dev_workflow.md" },
+    { "Troubleshooting" = "troubleshooting.md" },
     { "References & Datasheets" = "references.md" },
+    { "Docs Authoring Reference" = "authoring_reference.md" },
   ] },
 ]
 

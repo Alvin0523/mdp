@@ -50,7 +50,7 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
     Neither is fixable with another flag — it's a real version wall between an unmaintained-feeling vendored dependency and a modern `fmt`.
 
-    **Fix**: don't build the ROS2-wrapped package at all. Build the standalone `Micro-XRCE-DDS-Agent` directly from [eProsima's own repo](https://github.com/eProsima/Micro-XRCE-DDS-Agent) at the current release (`v3.0.1` — plain `cmake`/`make`, no colcon/ament, no `micro_ros_msgs` dependency) — it compiles clean against `fmt 12` and still bridges into the ROS2 DDS graph (default middleware is Fast DDS). See [ROS Workspace docs](ros/index.md) for the actual commands (`pixi run agent-build` / `pixi run agent` in `mdp_ros`).
+    **Fix**: don't build the ROS2-wrapped package at all. Build the standalone `Micro-XRCE-DDS-Agent` directly from [eProsima's own repo](https://github.com/eProsima/Micro-XRCE-DDS-Agent) at the current release (`v3.0.1` — plain `cmake`/`make`, no colcon/ament, no `micro_ros_msgs` dependency) — it compiles clean against `fmt 12` and still bridges into the ROS2 DDS graph (default middleware is Fast DDS). See [ROS Workspace docs](rpi/index.md) for the actual commands (`pixi run agent-build` / `pixi run agent` in `mdp_ros`).
 
 ## :cpu: STM32 Firmware (`mdp_stm32`)
 
@@ -102,7 +102,7 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ??? question "Teleop moves front steering but the rear wheels never spin, even though `/joint_commands` shows nonzero `velocity`"
 
-    `topic_based_ros2_control`'s `TopicBasedSystem` publishes `/joint_commands` with `name[]` listing every joint, but `position[]`/`velocity[]` as **separate, independently-indexed arrays** holding only the joints that use that interface type — not one slot per `name[]` entry. Code that reuses the same loop index across `name[]` and `position[]`/`velocity[]` will silently break for joints after the first interface-type group. See the full writeup in [Launch Files](ros/launch.md#core-topic-specifications).
+    `topic_based_ros2_control`'s `TopicBasedSystem` publishes `/joint_commands` with `name[]` listing every joint, but `position[]`/`velocity[]` as **separate, independently-indexed arrays** holding only the joints that use that interface type — not one slot per `name[]` entry. Code that reuses the same loop index across `name[]` and `position[]`/`velocity[]` will silently break for joints after the first interface-type group. See the full writeup in [Launch Files](rpi/launch.md#core-topic-specifications).
 
 ??? question "A `remappings=` on a controller `spawner` node doesn't seem to do anything"
 
