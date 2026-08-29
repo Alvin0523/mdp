@@ -47,34 +47,27 @@ Copyright &copy; 2026 The authors
 nav = [
   { "System Overview" = [
     { "Home" = "index.md" },
-    { "Architecture Guide" = "architecture.md" },
-    { "Assessment & Checklist" = "assessment_checklist.md" },
   ] },
-  { "Quickstart" = [
-    { "Run: Simulation" = "run_sim.md" },
-    { "Run: Real Hardware" = "run_real.md" },
-  ] },
-  { "Algorithm" = [
-    { "Overview" = "algorithm/index.md" },
-  ] },
+  { "Quickstart" = "quickstart.md" },
+  { "Assessment & Checklist" = "assessment_checklist.md" },
   { "Android" = [
     { "Overview" = "android/index.md" },
   ] },
-  { "RPi" = [
-    { "Overview & Nodes" = "rpi/index.md" },
-    { "Launch & Interfaces" = "rpi/launch.md" },
-    { "Gazebo 3D Simulation" = "rpi/simulation.md" },
-    { "Sensor Fusion Pipeline" = "rpi/sensor_fusion.md" },
+  { "Raspberry Pi" = [
+    { "Overview" = "rpi/index.md" },
+    { "ROS2" = [
+      { "Launch Files & Topics" = "rpi/ros2_jazzy.md" },
+      { "ROS2 Control" = "rpi/ros2_control.md" },
+      { "ROS2 EKF Localization" = "rpi/ros2_ekf_localization.md" },
+    ] },
+    { "Vision" = "rpi/vision.md" },
+    { "Algorithm" = "rpi/algorithm.md" },
   ] },
   { "STM32" = [
     { "Overview" = "stm32/index.md" },
-    { "Pinout Allocations" = "stm32/pinouts.md" },
-    { "Drivers & Peripherals" = "stm32/drivers.md" },
-    { "Serial Protocol" = "stm32/protocol.md" },
-    { "Closed-Loop Control & Sensor Fusion (Planned)" = "stm32/control_loop.md" },
-  ] },
-  { "Vision" = [
-    { "Overview" = "vision/index.md" },
+    { "Firmware Architecture" = "stm32/architecture.md" },
+    { "Control Tuning & Calibration" = "stm32/tuning.md" },
+    { "Serial Protocol" = "stm32/serial_protocol.md" },
   ] },
   { "Development & Resources" = [
     { "Hardware Specs & Wiring" = "hardware.md" },

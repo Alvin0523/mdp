@@ -8,10 +8,6 @@ version = "0.1.0"
 [tasks]
 serve = "zensical serve"
 build = "zensical build"
-clone-ros = "git submodule update --init mdp_ros"
-clone-stm32 = "git submodule update --init mdp_stm32"
-clone-all = "git submodule update --init --recursive"
-update = "git pull && git submodule sync --recursive && git submodule update --init --recursive --remote --merge"
 
 [dependencies]
 python = "=3.12"

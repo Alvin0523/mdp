@@ -10,18 +10,16 @@ Hover a name for a one-line description; click to open its documentation.
 
 | Tool | Used for |
 | --- | --- |
-| [OpenSpec][ext-openspec] | Spec-driven workflow in `mdp_ros/openspec/`, `mdp_stm32/openspec/` |
 | [ROS2 Jazzy][ext-ros2] | Host-side ROS2 distro |
-| [ros2_control / ros2_controllers][ext-ros2control] | `ackermann_steering_controller` + hardware_interface framework, see [Architecture](architecture.md) |
+| [ros2_control / ros2_controllers][ext-ros2control] | `ackermann_steering_controller` + hardware_interface framework, see [RPi: ROS2 Control](rpi/ros2_control.md) |
 | [Gazebo][ext-gazebo] | Simulation, via `gz_ros2_control` and `ros_gz` |
-| [micro-ROS][ext-microros] | Originally planned host↔MCU transport; superseded by `mdp_hardware_bridge`'s custom binary protocol, see [ADR 0002](architecture.md#0002-custom-binary-serial-protocol-vs-micro-ros-rclc) |
+| [micro-ROS][ext-microros] | Originally planned host↔MCU transport; superseded by `mdp_bridge`'s custom binary protocol |
 | [PlatformIO][ext-platformio] | Build/flash toolchain for `mdp_stm32` (STM32Cube HAL) |
 | [pixi][ext-pixi] | Environment/task manager used across this repo |
 | [Zensical][ext-zensical] | This docs site generator |
 | [Ultralytics ROS Quickstart][ext-yolo-ros] | YOLO ROS/ROS2 integration guide for object detection nodes |
 | [Ultralytics Raspberry Pi Guide][ext-yolo-rpi] | Deploying & optimizing YOLO models on Raspberry Pi / embedded hardware |
 
-  [ext-openspec]: https://github.com/Fission-AI/OpenSpec "Spec-driven change workflow — propose/apply/archive"
   [ext-ros2]: https://docs.ros.org/en/jazzy/ "ROS2 Jazzy Jalisco distro docs"
   [ext-ros2control]: https://control.ros.org/ "Controller framework + hardware_interface plugins"
   [ext-gazebo]: https://gazebosim.org/docs "Gazebo simulator docs"
@@ -98,4 +96,3 @@ references/WHEELTEC/
 ## Other Historical/Legacy References
 
 - **Host Control Reference:** `references/mdp_ws/docs/control-architecture.md` — an earlier prototype's control architecture notes, kept for historical comparison.
-- **Architectural Decision Records (ADRs):** live in the [Architecture Guide](architecture.md#3-key-architectural-decisions-adrs), not here — that's *why* a decision was made, this page is *where to find vendor material*.

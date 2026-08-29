@@ -4,11 +4,12 @@ icon: lucide/git-branch
 
 # Dev Workflow & OpenSpec Setup
 
-This guide covers setting up your development environment with OpenSpec and executing day-to-day work across submodules (`mdp_ros` and `mdp_stm32`).
+Day-to-day dev loop across submodules (`mdp_ros` and `mdp_stm32`). OpenSpec (below) is an **optional**
+spec-driven workflow for AI-assisted changes — skip this whole page if you're not using it.
 
 ---
 
-## 1. Initial OpenSpec Setup
+## 1. Initial OpenSpec Setup (Optional)
 
 `openspec/` folders inside submodules are already committed — never create them manually. Only `.claude/` or tool-specific folders (gitignored) need to be generated per machine.
 
@@ -59,7 +60,7 @@ To automatically include system architecture in proposals, ensure `openspec/conf
 
 ```yaml
 context: |
-  Read ../docs/architecture.md before proposing anything.
+  Read ../docs/index.md before proposing anything.
 ```
 
 ---
@@ -78,6 +79,7 @@ flowchart TD
   G --> H[Commit archived change]
   H --> I[Push & open PR]
 ```
+<p align="center"><strong>Fig. 1</strong> — Day-to-Day Development Loop</p>
 
 !!! note "OpenSpec Git Independence"
     OpenSpec commands (`propose`, `apply`, `archive`) only create/edit files. Branching, committing, and pushing are standard git operations.
@@ -131,13 +133,13 @@ flowchart TD
 ## 6. Writing Effective Proposals
 
 When issuing `/opsx:propose`, include 3 key elements:
-1. **Target TODO**: Reference the exact TODO item from [`docs/architecture.md`](architecture.md).
+1. **Target TODO**: Reference the exact TODO item from [`docs/index.md`](index.md).
 2. **Implementation Patterns**: Reference exact file paths or design patterns.
 3. **Explicit Scope Boundaries**: State what to *exclude* to keep changes incremental.
 
 ```text title="Example Propose Message"
 /opsx:propose "Integrate micro-ROS transport into mdp_stm32 firmware, replacing
-the current zenoh-pico demo per ADR 0001. Scope: transport + rclc node wiring only.
+the current zenoh-pico demo. Scope: transport + rclc node wiring only.
 Do not touch motor.c or encoders — those are separate TODO items."
 ```
 
@@ -160,19 +162,4 @@ Real issues encountered during development and their verified resolutions:
     | `openspec init` | First time setting up your local `.claude/` adapter (new machine, new teammate, fresh clone). Safe to re-run; never touches `config.yaml`/`specs/`/`changes/`. |
     | `openspec update` | Refreshing an adapter you *already* have, after upgrading the CLI. Can't create one from scratch. |
 
-### :satellite: micro-ROS Agent & `fmt` Library Wall
-
-??? question "`ros2 run micro_ros_agent ...` fails with `fmt`/`spdlog` errors"
-
-    The ROS2 `micro_ros_agent` colcon package's CMake SuperBuild pins an old (`v2.4.3`, ~2022) `Micro-XRCE-DDS-Agent` that fails against modern `fmt 12.x`.
-
-    **Fix**: Do not build the ROS2-wrapped colcon package. Build the standalone `Micro-XRCE-DDS-Agent` directly from [eProsima's repo](https://github.com/eProsima/Micro-XRCE-DDS-Agent) (`v3.0.1`). Use `pixi run agent-build` and `pixi run agent` in `mdp_ros`.
-
-### :twisted_rightwards_arrows: Git Submodules
-
-??? question "Cloned the repo but `mdp_ros/`/`mdp_stm32/` submodules are empty"
-
-    Run:
-    ```bash
-    pixi run clone-all
-    ```
+For git/submodule issues, see [Troubleshooting](troubleshooting.md#git-submodules).

@@ -1,5 +1,5 @@
 ---
-icon: lucide/cpu
+icon: lucide/list
 ---
 
 # Hardware Components & Physics Specifications
@@ -15,7 +15,7 @@ This page documents the verified hardware components and physical specifications
 | **Wheel Encoders** | **Hall Encoders** (2.54mm pitch, 6-pin) | 2 units mounted on drive motors (Model: `MG513P3012V`) |
 | **Steering Servo** | Model `HWZ020` (4.8V – 7.4V) | Front Ackermann steering servo (`left_joint`, `right_joint`). **Stall Torque:** 1.96 N·m (20 kg·cm). **Max Speed:** 6.54 rad/s (0.16s / 60°). **Mechanical Limits:** $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) |
 | **Motor Driver** | Dual AT8236 H-Bridge | Board-integrated motor driver (`src/motor.c`) |
-| **Onboard SBC (Host)** | **Raspberry Pi 4 Model B (4GB)** | Runs ROS2 Jazzy + `mdp_hardware_bridge`, connected to STM32 via USB Type-C |
+| **Onboard SBC (Host)** | **Raspberry Pi 4 Model B (4GB)** | Runs ROS2 Jazzy + `mdp_bridge`, connected to STM32 via USB Type-C |
 | **Camera** | **RPi Camera Module V2** | Sony IMX219 8MP sensor connected via CSI flexi cable. Driver: `ros-jazzy-v4l2-camera` (`v4l2_camera_node` publishing `/image_raw`) + `ros-jazzy-compressed-image-transport` (`/image_raw/compressed` for streaming) + `ros-jazzy-cv-bridge` |
 | **IR Range Sensors** | **Sharp GP2Y0A21YK** (×2) | Analog IR distance sensors with 3D printed brackets |
 | **Ultrasonic Sensor** | **HC-SR04** (×1) | Distance measurement sensor |
@@ -50,5 +50,5 @@ This page documents the verified hardware components and physical specifications
    - **2 Driven Rear Wheels** (Left Motor A, Right Motor B) + **1 Steering Servo** (`HWZ020`) controlling front wheels in an Ackermann geometry.
 
 3. **Onboard Computing & Perception**:
-   - **Raspberry Pi 4B (4GB)** serves as the main host computer running ROS2 Jazzy and the `mdp_hardware_bridge` serial bridge node over USB serial (`USART3`).
+   - **Raspberry Pi 4B (4GB)** serves as the main host computer running ROS2 Jazzy and the `mdp_bridge` serial bridge node over USB serial (`USART3`).
    - Perception hardware includes **RPi Camera V2**, **2× Sharp GP2Y0A21YK IR sensors**, and **1× HC-SR04 Ultrasonic sensor**.

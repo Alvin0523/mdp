@@ -1,161 +1,20 @@
 ---
-icon: lucide/gauge
+icon: lucide/sliders-horizontal
 ---
 
-# Closed-Loop Wheel Control & Sensor Fusion (Planning)
+# Control Tuning & Calibration (`mdp_stm32`)
 
-## Overview: motor + servo control flow
+Closed-loop wheel-speed PID theory, servo range/steering calibration, and the IMU → `ros2_control`
+→ `robot_localization` data flow. For hands-on bench-tuning steps, see
+[Overview: Bench-Tuning the Motor PID](index.md#bench-tuning-the-motor-pid).
 
-Same shape as WHEELTEC's own motor-control flow diagram (`STM32运动底盘开发手册`, 图 6-4), adapted to
-this project's actual hardware — 2 driven wheels (A=left, B=right, matching the diagram's note that
-Ackermann chassis only use motors A/B) and 1 steering servo, with the servo path's cubic correction
-stage marked as planned (see section 2 below) since it isn't implemented yet:
+---
 
-```mermaid
-flowchart LR
-    CMD["/cmd_vel<br/>(linear.x, angular.z)"] --> KIN["ackermann_steering_controller<br/>kinematics (Pi)"]
-
-    KIN -->|"left/right wheel<br/>target rad/s"| MPID
-    KIN -->|"steer_rad<br/>(target road wheel angle)"| SCUBIC
-
-    subgraph MOTOR["Motor control - per wheel (mdp_stm32)"]
-        direction LR
-        MPID["Velocity PID<br/>(motor_pid_*, TIM7 100Hz ISR)"] --> MPWM["PWM<br/>(motor_set_speed)"]
-        MPWM --> MDRV["AT8236<br/>H-bridge driver"]
-        MDRV --> MVOLT["Voltage"]
-        MVOLT --> MMOTOR["DC motor<br/>+ Hall encoder"]
-        MMOTOR -.->|"encoder ticks<br/>(speed feedback)"| MPID
-    end
-
-    subgraph SERVO["Steering control (mdp_stm32)"]
-        direction LR
-        SCUBIC["Cubic correction<br/>(PLANNED - not yet<br/>implemented, see below)"] --> SPWM["PWM<br/>(servo_set_angle)"]
-        SPWM --> SHW["HWZ020 servo"]
-        SHW --> SLINK["Tie-rod linkage<br/>(mechanical, asymmetric)"]
-        SLINK --> SANGLE["Front wheel<br/>steering angle"]
-    end
-```
-
-!!! note "Only 2 motors, 1 servo - no C/D motors or omni/mecanum paths"
-    WHEELTEC's own diagram (图 6-4) covers up to 4 drive motors for their omni/mecanum chassis
-    variants, with a note that differential and Ackermann chassis only use motors A/B and the X/Z
-    target axes. This project is Ackermann-only, so that's the only row that applies here.
-
-!!! warning "Status: implemented, NOT yet bench-tested — test/tune this before anything else"
-    Section 1's closed-loop wheel PID is now **implemented** in `mdp_stm32` (`motor_pid_init` /
-    `motor_pid_enable` / `motor_pid_set_target` / `motor_pid_get_measured_rad_s` / `motor_pid_pause`
-    / `motor_pid_resume` in `motor.c`, wired into `main.c` and `selftest.c`) but has **never run on
-    physical hardware** — `MOTOR_PID_KP=4.0f`/`MOTOR_PID_KI=0.5f` are untuned placeholder guesses.
-    **Next action: flash it and bench-tune with the wheels off the ground before building anything
-    else on top of it** (servo calibration, further `mdp_stm32` work, etc. can wait). Section 2
-    (servo range) and section 3 (IMU → EKF flow, config already applied in `ekf.yaml`) are otherwise
-    unaffected and can be done independently, but PID tuning is the priority right now.
-
-    Cross-referenced against WHEELTEC's own C30D vendor firmware
-    (`references/WHEELTEC/.../R550_C30D(2.0)_..._霍尔编码器_2025.12.26.zip`) to ground the control-law
-    shape in a working reference implementation for this exact board/motor/encoder combo — gain
-    *values* were not transferable (different PWM/tick scale), only the incremental-PI structure.
-
-### Bench-tuning procedure (do this first)
-
-1. Flash (`pixi run flash`), get the robot up on blocks so the wheels spin free.
-2. Send a step target via ROS (`ros2 topic pub /joint_commands ...` with a fixed `velocity` for
-   `lb_joint`/`rb_joint`) or a temporary direct test in firmware — watch actual wheel behavior.
-3. Start from `MOTOR_PID_KI = 0` (pure P + feedforward). Raise `MOTOR_PID_KP` until the wheel
-   tracks a step target quickly with acceptable overshoot (a little overshoot then settle is fine;
-   visible oscillation/buzzing means back off).
-4. Reintroduce `MOTOR_PID_KI` in small steps, just enough to kill any remaining steady-state error
-   (commanded rad/s vs. `motor_pid_get_measured_rad_s()`'s reading not converging) — too much causes
-   slow oscillation/overshoot growing over time.
-5. Repeat for both wheels — since they're never perfectly matched, it's plausible (though not
-   certain) the same gains work fine for both; watch for one wheel behaving worse than the other,
-   which would call for asymmetric tuning instead of a shared `MOTOR_PID_KP`/`MOTOR_PID_KI`.
-6. Once tuned on blocks, re-verify on the ground with the actual chassis weight/friction before
-   trusting it for real runs — this is a meaningfully different load than free-spinning wheels.
-
-## 0. Interrupt/timing architecture — why bare-metal is still OK, and where the line is
-
-`mdp_stm32` coordinates several independent periodic/event-driven things by hand (NVIC priority +
-shared `volatile` globals) instead of an RTOS scheduler + task priorities — same *shape* of problem
-WHEELTEC solves with FreeRTOS tasks (see below), just without a scheduler enforcing correctness for
-you. [ADR 0001](../architecture.md#0001-stm32cube-hal-bare-metal-via-platformio-vs-zephyr-rtos)'s
-reasoning (bring-up speed, vendor-HAL compatibility, course timeline) still holds — this isn't a
-recommendation to migrate. It IS a place mistakes are easy: an NVIC priority mix-up here already let
-a button press theoretically preempt the motor safety loop (found and fixed below).
-
-**Current ownership table** (NVIC priority number — lower runs first / can preempt higher numbers):
-
-| Priority | Interrupt | Rate | Owns | File |
-| --- | --- | --- | --- | --- |
-| 1 (highest) | `TIM7` | 100 Hz, fixed period | Motor PID, encoder reads (`encoder_get_delta_a/b`), PWM output | `motor.c` |
-| 2 | `USART3` (RX) | per-byte, ~115200 baud | Command packet framing (`g_last_command`) | `usart.c` |
-| 3 (lowest) | `EXTI0` | on press | Button debounce flag | `button.c` |
-| — (not an IRQ) | Main loop, fast tier | 100 Hz, tick-interval | Command/safety gating, IMU read, telemetry TX (interrupt-driven) | `main.c` |
-| — (not an IRQ) | Main loop, slow tier | ~5 Hz, tick-interval | OLED render, debug `printf`, battery ADC, heartbeat LED | `main.c` |
-
-**Rule for anything new**: actuator-driving/safety-relevant work gets the lowest priority *number*
-(highest urgency); best-effort/human-facing work gets the highest number. If a new peripheral needs
-its own precise timing (the ultrasonic/IR sensors on the roadmap are the obvious next candidate) and
-it has to coordinate with the motor loop or encoders the way `selftest.c` now has to
-(`motor_pid_pause()`/`resume()`), that's the point where hand-rolled coordination starts
-multiplying — treat that as the signal to reconsider, not any point before it.
-
-### Main loop timing allocation
-
-The main loop used to bundle everything (IMU read, telemetry TX, OLED render, debug print, battery
-ADC) into one `HAL_Delay(100)`-paced 10Hz pass — meaning IMU/encoder data reaching the Pi was
-throttled to 10Hz even though the PID ISR samples encoders at 100Hz internally. Split into two
-independent tick-interval tiers (`FAST_PERIOD_MS`/`SLOW_PERIOD_MS` in `main.c`, no blocking delay,
-no RTOS):
-
-| Tier | Rate | What's in it | Why this rate |
-| --- | --- | --- | --- |
-| Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, telemetry build+send | Matches the motor PID's own 100Hz encoder sampling 1:1 - no information the PID measures gets throttled down before reaching the Pi. Only viable at this rate because `uart_send_telemetry()` is interrupt-driven (`HAL_UART_Transmit_IT`, `usart.c`) rather than blocking - a blocking transmit of the 54-byte telemetry packet takes ~4.7ms at 115200 baud, which would eat ~47% of a 10ms period on its own. Also shrinks worst-case motor-switch-off reaction time from ~100ms (pre-tiering) to ~20ms |
-| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery ADC, heartbeat LED toggle | All either human-facing (no benefit refreshing faster than the eye uses) or slow-changing (battery voltage drifts over seconds/minutes) - also the two slowest operations (bit-banged OLED, blocking USART1 printf) |
-| Always | every raw loop pass | Button/self-test-request check, OLED auto-page-advance check | Cheap enough not to need tiering |
-
-**Why the motor PID itself stays at 100Hz** (i.e. why "maximize everything" doesn't mean raising
-every rate): the encoder is 1560 ticks/rev, so at max speed (~5.5 rev/s) a 100Hz sample already only
-covers ~85 ticks, and that number only gets *smaller* — and the measured velocity noisier — at the
-low speeds this robot actually spends most of its time at during careful arena maneuvering. Raising
-the PID rate further would trade real velocity-estimate resolution for a bigger number, not improve
-control quality.
-
-**Bandwidth check at 100Hz** (`USART3`, 115200 baud ≈ 11520 B/s): telemetry (54 bytes/packet) +
-commands (16 bytes/packet, ~50Hz from the host) ≈ 6200 B/s combined, about 54% of capacity - real
-margin remains. `USART1` (debug `printf`) is a physically separate UART peripheral and doesn't
-compete for this bandwidth at all.
-
-Battery voltage and measured wheel rad/s are cached in persistent locals so the slow tier can display
-whatever the fast tier (rad/s) or the slow tier itself (battery) last read, without either tier
-reading a resource it doesn't own out of turn.
-
-### WHEELTEC's actual reference: FreeRTOS, task-based, not ad-hoc ISRs
-
-Extracted directly from their firmware zip (not the marketing docs) - `BALANCE/balance.c`'s
-`Balance_task` is a genuine periodic FreeRTOS task (`vTaskDelayUntil`, not an ISR) at the *highest*
-priority in their whole system:
-
-| Task | Rate | Priority | Role |
-| --- | --- | --- | --- |
-| `Balance_task` | 100 Hz (`vTaskDelayUntil`) | **4 (highest)** | Velocity PI + `Set_Pwm` - the motor control loop |
-| `Check_task` | 100 Hz | 4 | Safety/battery monitoring |
-| `ICM20948_task` | 100 Hz | 3 | IMU read |
-| `show_task` | 10 Hz | 3 | OLED display |
-| `pstwo_task` / `data_task` | - | 4 | Gamepad / serial I/O |
-| `start_task` | once, deletes itself | 1 (lowest) | Bootstrap - spawns every other task |
-
-The pattern worth taking away even without adopting RTOS: **the actuator-driving loop gets the
-highest priority in the whole system**, `vTaskDelayUntil` gives it a jitter-free fixed period
-regardless of what else runs, and everything lower-priority (display, telemetry) genuinely cannot
-starve it - the scheduler enforces that structurally. This project's NVIC-priority table above is
-the bare-metal approximation of the same idea, manually maintained instead of scheduler-enforced.
-
-## 1. Closed-loop wheel speed — lives on the STM32, not the Pi/EKF
+## Closed-Loop Wheel Speed Control
 
 ### Current state
 
-`motor_set_speed_rad_s()` ([motor.c](../../mdp_stm32/src/motor.c)) is pure open-loop: target rad/s →
+`motor_set_speed_rad_s()` (`motor.c`) is pure open-loop: target rad/s →
 linear PWM% via the motor's rated max speed, no feedback. Actual wheel speed at a given PWM% drifts
 with battery voltage, load, and the fact that the two motors are never perfectly matched (already
 visible in `selftest.c`, which tracks and stops each wheel independently for exactly this reason).
@@ -177,7 +36,7 @@ the pin/timer assignments and hardware in this project were already ported from 
 
 - The vendor firmware **does run FreeRTOS** (`FreeRTOS/` in the zip, tasks created in `USER/main.c`:
   `Check_task`, `Balance_task`, `IMU_task`, `show_task`, `led_task`, `pstwo_task`, `data_task`) —
-  this project deliberately diverged from that (bare-metal HAL, [ADR 0001](../architecture.md#0001-stm32cube-hal-bare-metal-via-platformio-vs-zephyr-rtos)), so the *mechanism* below needs
+  this project deliberately diverged from that (bare-metal HAL), so the *mechanism* below needs
   re-implementing without an RTOS, but the *control law* is directly reusable.
 - The actual velocity loop runs inside `EXTI15_10_IRQHandler()` in `balance.c`, triggered by the
   MPU6050/ICM-20948's **INT (data-ready) pin**, which fires every 5 ms. It alternates: odd calls
@@ -199,7 +58,7 @@ the pin/timer assignments and hardware in this project were already ported from 
 - Note this is an **incremental** PI (accumulates `Pwm` across calls from `Bias` deltas), not a
   textbook positional PID — simpler to tune stably at a fixed sample rate and naturally rate-limits
   output changes, which matters for not stalling the AT8236's gate drive (see the locked-antiphase
-  note in [Drivers](drivers.md#at8236-motor-driver-motorc)).
+  note in [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)).
 
 ### Proposed plan for `mdp_stm32` (bare-metal, no RTOS, no MPU interrupt pin routed the same way)
 
@@ -234,7 +93,7 @@ alignment). "Same rad/s per encoder" isn't the same as "same actual ground speed
 themselves aren't identical.
 
 WHEELTEC's own firmware hits this same problem *despite* also running a per-wheel PI loop
-(`Incremental_PI_A/B`, section 1 above) — their fix is a simple manual trim, not a smarter control
+(`Incremental_PI_A/B`, above) — their fix is a simple manual trim, not a smarter control
 loop: a single runtime value `LineDiffParam` (0-100, centered at 50 = no correction), applied as a
 multiplier to the wheel *target* before the PI loop, boosting whichever side is lagging by up to 20%:
 
@@ -264,7 +123,9 @@ drifts, and nudges the value until it stops.
 target correctly, the car still visibly curves during a straight `/cmd_vel` command. If it drives
 straight once the PID's tuned, this isn't needed at all — don't add it preemptively.
 
-## 2. Servo range — the real vendor solution is an empirically-fit curve, not a linear gain
+---
+
+## Servo Range & Steering Calibration
 
 **Correction to an earlier note here**: WHEELTEC's `control.c` (`Kinematic_Analysis()`) computes the
 servo pulse as a pure linear gain with no measured-limit clamp:
@@ -542,7 +403,9 @@ firmware's internal commanded-value convention. No firmware change was needed �
 stay as they were (27°/41° in the commanded unit) — those are still the correct clamps for reaching
 the real physical lock point on each side, regardless of what that real angle turns out to be.
 
-## 3. IMU → `ros2_control` → `robot_localization` — proper data flow
+---
+
+## IMU → `ros2_control` → `robot_localization` Data Flow
 
 ### What should run where
 
