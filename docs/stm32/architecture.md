@@ -11,15 +11,16 @@ picture and build/flash/tuning steps, see [Overview](index.md).
 
 ## Interrupt / Timing Architecture
 
-`mdp_stm32` coordinates several independent periodic/event-driven things by hand (NVIC priority +
-shared `volatile` globals) instead of an RTOS scheduler + task priorities — same *shape* of problem
-WHEELTEC solves with FreeRTOS tasks (see below), just without a scheduler enforcing correctness for
-you. The decision to stay bare-metal (bring-up speed, vendor-HAL compatibility, course timeline)
-still holds — this isn't a recommendation to migrate. It IS a place mistakes are easy: an NVIC
-priority mix-up here already let a button press theoretically preempt the motor safety loop (found
-and fixed below).
+- No RTOS — timing is hand-coordinated via **NVIC interrupt priorities** + shared **`volatile`**
+  globals (no task scheduler, no mutexes; a shared global is the hand-off between an ISR and the
+  main loop).
+- Trade-off: nothing catches a priority mistake the way a scheduler would — already happened once
+  (an NVIC mix-up let a button press theoretically preempt the motor safety loop; fixed, see table).
 
-**Current ownership table** (NVIC priority number — lower runs first / can preempt higher numbers):
+!!! tip "Rule"
+    The actuator-driving loop always gets the **highest priority** in the system.
+
+**Ownership table** (NVIC priority number — lower runs first / can preempt higher numbers):
 
 | Priority | Interrupt | Rate | Owns | File |
 | --- | --- | --- | --- | --- |
@@ -29,143 +30,143 @@ and fixed below).
 | — (not an IRQ) | Main loop, fast tier | 100 Hz, tick-interval | Command/safety gating, IMU read, telemetry TX (interrupt-driven) | `main.c` |
 | — (not an IRQ) | Main loop, slow tier | ~5 Hz, tick-interval | OLED render, debug `printf`, battery ADC, heartbeat LED | `main.c` |
 
-**Rule for anything new**: actuator-driving/safety-relevant work gets the lowest priority *number*
-(highest urgency); best-effort/human-facing work gets the highest number. If a new peripheral needs
-its own precise timing (the ultrasonic/IR sensors on the roadmap are the obvious next candidate) and
-it has to coordinate with the motor loop or encoders the way `selftest.c` now has to
-(`motor_pid_pause()`/`resume()`), that's the point where hand-rolled coordination starts
-multiplying — treat that as the signal to reconsider, not any point before it.
+**Adding something new:**
+
+- Actuator-driving / safety-relevant → lowest priority *number* (highest urgency).
+- Best-effort / human-facing → highest priority number.
+- Needs its own precise timing and has to coordinate with the motor loop/encoders (like
+  `selftest.c` does via `motor_pid_pause()`/`resume()`) → that's the signal hand-rolled
+  coordination is multiplying. Reconsider bare-metal at that point, not before.
 
 ### Main loop timing allocation
 
-The main loop used to bundle everything (IMU read, telemetry TX, OLED render, debug print, battery
-ADC) into one `HAL_Delay(100)`-paced 10Hz pass — meaning IMU/encoder data reaching the Pi was
-throttled to 10Hz even though the PID ISR samples encoders at 100Hz internally. Split into two
-independent tick-interval tiers (`FAST_PERIOD_MS`/`SLOW_PERIOD_MS` in `main.c`, no blocking delay,
-no RTOS):
+Two independent tick-interval tiers (`FAST_PERIOD_MS`/`SLOW_PERIOD_MS` in `main.c`, no blocking
+delay). Previously one `HAL_Delay(100)`-paced 10Hz loop bottlenecked everything, including
+IMU/encoder data to the Pi, even though the PID ISR already samples at 100Hz internally.
 
 | Tier | Rate | What's in it | Why this rate |
 | --- | --- | --- | --- |
-| Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, telemetry build+send | Matches the motor PID's own 100Hz encoder sampling 1:1 - no information the PID measures gets throttled down before reaching the Pi. Only viable at this rate because `uart_send_telemetry()` is interrupt-driven (`HAL_UART_Transmit_IT`, `usart.c`) rather than blocking - a blocking transmit of the 54-byte telemetry packet takes ~4.7ms at 115200 baud, which would eat ~47% of a 10ms period on its own. Also shrinks worst-case motor-switch-off reaction time from ~100ms (pre-tiering) to ~20ms |
-| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery ADC, heartbeat LED toggle | All either human-facing (no benefit refreshing faster than the eye uses) or slow-changing (battery voltage drifts over seconds/minutes) - also the two slowest operations (bit-banged OLED, blocking USART1 printf) |
-| Always | every raw loop pass | Button/self-test-request check, OLED auto-page-advance check | Cheap enough not to need tiering |
+| Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, telemetry build+send | Matches the PID's own 100Hz sampling 1:1 |
+| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery ADC, heartbeat LED | Human-facing / slow-changing; also the 2 slowest ops (bit-banged OLED, blocking printf) |
+| Always | every raw loop pass | Button/self-test-request check, OLED page-advance check | Cheap enough not to need tiering |
 
-**Why the motor PID itself stays at 100Hz** (i.e. why "maximize everything" doesn't mean raising
-every rate): the encoder is 1560 ticks/rev, so at max speed (~5.5 rev/s) a 100Hz sample already only
-covers ~85 ticks, and that number only gets *smaller* — and the measured velocity noisier — at the
-low speeds this robot actually spends most of its time at during careful arena maneuvering. Raising
-the PID rate further would trade real velocity-estimate resolution for a bigger number, not improve
-control quality.
+!!! note "Fast tier only works because telemetry TX is interrupt-driven"
+    `uart_send_telemetry()` uses `HAL_UART_Transmit_IT`, not blocking. A blocking send of the
+    54-byte packet would take ~4.7ms at 115200 baud — ~47% of the 10ms period on its own. Also
+    drops worst-case motor-switch-off reaction time from ~100ms (pre-tiering) to ~20ms.
 
-**Bandwidth check at 100Hz** (`USART3`, 115200 baud ≈ 11520 B/s): telemetry (54 bytes/packet) +
-commands (16 bytes/packet, ~50Hz from the host) ≈ 6200 B/s combined, about 54% of capacity - real
-margin remains. `USART1` (debug `printf`) is a physically separate UART peripheral and doesn't
-compete for this bandwidth at all.
+!!! tip "Why the PID stays at 100Hz, not higher"
+    - Encoder: 1560 ticks/rev
+    - Max speed (~5.5 rev/s) → 100Hz sample ≈ 85 ticks
+    - Gets smaller/noisier at the low speeds used during careful arena maneuvering
+    - Raising the rate trades real resolution for a bigger number, not better control
 
-Battery voltage and measured wheel rad/s are cached in persistent locals so the slow tier can display
-whatever the fast tier (rad/s) or the slow tier itself (battery) last read, without either tier
-reading a resource it doesn't own out of turn.
+**Bandwidth** (`USART3` @ 115200 baud ≈ 11520 B/s):
 
-### WHEELTEC's actual reference: FreeRTOS, task-based, not ad-hoc ISRs
+- Telemetry: 54 B/packet @ 100Hz
+- Commands: 16 B/packet @ ~50Hz
+- Combined ≈ 6200 B/s (~54% of capacity) — margin remains
+- `USART1` (debug printf) is separate hardware, doesn't compete
 
-Extracted directly from their firmware zip (not the marketing docs) - `BALANCE/balance.c`'s
-`Balance_task` is a genuine periodic FreeRTOS task (`vTaskDelayUntil`, not an ISR) at the *highest*
-priority in their whole system:
-
-| Task | Rate | Priority | Role |
-| --- | --- | --- | --- |
-| `Balance_task` | 100 Hz (`vTaskDelayUntil`) | **4 (highest)** | Velocity PI + `Set_Pwm` - the motor control loop |
-| `Check_task` | 100 Hz | 4 | Safety/battery monitoring |
-| `ICM20948_task` | 100 Hz | 3 | IMU read |
-| `show_task` | 10 Hz | 3 | OLED display |
-| `pstwo_task` / `data_task` | - | 4 | Gamepad / serial I/O |
-| `start_task` | once, deletes itself | 1 (lowest) | Bootstrap - spawns every other task |
-
-The pattern worth taking away even without adopting RTOS: **the actuator-driving loop gets the
-highest priority in the whole system**, `vTaskDelayUntil` gives it a jitter-free fixed period
-regardless of what else runs, and everything lower-priority (display, telemetry) genuinely cannot
-starve it - the scheduler enforces that structurally. This project's NVIC-priority table above is
-the bare-metal approximation of the same idea, manually maintained instead of scheduler-enforced.
+Battery voltage / measured rad/s are cached in persistent locals — the slow tier displays whatever
+the fast/slow tier last read, without either reading a resource it doesn't own.
 
 ---
 
 ## Drivers
 
+### Command Units
+
+Units don't change crossing the Pi↔STM32 wire — rad/s stays rad/s, rad stays rad, all the way from
+`ackermann_steering_controller` to the STM32's command-handling code. Conversion only happens right
+before hardware is actually driven, one step per driver:
+
+| Stage | Unit | Where |
+| --- | --- | --- |
+| `ackermann_steering_controller` output | **rad/s** per wheel, **rad** for steering | Pi, `/joint_commands` |
+| `CommandPacket` (wire, `USART3`) | **rad/s** (`left_wheel_rad_s`/`right_wheel_rad_s`), **rad** (`steer_rad`) | crosses Pi↔STM32 |
+| `motor.c` internal | **PWM %** (0–100, signed for direction) | STM32, after conversion |
+| Motor hardware PWM output | raw timer compare-register count (duty cycle) | STM32, electrical signal |
+| `servo.c` internal | **microseconds** pulse width (600–2400µs) | STM32, after conversion |
+
+- **Motors**: `rad_s_to_pct()` converts target rad/s → PWM% via `pct = (rad_s / 34.56) × 100`
+  (34.56 rad/s = the motor's rated max speed post-gearbox). That's the *feedforward* baseline — the
+  PID's incremental correction is added on top, still in PWM% terms, before being written to the timer.
+- **Servo**: `SERVO_ANGLE_SCALE_RAD` converts commanded rad → microseconds directly (0.7854 rad / 45°
+  maps to 900µs off the 1500µs center) — no PWM% intermediate step, since there's no PID on the servo
+  at all (open-loop, see [Steering Servo Driver](#steering-servo-driver-servoc)).
+
 ### AT8236 Motor Driver (`motor.c`)
 
-Drives the 2 rear DC motors (`MG513P3012V`) via PWM on `TIM9`/`TIM10`/`TIM11` (`motor_init`, `motor_set_speed`). Pin/timer assignments verified against the WHEELTEC C30D resource-allocation PDF and ported from the vendor's Hall-encoder reference firmware.
-
-Wheel speed is **closed-loop** as of the closed-loop PID work above: the main loop no longer calls `motor_set_speed_rad_s()` directly to drive - it calls `motor_pid_set_target()`/`motor_pid_enable()`, and a 100Hz `TIM7` ISR (`motor_pid_*` functions) reads the encoders, runs a hybrid feedforward+incremental-PI controller (`rad_s_to_pct()` supplies the feedforward baseline, same formula as before), and writes the corrected PWM via `motor_set_speed()`. `motor_set_speed_rad_s()` itself is unchanged and still available as a standalone open-loop primitive, just no longer the live control path from `main.c`. **PID gains are untuned placeholders** - not yet bench-tested on hardware.
+- Drives the 2 rear DC motors (`MG513P3012V`) via PWM on `TIM9`/`TIM10`/`TIM11` (`motor_init`,
+  `motor_set_speed`). Pin/timer assignments verified against the WHEELTEC C30D resource-allocation
+  PDF.
+- Closed-loop: `main.c` calls `motor_pid_set_target()`/`motor_pid_enable()`, not
+  `motor_set_speed_rad_s()` directly. A 100Hz `TIM7` ISR (`motor_pid_*`) reads the encoders, runs a
+  feedforward + incremental-PI controller, writes the corrected PWM via `motor_set_speed()`.
+- `motor_set_speed_rad_s()` still exists standalone (open-loop primitive), just not the live path.
+- PID gains: untuned placeholders, not bench-tested on hardware.
+- **PI only, no D term** — deliberate, not an oversight. The measured signal (rad/s from tick deltas)
+  is inherently noisy at low speed (few ticks per 10ms window), and a D term differentiates that noise
+  further. Incremental-PI already rate-limits output changes structurally, covering most of what D
+  would otherwise buy. Reconsider only if bench-tuning shows P+I alone can't kill overshoot without
+  oscillating.
 
 !!! warning "Must use locked-antiphase drive, not a naive 0%/duty% scheme"
-    `motor_drive()` uses a **locked-antiphase** scheme, ported from WHEELTEC's own vendor reference firmware (`BALANCE/balance.c`'s `Set_Pwm`): both `IN1`/`IN2` sit at ~100% duty (electrical brake) at rest, and one side is pulled down from 100% by the commanded speed magnitude to produce a direction. A simpler-looking "stopped side = 0%, driven side = duty%" scheme was tried first and left the wheels **completely dead despite correct-looking PWM commands and zero errors** — the AT8236 needs continuous switching activity on both legs to keep its internal high-side gate drive/charge-pump alive, and a leg held statically low never actually turns the output on. If you're debugging "motors don't spin but everything else looks right," check this first before suspecting wiring or power.
+    `motor_drive()` holds both `IN1`/`IN2` at ~100% duty (electrical brake) at rest, pulling one side
+    down by the commanded speed magnitude to produce direction. A simpler "stopped side = 0%, driven
+    side = duty%" scheme left the wheels **completely dead** despite correct-looking PWM and zero
+    errors — the AT8236 needs continuous switching on both legs to keep its gate-drive/charge-pump
+    alive. Debugging "motors don't spin but everything looks right"? Check this first.
 
 ### Hall Encoder Driver (`encoder.c`)
 
-Reads Hall encoder ticks on the 2 rear drive motors using STM32 hardware timer encoder mode (`TIM2`/`TIM3`). Exposes both a per-call delta read (`encoder_get_delta_a`/`_b`, resets the hardware counter each call — used for a tick-rate speed estimate) and a running cumulative count (`encoder_get_count_a`/`_b`). Ticks-per-revolution is physically confirmed (below); ticks-to-real-distance is not — wheel diameter/effective rolling radius hasn't been independently measured on this board, so `encoder_get_count_a/_b` gives an accurate tick count but not yet an accurate meters value.
+- Reads Hall ticks on the 2 rear motors via hardware timer encoder mode (`TIM2`/`TIM3`).
+- `encoder_get_delta_a`/`_b` — per-call delta, resets counter (tick-rate speed estimate).
+- `encoder_get_count_a`/`_b` — running cumulative count.
+- Ticks-per-rev: confirmed (below). Ticks→distance: not yet — wheel diameter/rolling radius unmeasured.
 
-!!! note "Motor B (rear right) counts are negated to match Motor A's sign convention"
-    Motor B is mounted as a mirror image of Motor A, so its raw Hall A/B phase order comes out reversed relative to "forward" even though `motor_set_speed()` drives both sides with the same positive=forward PWM convention. `encoder_get_delta_b`/`encoder_get_count_b` negate the raw timer count before returning it, so both motors honor the "positive = forward" contract documented in `encoder.h` — without this, the rear-right encoder read negative while driving forward (visible on the OLED's `Enc R` field and in `/joint_states` telemetry).
+!!! note "Motor B (rear right) counts are negated"
+    Motor B is mounted mirrored to Motor A, so its raw Hall phase order comes out reversed relative
+    to "forward." `encoder_get_delta_b`/`_count_b` negate the raw count so both motors honor
+    "positive = forward" — without this, the rear-right encoder read negative while driving forward.
 
 #### Ticks-per-revolution — physically confirmed on hardware
 
-The `1560` ticks/rev figure used throughout (`selftest.c`'s drive-1-revolution test, `mdp_bridge`'s `kRadPerTick` conversion) comes from WHEELTEC's vendor formula for this exact motor/encoder combo: `EncoderMultiples(4) × Hall_13(13 pulses/motor-rev) × HALL_30F(30:1 gear ratio) = 1560`. This had never been independently checked on this specific board until now.
-
-**Method**: a reference mark was placed on the wheel and a fixed reference mark on the chassis right next to it. With the wheel free-spinning (car on blocks, motor switch OFF), the wheel was rotated by hand exactly 1 full turn at a time (marks realigned each time), reading the cumulative tick count off OLED page 3 (`Enc L`/`Enc R`) after each turn — 10 consecutive full rotations per wheel.
-
-**Left wheel** — cumulative counts after each of 10 rotations: `1560, 3121, 4680, 6241, 7800, 9361, 10921, 12481, 14041, 15600`.
-
-| Round | Cumulative | Delta (ticks this rev) |
-| --- | --- | --- |
-| 1 | 1560 | 1560 |
-| 2 | 3121 | 1561 |
-| 3 | 4680 | 1559 |
-| 4 | 6241 | 1561 |
-| 5 | 7800 | 1559 |
-| 6 | 9361 | 1561 |
-| 7 | 10921 | 1560 |
-| 8 | 12481 | 1560 |
-| 9 | 14041 | 1560 |
-| 10 | 15600 | 1559 |
-
-Average: `15600 / 10 = 1560.0` ticks/rev exactly. Per-round spread is ±1 tick (std dev ≈0.77), consistent with hand-alignment noise rather than any real deviation.
-
-**Right wheel** — cumulative counts after each of 10 rotations: `1560, 3121, 4680, 6241, 7800, 9355, 10921, 12480, 14041, 15600`.
-
-| Round | Cumulative | Delta (ticks this rev) |
-| --- | --- | --- |
-| 1 | 1560 | 1560 |
-| 2 | 3121 | 1561 |
-| 3 | 4680 | 1559 |
-| 4 | 6241 | 1561 |
-| 5 | 7800 | 1559 |
-| 6 | 9355 | 1555 |
-| 7 | 10921 | 1566 |
-| 8 | 12480 | 1559 |
-| 9 | 14041 | 1561 |
-| 10 | 15600 | 1559 |
-
-Average: `15600 / 10 = 1560.0` ticks/rev exactly — same as left. Rounds 6-7 show a paired counting glitch (round 6 five ticks short, round 7 six ticks over, netting back to the same cumulative left wheel hit at round 7) — the signature of one mistimed hand-alignment rather than a real deviation; excluding that pair, the scatter matches left's tight ±1 tick pattern.
-
-**Conclusion**: `1560` ticks/rev is confirmed accurate on physical hardware for both wheels, with no systematic left/right discrepancy — the WHEELTEC vendor formula holds for this board.
+- Formula: `EncoderMultiples(4) × Hall_13(13 pulses/motor-rev) × HALL_30F(30:1 gear ratio) = 1560`
+- Method: hand-turned each wheel 10 full rotations (car on blocks, motor switch OFF), reading
+  cumulative ticks off OLED page 3 after each turn.
+- Result: both wheels averaged exactly `1560.0` ticks/rev, ±1 tick spread (hand-alignment noise) —
+  confirmed, no left/right discrepancy.
 
 ### Steering Servo Driver (`servo.c`)
 
-Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). Operating angle limits (`SERVO_ANGLE_MAX_LEFT/RIGHT_RAD`) are calibrated against the actual mechanical steering lock — see [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration) above.
+Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). Operating angle limits
+(`SERVO_ANGLE_MAX_LEFT/RIGHT_RAD`) are calibrated against the actual mechanical steering lock — see
+[Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration).
 
 ### Motor ON/OFF Switch (`motor.c`)
 
-Reads the onboard motor ON/OFF switch (`SW3`) on `PD3` (input, pull-up) via `motor_estop_engaged()` — schematic: `3V3 -> R35 (100R) -> PD3`, `SW3` grounds it when switched OFF, so it idles HIGH (ON) and reads LOW when OFF; this matches the code's existing polarity assumption. **Gates both self-test** (refuses to run while OFF) **and the main drive loop** (`main.c` forces the wheels to 0% PWM whenever this reads OFF, regardless of what the host commands). Not yet cross-checked against a multimeter on the physical board, only confirmed functionally via self-test's refusal behavior.
+- Pin: `PD3`, input, pull-up. Schematic: `3V3 → R35 (100R) → PD3`; `SW3` grounds it when OFF.
+- Idles HIGH (ON), reads LOW when OFF — read via `motor_estop_engaged()`.
+- Gates self-test (refuses while OFF) and the main drive loop (`main.c` forces 0% PWM regardless of
+  host commands while OFF).
+- Not yet cross-checked with a multimeter — only confirmed functionally (self-test refusal).
 
 ### Battery Voltage ADC (`battery.c`)
 
-Reads `PB0` (`ADC1_CH8`) via `HAL_ADC` polling (`battery_init`, `battery_read_voltage`). The sense-resistor divider ratio couldn't be confirmed from the schematic PDF text extraction (schematic is a visual layout, not linear text), so instead of guessing, the conversion formula (`raw / 4095.0 * 3.3 * 11.0`) was taken from WHEELTEC's own C30D basic-example firmware (`references/WHEELTEC/.../03-ADC采集电压值与电位器值/ADC.zip`), which targets this exact board line and channel (`Battery_Ch = 8`). Not yet cross-checked against a multimeter on this specific board.
+- `PB0` / `ADC1_CH8`, `HAL_ADC` polling (`battery_init`, `battery_read_voltage`).
+- Formula: `raw / 4095.0 × 3.3 × 11.0` (12-bit ADC, 3.3V ref, 11x divider ratio).
+- Divider ratio sourced from WHEELTEC's C30D ADC example firmware (`Battery_Ch = 8`) — couldn't be
+  confirmed from the schematic PDF (visual layout, not extractable text).
+- Not yet cross-checked with a multimeter on this board.
 
 ---
 
 ## Pinouts & Peripherals
 
-Verified pin allocations and hardware peripheral assignments for the WHEELTEC C30D (Revisions 2.0 / 2.1 / 2.2) control board based on official vendor schematics (`references/`).
+Verified pin allocations for the WHEELTEC C30D (Revisions 2.0 / 2.1 / 2.2), per the vendor
+schematics (`references/`).
 
 ### Serial Communication (Host↔MCU Transport)
 
@@ -187,7 +188,7 @@ Verified pin allocations and hardware peripheral assignments for the WHEELTEC C3
 | **Motor B** | Rear Right (BR) | `PE5`, `PE6` | TIM9_CH1 (`PE5`), TIM9_CH2 (`PE6`) | **Active** (Rear-Right Drive Motor) |
 | **Motor C** | — | `PE9`, `PE11` | TIM1_CH1 (`PE9`), TIM1_CH2 (`PE11`) | *Unused* (Unpowered Front Wheels) |
 | **Motor D** | — | `PE13`, `PE14` | TIM1_CH3 (`PE13`), TIM1_CH4 (`PE14`) | *Unused* (Unpowered Front Wheels) |
-| **Motor ON/OFF Switch** | `SW3` (`BSI-10`) | `PD3` | Digital **Input**, pull-up | `3V3 -> R35 (100R) -> PD3`, `SW3` grounds it when switched OFF - idles HIGH (motor ON/ready), reads LOW when switched OFF. **MCU reads this, does not drive it** - it's the physical switch's state coming in, not an MCU-controlled enable output. Read via `motor_estop_engaged()` (`motor.c`); gates both self-test and the main drive loop (`main.c`) - motors are forced to 0% PWM whenever this reads OFF, regardless of host commands |
+| **Motor ON/OFF Switch** | `SW3` (`BSI-10`) | `PD3` | Digital **Input**, pull-up | MCU reads (doesn't drive) the physical switch state — see [Motor ON/OFF Switch](#motor-onoff-switch-motorc) above |
 | **Wheel-Speed PID Control Loop** | — (internal timer, no pin) | `TIM7` | Update-interrupt timer, no output | 100Hz fixed-period ISR (`motor_pid_init()`/`motor.c`) running the closed-loop wheel-speed PID that ultimately drives Motor A/B above - see [Closed-Loop Wheel Speed Control](tuning.md#closed-loop-wheel-speed-control) |
 
 ### Wheel Encoders (Hall Encoders)
@@ -203,7 +204,7 @@ Verified pin allocations and hardware peripheral assignments for the WHEELTEC C3
 
 | Function | Pins | Peripheral | Signal / Details |
 | --- | --- | --- | --- |
-| **Steering Servo** | `PB15` | TIM12_CH2 | 50 Hz PWM (1.0ms–2.0ms pulse width) |
+| **Steering Servo** | `PB15` | TIM12_CH2 | 50 Hz PWM (600–2400µs configured range, ~960–2320µs actual operating span — see [Command Units](#command-units) / [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) |
 | **IMU Sensor** | `PB10` (SCL), `PB11` (SDA) | Bit-banged software I2C (GPIO, `GPIO_MODE_OUTPUT_OD`) - **not** the hardware `I2C2` peripheral | ICM-20948 (9-DOF Gyro/Accel/Mag - only accel+gyro registers are read, magnetometer unused). Polled (`imu_update()`), not interrupt-driven - no `INT` pin connected in firmware |
 | **Battery AD** | `PB0` | ADC1_CH8 | Voltage measurement via resistor divider |
 | **Car Type Select** | `PB1` | ADC1_CH9 | Potentiometer voltage reading |

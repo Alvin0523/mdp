@@ -12,228 +12,94 @@ Closed-loop wheel-speed PID theory, servo range/steering calibration, and the IM
 
 ## Closed-Loop Wheel Speed Control
 
-### Current state
+A dedicated `TIM7` ISR runs at 100Hz and closes the loop per wheel:
 
-`motor_set_speed_rad_s()` (`motor.c`) is pure open-loop: target rad/s →
-linear PWM% via the motor's rated max speed, no feedback. Actual wheel speed at a given PWM% drifts
-with battery voltage, load, and the fact that the two motors are never perfectly matched (already
-visible in `selftest.c`, which tracks and stops each wheel independently for exactly this reason).
-
-### Why the STM32, not `robot_localization`'s EKF or the ROS2 host
-
-- `robot_localization`'s EKF is a **state estimator**, not a controller — it fuses odometry/IMU into
-  a pose estimate and has no path to emit a PWM/speed-correction signal at all.
-- Closing the loop from the Pi means round-tripping over USART3 (bridge polls at whatever
-  `readLoop()`/OS scheduling gives it, MCU telemetry currently at 10 Hz) — too much latency and
-  jitter for a speed loop that should react within milliseconds of an encoder edge.
-- The STM32 is the only point in the system with low-latency access to both sides of the loop
-  (PWM timers + encoder counters) in the same control cycle.
-
-### Reference: how WHEELTEC's own C30D firmware does it
-
-Extracted and read directly from the vendor zip (`BALANCE/balance.c` + `BALANCE/control.c`), since
-the pin/timer assignments and hardware in this project were already ported from it:
-
-- The vendor firmware **does run FreeRTOS** (`FreeRTOS/` in the zip, tasks created in `USER/main.c`:
-  `Check_task`, `Balance_task`, `IMU_task`, `show_task`, `led_task`, `pstwo_task`, `data_task`) —
-  this project deliberately diverged from that (bare-metal HAL), so the *mechanism* below needs
-  re-implementing without an RTOS, but the *control law* is directly reusable.
-- The actual velocity loop runs inside `EXTI15_10_IRQHandler()` in `balance.c`, triggered by the
-  MPU6050/ICM-20948's **INT (data-ready) pin**, which fires every 5 ms. It alternates: odd calls
-  read attitude (`Read_DMP()`), even calls (**effectively every 10 ms, ~100 Hz**) read both encoders
-  and run the velocity PI:
-
-    ```c
-    // control.c — Incremental_PI_A/B, called every 10ms from the IMU data-ready ISR
-    Bias = Encoder - Target;                              // measured - target
-    Pwm += Velocity_KP*(Bias-Last_bias) + Velocity_KI*Bias; // incremental PI
-    // clamp to +/-7200 (their PWM/ARR scale), Last_bias = Bias
-    ```
-
-    Default gains in `system.c`: `Velocity_KP = 300`, `Velocity_KI = 300` (further tunable at
-    runtime via their app/potentiometer — not fixed constants in practice). This applies to the
-    Ackermann car variant too — `robot_select_init.c`'s `case Akm_Car:` uses the same `Robot_Init` /
-    velocity-loop path as every other chassis type; car-selection only changes kinematics geometry
-    (wheelbase, track, wheel diameter), not whether the PI loop runs.
-- Note this is an **incremental** PI (accumulates `Pwm` across calls from `Bias` deltas), not a
-  textbook positional PID — simpler to tune stably at a fixed sample rate and naturally rate-limits
-  output changes, which matters for not stalling the AT8236's gate drive (see the locked-antiphase
-  note in [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)).
-
-### Proposed plan for `mdp_stm32` (bare-metal, no RTOS, no MPU interrupt pin routed the same way)
-
-1. **Decouple the motor control rate from the 10 Hz main loop.** Telemetry/OLED/IMU-read can stay at
-   10 Hz; the wheel PI needs to run faster and on a fixed period — a free-running hardware timer
-   (e.g. `TIM7`, currently unused) with an update interrupt at ~50–100 Hz is the bare-metal
-   equivalent of WHEELTEC's IMU-data-ready-triggered ISR, without needing an actual sensor interrupt
-   to hang the timing off of.
-2. **In that ISR:** read `encoder_get_delta_a()`/`_b()` (already tick-since-last-call), convert to a
-   measured rad/s using the existing `2*pi/1560` ticks→rad conversion, run one incremental-PI step
-   per wheel against the current target (still delivered via `g_last_command`, unchanged), write the
-   corrected PWM% via `motor_set_speed()`.
-3. **Gains need rescaling, not literal copying** — WHEELTEC's `Velocity_KP/KI = 300` are tuned
-   against their integer encoder/PWM scale (PWM clamp ±7200, different ARR, different tick math).
-   Treat `300`/`300` as a *starting order of magnitude* to bench-tune from, not a direct port.
-4. **Keep the existing safety layers wrapping the loop, don't let the PID fight them**: the 500 ms
-   stale-command fail-safe (`uart_command_is_stale`) and the `PD3` motor ON/OFF switch check should
-   still zero the PWM output unconditionally, ahead of/around the PID, exactly as `main.c` does today
-   — the PID should never be able to override those.
-5. Open question / to decide when implementing: exact `TIMx` and priority to use, and whether the
-   per-wheel encoder read should stay in the new ISR (tight timing) or whether a shared volatile
-   "latest delta" read at 10 Hz is precise enough — needs bench testing once built.
-
-### Wheel-speed trim — a tool to reach for if one wheel is "no good" after PID tuning
-
-**Not implemented yet — this is a documented option for later, only add it if the symptom below
-actually shows up.** Even with a correctly-tuned per-wheel PID, the car can still drift/curve during
-a commanded-straight run, because the PID only guarantees each wheel hits *its own encoder-measured*
-target — it can't see a systematic mismatch the encoder is blind to (slightly different effective
-wheel radius from manufacturing tolerance, uneven tire wear, one side gripping less, chassis
-alignment). "Same rad/s per encoder" isn't the same as "same actual ground speed" if the wheels
-themselves aren't identical.
-
-WHEELTEC's own firmware hits this same problem *despite* also running a per-wheel PI loop
-(`Incremental_PI_A/B`, above) — their fix is a simple manual trim, not a smarter control
-loop: a single runtime value `LineDiffParam` (0-100, centered at 50 = no correction), applied as a
-multiplier to the wheel *target* before the PI loop, boosting whichever side is lagging by up to 20%:
-
-```c
-// wheelCoefficient() in WHEELTEC's balance.c - conceptual reference, not our code
-if (isLeftWheel  && diffparam >= 50) return 1.0f + 0.004f*(diffparam-50); // up to 1.2x
-if (!isLeftWheel && diffparam <= 50) return 1.0f + 0.004f*(50-diffparam); // up to 1.2x
-return 1.0f;
+```mermaid
+flowchart LR
+    TARGET["Target rad/s<br/>(g_last_command)"] --> PI
+    ENC["encoder_get_delta_a/b()<br/>ticks since last call"] --> CONV["× 2π/1560<br/>→ measured rad/s"]
+    CONV --> PI["Incremental PI<br/>Bias = measured - target<br/>Pwm += KP·(Bias-Last_bias) + KI·Bias"]
+    PI --> OUT["motor_set_speed()<br/>PWM %"]
+    OUT --> MOTOR["AT8236 → motor"]
+    MOTOR -.->|"ticks"| ENC
 ```
+<p align="center"><strong>Fig. 3</strong> — Wheel-Speed PID Loop (per wheel)</p>
 
-It's not auto-tuned or measured — the operator watches the car drive straight, sees which way it
-drifts, and nudges the value until it stops.
+Incremental PI (accumulates `Pwm` from `Bias` deltas) rather than a positional PID — naturally
+rate-limits output changes, which matters for not stalling the AT8236's gate drive (see the
+locked-antiphase note in [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)).
 
-**Proposed equivalent for `mdp_stm32`, if this symptom shows up after bench-tuning the PID:**
+The safety layers wrap the loop and always win: the 500ms stale-command fail-safe
+(`uart_command_is_stale`) and the `PD3` motor switch check zero the PWM output unconditionally,
+ahead of/around the PID — the PID can never override those.
 
-- Two simple constants (or one WHEELTEC-style centered 0-100 knob, either works) — e.g.
-  `MOTOR_LEFT_TRIM`/`MOTOR_RIGHT_TRIM`, defaulting to `1.0f` (neutral, no change in behavior until
-  touched).
-- Applied to `left_rad_s`/`right_rad_s` **before** `motor_pid_set_target()` is called (`main.c`), so
-  the trim adjusts what the PID is asked to track, not the PID itself — keeps the PID's own logic
-  untouched.
-- Tuned the same pragmatic way WHEELTEC does it: drive straight, watch which way it curves, nudge
-  the trim on the lagging side, repeat — no closed-loop auto-detection needed, this is a manual knob
-  by design (same reasoning as WHEELTEC's own choice not to over-engineer it).
+`MOTOR_PID_KP=4.0f`/`MOTOR_PID_KI=0.5f` are untuned placeholder gains — see
+[Bench-Tuning the Motor PID](index.md#bench-tuning-the-motor-pid) for the tuning procedure.
 
-**When to actually add this**: only if, after the PID is bench-tuned and tracking each wheel's own
-target correctly, the car still visibly curves during a straight `/cmd_vel` command. If it drives
-straight once the PID's tuned, this isn't needed at all — don't add it preemptively.
+**Limitation**: matching each wheel's own encoder-measured rad/s doesn't guarantee equal *real*
+ground speed — different effective wheel radius/tire wear/alignment is invisible to the encoder.
+A perfectly-tuned PID can still leave the car curving on a straight command — see
+[Wheel-speed trim](#wheel-speed-trim) below.
+
+### Wheel-speed trim
+
+Not implemented — only add if the car still visibly curves on a straight `/cmd_vel` command *after*
+the PID is bench-tuned and each wheel is confirmed tracking its own target correctly. If it drives
+straight once tuned, skip this.
+
+If needed: two constants, `MOTOR_LEFT_TRIM`/`MOTOR_RIGHT_TRIM` (default `1.0f`, neutral), applied to
+`left_rad_s`/`right_rad_s` before `motor_pid_set_target()` — adjusts what the PID is asked to track,
+not the PID itself. Tuned by feel: drive straight, see which way it curves, nudge the trim on the
+lagging side, repeat.
 
 ---
 
 ## Servo Range & Steering Calibration
 
-**Correction to an earlier note here**: WHEELTEC's `control.c` (`Kinematic_Analysis()`) computes the
-servo pulse as a pure linear gain with no measured-limit clamp:
+**The problem**: the servo-command-to-real-wheel-angle relationship isn't linear, and isn't symmetric
+between left and right — one side needs 27° commanded, the other 41°, to reach the same ~32.5° real
+wheel angle. This is a property of any rigid-linkage Ackermann steering mechanism (confirmed against
+WHEELTEC's own kinematics manual — no such linkage can hold a constant ratio across its full range),
+not a defect specific to this chassis.
+
+**The real fix**: fit a cubic curve per side from measured (servo angle, real angle) data, instead of
+assuming a linear gain. This is the same fix WHEELTEC uses on boards without a linkage feedback
+sensor (open-loop PWM only, same as this project).
+
+:white_check_mark: **Implemented (2026-09-03)**, adapted directly from WHEELTEC's own reference
+firmware (`R550_C30D(2.0)` chassis source, `BALANCE/balance.c`, `Drive_Motor()`'s `Akm_Car` branch)
+rather than fitting our own from scratch:
 
 ```c
-Servo = SERVO_INIT - angle*K;   // K = 570.8f, no software clamp to a verified lock angle
+Angle_Servo = -0.628*angle^3 + 1.269*angle^2 - 1.772*angle + 1.573;
+Servo_us    = 1500 + (Angle_Servo - 1.572) * 636.56;   // clamped to 800-2200us
 ```
 
-— but this turns out to be their **simplified/older** example, not their actual documented
-methodology. Their real answer, found in both the theory manual and their current `balance.c` source,
-is that the servo-command-to-real-angle relationship is **not linear at all**, and they solve it with
-an **empirically-measured cubic curve fit**, not a constant gain. Full breakdown below, since this is
-the actual engineering answer to "why does one side need 27° commanded and the other 41° for the
-same ~32.5° real angle."
+Reasoning for adopting their coefficients directly instead of re-deriving our own: the underlying
+nonlinearity is a property of the physical rigid-linkage Ackermann mechanism itself (see "The
+problem" above — no such linkage holds a constant ratio across its range), not something specific
+to their sample unit, so the curve *shape* was expected to transfer.
 
-### The real problem, in the vendor's own words
+**Hardware-tested (2026-09-03)**, confirmed against the actual chassis:
+- Sign convention matches ours (positive angle = wheel turns right, negative = left) — no flip.
+- Their clamp bounds (`-28.1°` left / `+18.3°` right, non-symmetric) do **not** transfer as-is:
+  `-28.1°` lands close to this unit's real left lock, but `+18.3°` is confirmed conservative — this
+  unit's real right-side lock is further out than that. Expected per-unit variance (servo trim +
+  linkage assembly tolerance), consistent with the old linear clamps (41°/27°) also being
+  unit-specific rather than a spec value.
 
-Translated from `轮式移动机器人的运动学模型.pdf`, Section 8 ("Supplementary note on the Ackermann
-steering mechanism"):
+**Current status**: `SERVO_ANGLE_MAX_LEFT_RAD`/`SERVO_ANGLE_MAX_RIGHT_RAD` (`servo.h`) are set to
+WHEELTEC's `28.1°`/`18.3°` bounds as a **provisional, safe-to-drive-on clamp** — not yet the
+accurate real-lock values, and confirmed leaving real range unused on the right side. **Not yet
+prioritized for refinement** — deferred behind bench-tuning the wheel-speed PID (see
+[Bench-Tuning the Motor PID](index.md#bench-tuning-the-motor-pid)), then full-pipeline
+(host↔MCU) verification.
 
-> No mature mechanism exists that can make the inner and outer steering wheels' angles precisely
-> satisfy the ideal Ackermann relationship (`cot(δ_outer) − cot(δ_inner) = track_width / wheelbase`)
-> across the *entire* range — it can only be **approximated**, via a trapezoidal linkage or a
-> derivative of one. [...] The servo acts as the driving element in the whole steering mechanism.
-> There are two ways our products control the servo's rotation: (1) sending a PWM value that drives
-> the servo directly, with no slider position sensor / no trapezoidal-linkage feedback; or (2) sending
-> slider position information and using incremental PID to control the PWM magnitude, indirectly
-> controlling the servo via closed-loop position control (requires a slider position sensor). Both
-> cases are explained below.
-
-This directly confirms what we found by measurement: **every simple rigid-linkage Ackermann steering
-mechanism has this problem** — it isn't specific to this chassis being poorly built. The vendor
-splits their fix into two cases depending on whether the hardware has a feedback sensor. This project
-has no such sensor (open-loop PWM only), so their **case 1** below is the one that applies to us.
-
-### Case 1 — no feedback (our situation): fit a curve from measured data, don't assume linearity
-
-Translated, Section 8.1:
-
-> In this case, we mainly investigate the relationship between the servo's rotation angle (which
-> corresponds 1:1 with the PWM value) and the car's front wheel steering angle (using the left wheel
-> as the reference), taking the high-spec Ackermann car as an example. First, plot a scatter graph
-> from known data (measured experimentally) — see Figure 8-3. By inspection, it's clear the curve's
-> trend can be fitted with a quadratic or cubic curve. For simplicity, MATLAB's curve-fitting toolbox
-> can be used (type `cftool` at the MATLAB command line) to check the fit — a cubic curve was chosen
-> here, since (avoiding overfitting) a higher-order fit generally does better — see Figure 8-4.
-> Finally, looking at the fit result, the goodness-of-fit R² comes out close to 1 — the data fits
-> well. See Figure 8-5.
-
-**Their actual worked example** (steering angle in radians, read from the published scatter plot,
-Figure 8-3 — this is for their "high-spec Ackermann" reference chassis, not this project's car, but
-shows the method with real numbers):
-
-| Steering angle (rad) | Servo PWM (µs) |
-| --- | --- |
-| -0.38 | 1100 |
-| -0.36 | 1150 |
-| -0.34 | 1200 |
-| -0.24 | 1250 |
-| -0.17 | 1350 |
-| -0.09 | 1450 |
-| 0.00 | 1500 |
-| 0.02 | 1550 |
-| 0.20 | 1650 |
-| 0.37 | 1750 |
-| 0.53 | 1800 |
-| 0.60 | 1850 |
-
-Note the data isn't symmetric around 0° either — same asymmetry pattern we found on our own chassis
-(more travel available on one side than the other), and it isn't evenly spaced — it's whatever they
-actually measured, not a synthetic/assumed spread.
-
-**Their fitted cubic** (Figure 8-5, MATLAB `cftool`, model type `Poly3`):
-
-```
-f(x) = p1·x³ + p2·x² + p3·x + p4
-
-p1 = -27.25   (95% CI: -723.1 to 668.6)
-p2 = -443.1   (95% CI: -689.4 to -196.9)
-p3 =  824.5   (95% CI:  690.7 to 958.2)
-p4 =  1507
-
-Goodness of fit: SSE = 4474, R² = 0.994, Adjusted R² = 0.9918, RMSE = 23.65
-```
-
-`f(x)` here maps *steering angle (radians) → PWM pulse width (µs)* directly — a single-stage cubic,
-simpler than `balance.c`'s two-stage version (radians→servo-shaft-angle via cubic, then
-servo-shaft-angle→PWM via a linear `Ratio`) found earlier in this doc, but the same underlying idea:
-**fit the real measured curve, don't assume a straight line.** Both are valid implementation choices
-for the same fix; which one to use is a matter of convenience, not correctness.
-
-### Applying this to our own car — the actual plan
-
-1. **Measure (commanded angle, real angle) pairs across the range, on each side separately** — not
-   just the two full-lock extremes we already have. A handful of intermediate points per side
-   (e.g. ~5-6 points spanning 0° to each side's max) is enough for a good cubic fit, mirroring the
-   ~12-point spread in the vendor's own example above.
-2. **Fit a cubic per side** (`numpy.polyfit(x, y, 3)` — no MATLAB needed, same underlying least-squares
-   method `cftool` uses) and check the R² the same way they did, to confirm the fit is actually good
-   before trusting it.
-3. **Replace the single linear `SERVO_ANGLE_SCALE_RAD` conversion in `servo_set_angle()`** with the
-   fitted cubic (evaluated per side, since we already know the two sides' curves differ) — same
-   architectural slot `balance.c`'s `Angle_Servo = f(AngleR)` occupies, just fit to our own chassis's
-   actual measured data instead of theirs.
-4. This resolves both open questions from this session at once: the "diminishing angle per commanded
-   unit near the limit" behavior (a cubic naturally captures that curvature, a linear gain can't) and
-   the left/right asymmetry (fitting two separate cubics, one per side, handles it directly instead of
-   patching it with a shared rate + different clamps).
+**Next calibration step (when revisited)**: fine-sweep the right side past `18.3°` (tooling already
+exists: `selftest.c`'s `servo_sweep_right_fine()`, currently unwired into `selftest_run()`, sweeps
+`35-55°` commanded via `servo_set_angle_raw()`) to find this unit's real right-side lock, then
+decide whether to keep WHEELTEC's coefficients with a widened right clamp, or refit our own cubic
+per side from measured (commanded angle, real wheel angle) data per the original plan below.
 
 Procedure for the physical measurement side (no special tools beyond a protractor / phone protractor
 app):
@@ -249,48 +115,27 @@ app):
 5. Check **both** left and right separately — Ackermann knuckles aren't always symmetric, so don't
    assume the ± range is equal.
 
-:white_check_mark: **Calibrated on physical hardware**, via progressively finer sweeps ending in a
-degree-by-degree (1° resolution, 1.5s/step) pass per side. Final operating limits:
+:white_check_mark: Calibrated on hardware via degree-by-degree sweeps per side. Final operating
+limits (commanded unit, stored in radians per REP-103 to match the rest of the stack):
 
 | Side | `servo.h` constant | Value |
 | --- | --- | --- |
 | Right | `SERVO_ANGLE_MAX_RIGHT_RAD` | **41°** (~0.7156 rad) |
 | Left | `SERVO_ANGLE_MAX_LEFT_RAD` | **27°** (~0.4712 rad) |
 
-Stored in **radians**, not degrees — `servo_set_angle()`'s unit was changed to match REP-103 (ROS's
-standard: SI units, radians for angles), the same convention `ackermann_steering_controller`/URDF/the
-`CommandPacket`'s `steer_rad` field already use throughout the rest of the stack. `main.c` used to
-convert the command packet's `steer_rad` to an internal "angle_deg" and back — that indirection (and
-the ambiguity noted below about what "angle_deg" actually represented) is gone; degree literals are
-kept only as comments next to each `_RAD` constant, since that's how they were physically measured.
+Genuinely asymmetric, not a rough estimate — Ackermann knuckles aren't guaranteed symmetric.
+`selftest.c`'s `servo_sweep_range()` sweeps either direction, and `servo_set_angle_raw()` bypasses
+the operating clamp for calibration probing.
 
-Genuinely asymmetric, confirmed at 1° resolution, not a rough estimate — earlier coarse passes (5°
-steps) suggested roughly right~30-35/left~25-30 before the fine sweeps narrowed each side down to
-an exact confirmed value. `selftest.c`'s sweep helper (`servo_sweep_range()`) supports sweeping
-either direction (ascending or descending) and any sub-range via `servo_set_angle_raw()`
-(bypasses the operating clamp, calibration-only) — used repeatedly during this process to zoom into
-each side's real limit without re-running the full range each time.
+The `HWZ020`'s datasheet-rated range is ±22.35° — smaller than the operating value above, because
+the datasheet describes the servo's own internal travel, not the actual wheel steering angle this
+chassis's linkage achieves. The chassis-measured value is what governs safe operation here.
 
-Note the `HWZ020`'s own **datasheet-rated** range (`docs/hardware.md`, official course component
-spec) is ±22.35° — the operating value here exceeds that. The datasheet number describes the
-servo's own internal rotational travel as a component; what was measured describes the actual wheel
-steering angle achieved through *this chassis's specific linkage geometry* before physical
-interference, which is a different (and larger) number. Both are legitimate, they're just answering
-different questions — the chassis-measured value is what actually governs safe operation here since
-it accounts for the real linkage, not just the bare servo spec.
-
-**Implementation** (`servo.h`/`servo.c`, `selftest.c`): `servo_set_angle(float angle_rad)` clamps
-asymmetrically — `+SERVO_ANGLE_MAX_RIGHT_RAD` / `-SERVO_ANGLE_MAX_LEFT_RAD` — while keeping a single
-fixed `SERVO_ANGLE_SCALE_RAD` (~0.7854 rad, i.e. 45°) for the radians→microseconds conversion, so the
-pulse-per-radian rate stays identical on both sides; only the clamp differs. `main.c` passes the
-command packet's `steer_rad` straight through with no unit conversion; `selftest.c`'s sweep still
-picks a step size in degrees for human-friendly config, converting once to radians at the top of the
-file, and converts back to degrees only for the OLED readout (display-only, not the underlying unit).
-The pulse range
-(`SERVO_PULSE_MIN_US`/`MAX_US` = 600/2400µs) is kept at the widened value used during sweep testing
-— that's the range the per-side clamps were actually validated against, reverting it to stock would
-break the calibration rather than restore safety. The self-test sweep (phase 3) sweeps the left limit
-first (`-27°`), then ascends slowly to the right limit (`+41°`), matching the confirmed values above.
+**Implementation** (`servo.h`/`servo.c`): `servo_set_angle(float angle_rad)` clamps asymmetrically
+(`+SERVO_ANGLE_MAX_RIGHT_RAD` / `-SERVO_ANGLE_MAX_LEFT_RAD`) while keeping one fixed
+`SERVO_ANGLE_SCALE_RAD` (~0.7854 rad / 45°) for the radians→microseconds conversion — pulse-per-radian
+rate is identical both sides, only the clamp differs. `SERVO_PULSE_MIN_US`/`MAX_US` (600/2400µs) is
+the widened range the clamps were validated against — don't revert it to stock.
 
 ### Command resolution — how finely the steering angle can actually be set
 
@@ -356,45 +201,17 @@ Important distinction worth being explicit about: the firmware-side calibration 
 (`angle_deg`→radians, `servo_set_angle()`'s own convention) — it is **not** the real steering
 angle, just the commanded value needed to reach the real physical lock point on each side.
 
-**Session 1** — protractor measurement at the wheel, taken during a turn test, 4 raw readings:
-left-as-inner 32.68°, right-as-inner 33.69°, left-as-outer 31.00°, right-as-outer 30.96°.
+**Method**: protractor measurement at the wheel, 8 raw readings across 2 sessions (both wheels, both
+firmware-clamped commanded extremes). This is a single shared servo/linkage driving both front
+wheels (servo → right wheel's knuckle → tie-rod → left wheel), so both wheels are expected to reach
+the same real angle at full lock, and all 8 readings are treated as noisy samples of one true value —
+the servo's own command resolution (~0.05°) is well finer than manual protractor precision, so
+measurement noise dominates, not the mechanism.
 
-**Session 2** — a cleaner direct re-measurement: commanded the servo straight to each
-firmware-clamped extreme (`SERVO_ANGLE_MAX_LEFT_RAD`/`RIGHT_RAD`) and held for 8s
-(`selftest.c`'s `servo_sweep()`), measuring *both* wheels at *each* extreme, 4 more raw readings:
-
-| Commanded position | Right wheel | Left wheel |
-| --- | --- | --- |
-| RIGHT max (+41° commanded) | 32.47119229° | 30.25643716° |
-| LEFT max (-27° commanded) | 32.73522627° | 34.50852299° |
-
-**Precision & mode analysis**: this is a single shared servo/linkage driving both front wheels —
-the servo connects directly to the right wheel's knuckle, and the right wheel connects to the left
-via a tie-rod. Both wheels are expected to reach the same real angle at full lock (not a true
-trapezoidal-Ackermann inner/outer differential), so all 8 readings across both sessions are treated
-as noisy samples of one true value. The servo's own command resolution floor is ~0.05° (1µs pulse
-step), well finer than manual protractor reading precision, so the dominant error source is the
-measurement itself, not the mechanism.
-
-Rounding all 8 readings to the nearest 0.5°:
-
-| Raw | Nearest 0.5° |
-| --- | --- |
-| 30.96375653 | 31.0 |
-| 31.00271913 | 31.0 |
-| 32.68055474 | 32.5 |
-| 33.69006753 | 33.5 |
-| 32.47119229 | 32.5 |
-| 34.50852299 | 34.5 |
-| 32.73522627 | 32.5 |
-| 30.25643716 | 30.5 |
-
-**32.5° is the mode** (3 of 8 readings agree there, vs. 2 for the next-most-common value, 31.0°) —
-taken as the answer over the mean. Cross-checked independently using only the 4 right-wheel readings
-(right is the directly-driven side, one linkage joint closer to the servo than left, so in principle
-the more trustworthy measurement point even though session 1's right-wheel pair alone wasn't
-particularly tight) — those 4 also mode to 32.5°, the same answer both ways. Final value:
-**32.5° (0.5672 rad)**, symmetric on both sides.
+**Result**: rounding to the nearest 0.5°, **32.5° is the mode** (3 of 8 readings, vs. 2 for the
+next-most-common value) — taken as the answer over the mean. Cross-checked using only the
+right-wheel readings (the directly-driven side) independently, which also mode to 32.5°. Final
+value: **32.5° (0.5672 rad)**, symmetric on both sides.
 
 `mdp_description/urdf/mini_akm_real_robot.urdf`'s `left_joint`/`right_joint` limits are now
 `±0.5672 rad` (32.5°) — since URDF joint limits are meant to represent the real steering angle

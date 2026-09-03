@@ -15,7 +15,7 @@ controller drive both sim and real hardware unmodified.
 Both simulation and real hardware use the exact same `ackermann_steering_controller` implementation:
 
 - **Simulation Mode**: `ackermann_steering_controller` connects directly to Gazebo via `gz_ros2_control` plugin.
-- **Real Hardware Mode**: `ackermann_steering_controller` connects to `topic_based_ros2_control` which bridges topics to `mdp_bridge` (`serial_bridge_node`). The originally-planned micro-ROS Agent path was superseded by this custom binary protocol.
+- **Real Hardware Mode**: `ackermann_steering_controller` connects to `topic_based_ros2_control` which bridges topics to `mdp_bridge` (`serial_bridge_node`), using a custom binary protocol.
 
 ## Ackermann Controller Parameters (`ackermann_controller.yaml` & `real_controller.yaml`)
 

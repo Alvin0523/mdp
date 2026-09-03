@@ -53,6 +53,21 @@ graph TD
 ```
 <p align="center"><strong>Fig. 1</strong> — STM32 System Overview</p>
 
+## Architecture & Design Decisions
+
+- **No RTOS** — bare-metal HAL. Timing is hand-coordinated via NVIC interrupt priorities + shared
+  `volatile` globals, not scheduler tasks.
+- **Priority rule**: the actuator-driving loop (motor PID, `TIM7`) always gets the highest priority
+  in the system.
+- **Two main-loop rate tiers**: fast (100Hz — command/safety/IMU/telemetry) and slow (~5Hz —
+  OLED/battery/debug), not one shared 10Hz loop.
+- **Closed-loop wheel-speed PID runs on the STM32**, not the Pi/EKF — only place with low-latency
+  access to both PWM timers and encoder counters in the same cycle.
+- **Custom binary protocol over `USART3`** — see [Serial Protocol](serial_protocol.md).
+
+See [Firmware Architecture](architecture.md) for the full reasoning/implementation, and
+[Control Tuning & Calibration](tuning.md) for PID/servo control theory.
+
 ## Folder & File Hierarchy
 
 ```text
@@ -69,24 +84,23 @@ mdp_stm32/
     └── selftest.c             # Scripted drive/steer self-test
 ```
 
-## Pages
+## Learn More
 
-- [**Firmware Architecture**](architecture.md) — Interrupt/timing design, driver internals, pin allocations.
-- [**Control Tuning & Calibration**](tuning.md) — Closed-loop wheel-speed PID theory, servo range/steering calibration, IMU → EKF data flow.
-- [**Serial Protocol**](serial_protocol.md) — Binary framing, telemetry/command packet layout, stale-link fail-safe.
+| Topic | What it covers |
+| --- | --- |
+| [**Firmware Architecture**](architecture.md) | Interrupt/timing design, driver internals, pin allocations. |
+| [**Control Tuning & Calibration**](tuning.md) | Closed-loop wheel-speed PID theory, servo range/steering calibration, IMU → EKF data flow. |
+| [**Serial Protocol**](serial_protocol.md) | Binary framing, telemetry/command packet layout, stale-link fail-safe. |
 
 ---
 
 ## Overview: motor, servo & telemetry flow
 
-Command path is the same shape as WHEELTEC's own motor-control flow diagram (`STM32运动底盘开发手册`,
-图 6-4), adapted to this project's actual hardware — 2 driven wheels (A=left, B=right, matching the
-diagram's note that Ackermann chassis only use motors A/B) and 1 steering servo, with the servo
-path's cubic correction stage marked as planned (see
+Per-signal detail behind Fig. 1's boxes — 2 driven wheels + 1 steering servo, with the servo path's
+cubic correction stage marked as planned (see
 [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) since it isn't
-implemented yet. The telemetry path back to the Pi isn't just encoder feedback — every 100Hz tick
-also packs in IMU, battery voltage, and the motor ON/OFF switch state (see
-[Interrupt / Timing Architecture](architecture.md#interrupt-timing-architecture)):
+implemented yet. Telemetry packs in IMU, battery voltage, and the motor switch state alongside
+encoder feedback every 100Hz tick:
 
 ```mermaid
 flowchart LR
@@ -125,36 +139,43 @@ flowchart LR
 ```
 <p align="center"><strong>Fig. 2</strong> — Motor, Servo & Telemetry Flow</p>
 
-!!! note "Only 2 motors, 1 servo - no C/D motors or omni/mecanum paths"
-    WHEELTEC's own diagram (图 6-4) covers up to 4 drive motors for their omni/mecanum chassis
-    variants, with a note that differential and Ackermann chassis only use motors A/B and the X/Z
-    target axes. This project is Ackermann-only, so that's the only row that applies here.
+!!! note "Ackermann-only: 2 motors, 1 servo"
+    This project only uses motors A/B + one steering servo — no C/D motors or omni/mecanum paths.
 
-!!! warning "Status: implemented, NOT yet bench-tested — test/tune this before anything else"
-    The closed-loop wheel PID (see [Control Tuning & Calibration](tuning.md#closed-loop-wheel-speed-control))
-    is **implemented** in `mdp_stm32` (`motor_pid_init` /
-    `motor_pid_enable` / `motor_pid_set_target` / `motor_pid_get_measured_rad_s` / `motor_pid_pause`
-    / `motor_pid_resume` in `motor.c`, wired into `main.c` and `selftest.c`) but has **never run on
-    physical hardware** — `MOTOR_PID_KP=4.0f`/`MOTOR_PID_KI=0.5f` are untuned placeholder guesses.
-    **Next action: flash it and bench-tune with the wheels off the ground before building anything
-    else on top of it** — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid) below.
-    Servo range and IMU → EKF flow (config already applied in `ekf.yaml`) are otherwise unaffected
-    and can be done independently, but PID tuning is the priority right now.
-
-    Cross-referenced against WHEELTEC's own C30D vendor firmware
-    (`references/WHEELTEC/.../R550_C30D(2.0)_..._霍尔编码器_2025.12.26.zip`) to ground the control-law
-    shape in a working reference implementation for this exact board/motor/encoder combo — gain
-    *values* were not transferable (different PWM/tick scale), only the incremental-PI structure.
+!!! warning "PID not yet bench-tested — see [TODO](#todo)"
+    Untuned placeholder gains, never run on hardware. Test/tune this before building anything else
+    on top of it — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid) below.
 
 ---
 
+## TODO
+
+- [x] Bringup (LED/printf) — verified on hardware
+- [x] AT8236 motor PWM — verified on hardware; locked-antiphase drive required, see [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)
+- [x] HWZ020 steering servo — verified on hardware; calibrated 1° resolution: right 41°, left 27° (commanded unit), see [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)
+- [x] URDF steering limits — updated to `±0.5672 rad` (32.5°), replaces datasheet spec, see [tuning.md](tuning.md#resolved-urdf-steering-limit-now-matches-the-real-measured-steering-angle); not yet re-validated on hardware
+- [ ] Closed-loop wheel-speed PID — implemented, **not bench-tuned or hardware-tested**. `MOTOR_PID_KP=4.0f`/`KI=0.5f` are untuned placeholders. **Next priority** — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)
+- [x] `PD3` motor switch gating — implemented, functionally confirmed; polarity not yet cross-checked with a multimeter
+- [x] NVIC interrupt priorities — verified on hardware; motor PID (`TIM7`) now highest-priority, see [Interrupt / Timing Architecture](architecture.md#interrupt-timing-architecture)
+- [ ] Main loop rate tiers (100Hz/5Hz) — implemented, not yet hardware-tested, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation)
+- [x] Hall encoder driver + ticks/rev — verified on hardware; 1560 ticks/rev confirmed both wheels, see [Ticks-per-revolution](architecture.md#ticks-per-revolution-physically-confirmed-on-hardware). Wheel diameter/rolling radius for ticks→distance still unconfirmed
+- [x] ICM-20948 IMU driver — implemented
+- [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run real` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md#serial-protocol)
+- [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
+- [x] Automated self-test (`selftest.c`) — verified on hardware
+- [ ] Ultrasonic (HC-SR04) driver — not started
+- [ ] IR distance sensors (Sharp GP2Y0A21YK ×2) driver — not started
+
+---
+
+See [Quickstart](../quickstart.md) for every `pixi run` command (setup, flash, monitor, teleop) —
+this page stays theory-only from here on.
+
 ## Bench-Tuning the Motor PID
 
-!!! warning "Do this before anything else builds on top of it"
-    The closed-loop wheel PID is implemented but has never run on physical hardware —
-    `MOTOR_PID_KP=4.0f`/`MOTOR_PID_KI=0.5f` are untuned placeholder guesses. See
-    [Control Tuning: Closed-Loop Wheel Speed Control](tuning.md#closed-loop-wheel-speed-control)
-    for why it's designed this way.
+Do this before anything else builds on top of the wheel PID — see
+[Control Tuning: Closed-Loop Wheel Speed Control](tuning.md#closed-loop-wheel-speed-control) for why
+it's designed this way.
 
 1. Flash (`pixi run flash`), get the robot up on blocks so the wheels spin free.
 2. Send a step target via ROS (`ros2 topic pub /joint_commands ...` with a fixed `velocity` for
@@ -172,7 +193,7 @@ flowchart LR
    trusting it for real runs — this is a meaningfully different load than free-spinning wheels.
 
 If, after tuning, the car still curves during a straight `/cmd_vel` command, see
-[Control Tuning: Wheel-speed trim](tuning.md#wheel-speed-trim-a-tool-to-reach-for-if-one-wheel-is-no-good-after-pid-tuning).
+[Control Tuning: Wheel-speed trim](tuning.md#wheel-speed-trim).
 
 ---
 
@@ -238,43 +259,11 @@ ros2 topic pub /joint_commands sensor_msgs/msg/JointState \
 ```
 Wheels should spin slowly and the servo should turn — confirms the full STM32 -> Pi -> STM32 loop.
 
----
+## Not Yet Verified On Hardware
 
-## Verified / Not Yet Verified On Hardware
-
-**Verified:**
-
-- STM32-side firmware builds (`pixi run build`) and flashes (`pixi run flash`) cleanly.
-- `PD3` motor switch polarity assumption — functionally confirmed (self-test correctly refuses with the quick 5-blink pattern when the switch is in the disabled position, runs normally otherwise). Not yet confirmed with a multimeter against the raw pin voltage.
-- Full protocol round-trip (`ackermann_steering_controller` → `topic_based_ros2_control` → `mdp_bridge` → STM32 → motors/servo, and telemetry back) — confirmed via `pixi run real` + `pixi run teleop`, after fixing two bugs found along the way: the `/joint_commands` array-indexing bug and the steering sign-convention mismatch.
-- The automated self-test sequence (`selftest.c`) — confirmed running on physical hardware, including actual wheel rotation, after fixing the motor driver's PWM scheme (see [Firmware Architecture: AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)).
-- Steering servo range — calibrated on physical hardware at 1° resolution per side (see [Control Tuning: Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)).
-- Hall encoder ticks-per-revolution (1560) — physically confirmed on both wheels via a 10-rotation hand-turn test (see [Firmware Architecture: Ticks-per-revolution](architecture.md#ticks-per-revolution-physically-confirmed-on-hardware)).
-
-**Not yet verified:**
-
-- Closed-loop wheel-speed PID — implemented, not bench-tuned or hardware-tested (see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid) above).
-- `PD3` motor switch polarity has not been confirmed with a multimeter against the raw pin voltage (only functionally, via self-test behavior).
-- Battery voltage ADC divider ratio (11x) — sourced from WHEELTEC's vendor example firmware, not cross-checked against a multimeter on this specific board.
+- Closed-loop wheel-speed PID — implemented, not bench-tuned or hardware-tested (see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)).
+- `PD3` motor switch polarity — only confirmed functionally (self-test refusal), not with a multimeter.
+- Battery voltage ADC divider ratio (11x) — sourced from vendor firmware, not cross-checked with a multimeter.
 - Wheel diameter / effective rolling radius for ticks→real-distance conversion — unconfirmed.
-
----
-
-## TODO
-
-- [x] PlatformIO/STM32Cube HAL Project Bringup — LED blink (`PE8`) + `printf` serial logging over `USART3`, verified on physical board
-- [x] AT8236 Motor PWM Driver — `TIM9`/`TIM10`/`TIM11` PWM implemented (`motor_init`, `motor_set_speed`); **on-hardware drive test confirmed** (locked-antiphase drive scheme required, see [Firmware Architecture](architecture.md#at8236-motor-driver-motorc))
-- [x] HWZ020 Steering Servo Driver (`PB15` / TIM12_CH2) — Implemented (`servo_init`, `servo_set_angle`); on-hardware steering confirmed via ROS2 teleop; **mechanical steering-lock commanded values calibrated at 1° resolution: right 41°, left 27°** (firmware-internal pulse-mapped unit, not real angle) — see [Control Tuning](tuning.md#servo-range-steering-calibration)
-- [x] URDF `left_joint`/`right_joint` limits updated to `±0.5672 rad` (32.5°) — the **steering angle** physically measured with a protractor, 8 raw readings across 2 measurement sessions (both wheels, both firmware-clamped commanded extremes). Mode at 0.5° resolution (32.5°, agreed on by 3 of 8 readings, confirmed independently via right-wheel-only readings too) taken as the answer over the mean — see [Control Tuning](tuning.md#resolved-urdf-steering-limit-now-matches-the-real-measured-steering-angle). Replaces the servo's bare datasheet spec (`±0.39 rad`/22.35°). Not yet re-validated on hardware after the change
-- [ ] Closed-Loop Wheel Speed PID — **Implemented, NOT yet bench-tuned or hardware-tested** (`motor_pid_init/enable/set_target/get_measured_rad_s/pause/resume` in `motor.c`, TIM7 100Hz ISR, hybrid feedforward+incremental-PI). `MOTOR_PID_KP=4.0f`/`MOTOR_PID_KI=0.5f` are untuned placeholder gains. **This is the next priority item** — flash and bench-test (wheels off the ground) before any other `mdp_stm32` work builds on top of it. See [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)
-- [x] Motor switch (`PD3`) now gates the driving loop directly in `main.c` (not just self-test) — switch OFF forces 0% PWM regardless of host commands; not yet hardware-tested
-- [x] NVIC interrupt priorities reordered — motor PID (`TIM7`) is now the highest-priority app interrupt (was previously *lowest*, an oversight that let the button/UART preempt the safety-critical motor loop); see the ownership table in [Firmware Architecture: Interrupt / Timing Architecture](architecture.md#interrupt-timing-architecture)
-- [x] Main loop split into two rate tiers (100Hz command/IMU/telemetry, ~5Hz OLED/battery/debug) instead of one shared 10Hz `HAL_Delay` — telemetry TX converted to interrupt-driven (`HAL_UART_Transmit_IT`) to make 100Hz viable; not yet hardware-tested. See [Firmware Architecture: Main loop timing allocation](architecture.md#main-loop-timing-allocation)
-- [x] Hall Encoder Driver (TIM2 / TIM3) — Implemented (`encoder_init`, delta + cumulative tick reads). **Ticks-per-revolution (1560) physically confirmed on hardware** for both wheels via a 10-rotation hand-turn test (average landed on exactly 1560.0 ticks/rev, both sides, no systematic left/right discrepancy) — see [Firmware Architecture](architecture.md#ticks-per-revolution-physically-confirmed-on-hardware). Wheel diameter/effective rolling radius for ticks→real-distance conversion is still unconfirmed
-- [x] ICM-20948 IMU Driver (bit-banged software I2C, `PB10`/`PB11`) — Implemented
-- [x] Onboard Motor ON/OFF Switch (`PD3`) — Implemented (`motor_estop_engaged`); active-low polarity functionally confirmed via self-test refusal behavior, not yet confirmed with a multimeter
-- [x] Serial Protocol + `mdp_bridge` — Custom binary protocol over `USART3` implemented on both sides (see [Serial Protocol](serial_protocol.md#serial-protocol)); replaces the originally planned micro-ROS transport; **full round-trip on-hardware validated** via `pixi run real` + `pixi run teleop` (two bugs found and fixed along the way — see [RPi: ROS2 Jazzy](../rpi/ros2_jazzy.md#core-topic-specifications))
-- [x] Battery Voltage ADC (`PB0` / ADC1_CH8) — Implemented (`battery_init`, `battery_read_voltage`); divider ratio (11x) sourced from WHEELTEC's C30D vendor example firmware, not yet cross-checked against a multimeter on this specific board
-- [ ] Ultrasonic Distance Sensor (HC-SR04) Driver — Not started
-- [ ] IR Distance Sensor (Sharp GP2Y0A21YK ×2) Driver — Not started
+- Main loop rate tiers (100Hz/5Hz) and URDF steering limits — implemented/updated, not yet re-validated on hardware.
 

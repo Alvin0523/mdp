@@ -6,7 +6,7 @@ icon: lucide/cable
 
 ## Serial Protocol
 
-Custom lightweight binary protocol over `USART3` (Type-C Port 3, `PD8`/`PD9`, 115200 baud) linking the STM32 firmware to the `mdp_bridge` ROS2 node on the Pi. Supersedes the originally planned micro-ROS transport.
+Custom lightweight binary protocol over `USART3` (Type-C Port 3, `PD8`/`PD9`, 115200 baud) linking the STM32 firmware to the `mdp_bridge` ROS2 node on the Pi.
 
 Implementations:
 
