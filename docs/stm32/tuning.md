@@ -81,25 +81,43 @@ problem" above — no such linkage holds a constant ratio across its range), not
 to their sample unit, so the curve *shape* was expected to transfer.
 
 **Hardware-tested (2026-09-03)**, confirmed against the actual chassis:
-- Sign convention matches ours (positive angle = wheel turns right, negative = left) — no flip.
-- Their clamp bounds (`-28.1°` left / `+18.3°` right, non-symmetric) do **not** transfer as-is:
-  `-28.1°` lands close to this unit's real left lock, but `+18.3°` is confirmed conservative — this
-  unit's real right-side lock is further out than that. Expected per-unit variance (servo trim +
-  linkage assembly tolerance), consistent with the old linear clamps (41°/27°) also being
-  unit-specific rather than a spec value.
+- Sign convention was initially assumed to match WHEELTEC's own (positive = right) — **this was
+  wrong**. Directly confirmed on physical hardware (observer standing behind the robot, facing the
+  same way it drives) that **positive = left, negative = right** on this unit — which actually
+  matches REP-103 (positive yaw/turn = CCW = left) directly, so no sign translation is needed
+  anywhere in the ROS↔MCU stack after all (see `mdp_bridge/serial_bridge_node.cpp`).
+- The two fine-sweeps below were run *before* this sign convention was confirmed, so they were
+  initially mislabeled LEFT/RIGHT by the (wrong) assumption. The magnitudes found are correct; only
+  the labels needed correcting once the physical direction was actually confirmed.
+- WHEELTEC's own clamp bounds (`28.1°`/`18.3°`) did **not** transfer as-is either way — both were
+  confirmed conservative on this unit. Expected per-unit variance (servo trim + linkage assembly
+  tolerance), consistent with the old linear clamps (41°/27°) also having been unit-specific.
 
-**Current status**: `SERVO_ANGLE_MAX_LEFT_RAD`/`SERVO_ANGLE_MAX_RIGHT_RAD` (`servo.h`) are set to
-WHEELTEC's `28.1°`/`18.3°` bounds as a **provisional, safe-to-drive-on clamp** — not yet the
-accurate real-lock values, and confirmed leaving real range unused on the right side. **Not yet
-prioritized for refinement** — deferred behind bench-tuning the wheel-speed PID (see
-[Bench-Tuning the Motor PID](index.md#bench-tuning-the-motor-pid)), then full-pipeline
-(host↔MCU) verification.
+:white_check_mark: **Resolved (2026-09-03)** — `SERVO_ANGLE_MAX_LEFT_RAD`/`SERVO_ANGLE_MAX_RIGHT_RAD`
+(`servo.h`) are now this unit's own hardware-measured real limits, found via `selftest.c`'s fine
+sweeps (`servo_set_angle_raw()`, past the operating clamp, 1° steps):
 
-**Next calibration step (when revisited)**: fine-sweep the right side past `18.3°` (tooling already
-exists: `selftest.c`'s `servo_sweep_right_fine()`, currently unwired into `selftest_run()`, sweeps
-`35-55°` commanded via `servo_set_angle_raw()`) to find this unit's real right-side lock, then
-decide whether to keep WHEELTEC's coefficients with a widened right clamp, or refit our own cubic
-per side from measured (commanded angle, real wheel angle) data per the original plan below.
+| Side | Real limit found | Limiting factor | Clamped to |
+| --- | --- | --- | --- |
+| Left (positive) | somewhere in `50°`–`55°` | **Wheel touching the chassis**, not a servo stall — no stall found up to `55°` | `48°` (2° margin off the last confirmed-clean `50°`) |
+| Right (negative) | `26°` | Servo stall (audible, no motion) | `24°` (2° margin) |
+
+!!! warning "\"Commanded angle\" is not a confirmed real angle — terminology correction"
+    All the numbers above ("24°", "48°", etc.) are the *input value* to WHEELTEC's cubic formula,
+    not an independently-measured real wheel angle. In WHEELTEC's own code this input is meant to
+    represent a real angle (their `AngleR` feeds `R = wheelbase/tan(AngleR)`, real Ackermann
+    geometry) — we inherited that *intended* meaning by copying their formula, but never
+    independently confirmed it holds true on this chassis. What's actually been verified so far:
+    direction (positive=left) and the mechanical safety limits (stall/chassis-contact points) —
+    **not** whether "24°" commanded produces a real 24° wheel deflection. That requires a
+    protractor-at-the-wheel measurement across the range, still not done. Until then, treat these
+    as "commanded values," not confirmed real angles.
+
+The left side's exact contact-onset point between `50°` and `55°` wasn't pinned down further —
+deliberately stopped once contact was visible rather than risk more chassis contact just to find
+the precise degree. WHEELTEC's borrowed cubic *coefficients* are still in use (the mapping itself
+is unverified for accuracy across the range — see the cubic-fit plan below, still not done), but
+the clamp bounds are no longer WHEELTEC's numbers at all.
 
 Procedure for the physical measurement side (no special tools beyond a protractor / phone protractor
 app):
