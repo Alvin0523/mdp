@@ -138,9 +138,9 @@ When issuing `/opsx:propose`, include 3 key elements:
 3. **Explicit Scope Boundaries**: State what to *exclude* to keep changes incremental.
 
 ```text title="Example Propose Message"
-/opsx:propose "Integrate micro-ROS transport into mdp_stm32 firmware, replacing
-the current zenoh-pico demo. Scope: transport + rclc node wiring only.
-Do not touch motor.c or encoders — those are separate TODO items."
+/opsx:propose "Add wheel-speed trim compensation to mdp_stm32 firmware, so a
+straight /cmd_vel command doesn't curve. Scope: motor.c trim constants only.
+Do not touch the PID loop or encoders — those are separate TODO items."
 ```
 
 ---

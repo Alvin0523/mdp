@@ -13,7 +13,6 @@ Hover a name for a one-line description; click to open its documentation.
 | [ROS2 Jazzy][ext-ros2] | Host-side ROS2 distro |
 | [ros2_control / ros2_controllers][ext-ros2control] | `ackermann_steering_controller` + hardware_interface framework, see [RPi: ROS2 Control](rpi/ros2_control.md) |
 | [Gazebo][ext-gazebo] | Simulation, via `gz_ros2_control` and `ros_gz` |
-| [micro-ROS][ext-microros] | Originally planned host↔MCU transport; superseded by `mdp_bridge`'s custom binary protocol |
 | [PlatformIO][ext-platformio] | Build/flash toolchain for `mdp_stm32` (STM32Cube HAL) |
 | [pixi][ext-pixi] | Environment/task manager used across this repo |
 | [Zensical][ext-zensical] | This docs site generator |
@@ -23,7 +22,6 @@ Hover a name for a one-line description; click to open its documentation.
   [ext-ros2]: https://docs.ros.org/en/jazzy/ "ROS2 Jazzy Jalisco distro docs"
   [ext-ros2control]: https://control.ros.org/ "Controller framework + hardware_interface plugins"
   [ext-gazebo]: https://gazebosim.org/docs "Gazebo simulator docs"
-  [ext-microros]: https://micro.ros.org/ "ROS2 client library for microcontrollers"
   [ext-platformio]: https://docs.platformio.org/ "PlatformIO build/flash toolchain docs"
   [ext-pixi]: https://pixi.sh/ "Conda-based environment/task manager"
   [ext-zensical]: https://zensical.org/docs/ "This site's static-site generator"
