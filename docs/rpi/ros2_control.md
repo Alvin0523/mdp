@@ -56,6 +56,6 @@ To ensure physical realism matching the **HWZ020** steering servo and **MG513P30
    - Steering Knuckles (`left_joint`, `right_joint`): `<axis xyz="0 0 1"/>` (positive angle = left turn).
 
 2. **Steering Joint Limits:**
-   - Angle limits: `lower="-0.39" upper="0.39"` ($\pm 22.35^\circ$) — the servo's bare datasheet spec; intentionally different from the real robot's measured `±0.5672 rad` (32.5°), see [STM32: Servo Range & Steering Calibration](../stm32/tuning.md#servo-range-steering-calibration).
+   - Angle limits: `lower="-0.39" upper="0.39"` ($\pm 22.35^\circ$) — the servo's bare datasheet spec; intentionally different from the real robot's measured, **asymmetric** `lower="-0.5149" upper="0.6109"` (−29.5°/+35.0°), see [STM32: Servo Range & Steering Calibration](../stm32/tuning.md#servo-range-steering-calibration).
    - Torque limit: `effort="10.0"` (prevents Gazebo solver contact lockup).
    - Speed limit: `velocity="5.0"` (matches HWZ020 servo max speed of 6.54 rad/s).

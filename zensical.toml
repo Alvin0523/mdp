@@ -60,6 +60,7 @@ nav = [
       { "ROS2 Control" = "rpi/ros2_control.md" },
       { "ROS2 EKF Localization" = "rpi/ros2_ekf_localization.md" },
     ] },
+    { "Simulation Symbol Assets" = "rpi/sim_assets.md" },
     { "Vision" = "rpi/vision.md" },
     { "Algorithm" = "rpi/algorithm.md" },
   ] },

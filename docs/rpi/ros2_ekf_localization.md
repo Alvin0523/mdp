@@ -44,3 +44,54 @@ Other notable settings in `ekf.yaml`:
 Fused pose is published on `/odometry/filtered` and consumed by autonomy nodes in place of raw wheel odometry.
 
 For the verification checklist and the known EKF covariance issue, see [RPi: EKF Verification Checklist](index.md#ekf-verification-checklist-post-bringup).
+
+## The `map` → `odom` → `base` frame chain
+
+`/odometry/filtered` is an `odom`-frame message, and `odom` is created wherever the robot happened to
+start, with identity orientation. The arena is a different frame: origin at the arena's bottom-left
+corner, axes along the arena walls, which is the coordinate system the planner and every arena-referenced
+marker already used. Those two frames coincide only if the robot starts at the arena origin facing
+`+X`, which it never does, so they need an explicit edge between them — without one, drawing arena
+coordinates in `odom` rotates the whole arena by the start yaw and offsets it by the start position
+(that was the 90° Foxglove heading offset).
+
+Per [REP-105](https://www.ros.org/reps/rep-0105.html) the arena frame is `map`, giving one chain:
+
+```
+map ──(static, = start pose)──> odom ──(dead reckoning)──> base_footprint / base_link
+```
+
+Each edge has exactly one owner, and the owners differ between sim and hardware:
+
+| Edge | Sim (`task1_sim.launch.py`) | Hardware (`real.launch.py`) |
+| --- | --- | --- |
+| `map` → `odom` | `static_transform_publisher` (`map_to_odom_static_tf`), value = the Gazebo spawn pose | `static_transform_publisher` (`map_to_odom_static_tf`), value = where the car is placed in the start box |
+| `odom` → base | `ackermann_steering_controller` (`ackermann_controller.yaml`, `enable_odom_tf: true`) | `ekf_filter_node` (`ekf.yaml`, `publish_tf: true`); the controller stands down via `enable_odom_tf: false` in `real_controller.yaml` |
+| `/odometry/filtered` publisher | `ekf_filter_node` with `config/ekf_sim.yaml`, `publish_tf: false` — estimator only, broadcasts no TF | `ekf_filter_node` with `config/ekf.yaml` |
+
+Two details that trip people up:
+
+- **The base link differs between the two.** The sim URDF (`mini_akm_robot.urdf`) roots at
+  `base_footprint`, the hardware URDF (`mini_akm_real_robot.urdf`) roots at `base_link`, so the child of
+  `odom` is not the same link in both graphs. `ekf_sim.yaml` sets `base_link_frame: base_footprint` to
+  match the sim, and its `base_frame_id` agrees with `ackermann_controller.yaml`.
+- **`ekf_sim.yaml` is a separate file, not an edit of `ekf.yaml`.** Sim needs `publish_tf: false` (the
+  controller already owns `odom` → `base_footprint` there, and one edge gets one broadcaster),
+  `use_sim_time: true`, the sim base link, and **no** `imu0` — nothing bridges an IMU out of Gazebo, and a
+  configured-but-silent input is not the same thing to `robot_localization` as an absent one: it
+  interacts with `sensor_timeout` and leaves the filter running prediction-only in stretches. Hardware
+  localization is untouched by any of this.
+
+`map` → `odom` is static because there is no absolute localization source to correct it with. All drift
+therefore accumulates in `odom` → `base`, which is where REP-105 wants it. If an absolute source is
+added later (AMCL against a LiDAR scan, a fiducial, an overhead camera), the usual
+`robot_localization` two-instance pattern applies: a second EKF with `world_frame: map` takes over
+broadcasting `map` → `odom` and the static publisher is deleted. Nothing else changes — no `frame_id`
+in any node moves, because the arena frame is already `map` and consumers already look the transform
+up in TF rather than assuming it.
+
+Consumers should do exactly that. `task1_runner.py` transforms each incoming `/odometry/filtered` pose
+into its `arena_frame` parameter with `lookup_transform` + `do_transform_pose` before it feeds the path
+follower, and drops the update (keeping the previous pose, warning at a throttled rate) if the lookup
+fails. It deliberately has no raw-pose fallback: falling back would silently reintroduce the full
+start-pose error for as long as TF was unavailable.
