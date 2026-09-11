@@ -21,6 +21,7 @@ the app sends/receives, since that's the part that has to stay in sync across re
 
 - Interactive movement commands (buttons/gestures/tilt — manual text entry is explicitly disallowed by the rubric).
 - Obstacle placement: `(x, y)` + assigned obstacle number, sent on touch-drag release.
+- Obstacle deletion (drag outside arena to delete) - 'OBSTACLE_DELETE' , <obstacle number>
 - Target face orientation per obstacle (`N`/`S`/`E`/`W`).
 
 **Robot → App** (over the same link):
