@@ -20,9 +20,12 @@ the app sends/receives, since that's the part that has to stay in sync across re
 **App → Robot** (over Bluetooth RFCOMM serial):
 
 - Interactive movement commands (buttons/gestures/tilt — manual text entry is explicitly disallowed by the rubric).
+      - Begin the run - `BEGIN, <task_id>`
+      - Stop current run - `STOP`
 - Obstacle placement: `(x, y)` + assigned obstacle number, sent on touch-drag release.
 - Obstacle deletion (drag outside arena to delete) - `OBSTACLE_DELETE, <obstacle number>`
 - Target face orientation per obstacle (`N`/`S`/`E`/`W`).
+
 
 **Robot → App** (over the same link):
 
