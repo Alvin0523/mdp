@@ -152,8 +152,9 @@ flowchart LR
 
 - [x] Bringup (LED/printf) — verified on hardware
 - [x] AT8236 motor PWM — verified on hardware; locked-antiphase drive required, see [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)
-- [x] HWZ020 steering servo — verified on hardware; calibrated 1° resolution: right 41°, left 27° (commanded unit), see [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)
-- [x] URDF steering limits — updated to `±0.5672 rad` (32.5°), replaces datasheet spec, see [tuning.md](tuning.md#resolved-urdf-steering-limit-now-matches-the-real-measured-steering-angle); not yet re-validated on hardware
+- [x] HWZ020 steering servo — calibrated on hardware in **real wheel angle**: center `1490µs`, left `+35.0°` @ `840µs`, right `−29.5°` @ `2400µs`. WHEELTEC's cubic retired in favour of per-side linear interpolation between measured endpoints. See [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)
+- [x] URDF steering limits — now asymmetric `lower="-0.5149" upper="0.6109"` (−29.5°/+35.0°), from protractor readings. Replaces a symmetric `±0.5672 rad` (32.5°) whose stated measurement was never performed, see [What the earlier record got wrong](tuning.md#what-the-earlier-record-got-wrong)
+- [ ] Steering — **which wheel** each protractor reading came from was not recorded, so `left_joint`/`right_joint` still share one limit pair when Ackermann geometry says they should differ. Right limit (`2400µs`) also unconfirmed — the wheel was still tracking there. See [Still open](tuning.md#still-open)
 - [ ] Closed-loop wheel-speed PID — implemented, **not bench-tuned or hardware-tested**. `MOTOR_PID_KP=4.0f`/`KI=0.5f` are untuned placeholders. **Next priority** — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)
 - [x] `PD3` motor switch gating — implemented, functionally confirmed; polarity not yet cross-checked with a multimeter
 - [x] NVIC interrupt priorities — verified on hardware; motor PID (`TIM7`) now highest-priority, see [Interrupt / Timing Architecture](architecture.md#interrupt-timing-architecture)
@@ -234,7 +235,7 @@ Only `PE8` is a GPIO-controllable LED on this board (confirmed against the resou
 | --- | --- |
 | 1 | Forward, 1 wheel revolution |
 | 2 | Backward, 1 wheel revolution |
-| 3 | Full-range servo sweep, **left limit first**, then slowly ascending to the right limit (confirmed asymmetric: left 27°, right 41°) — see [Control Tuning: Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration). Supersedes the old fixed ±20° steer-left/steer-right phases, which were dropped |
+| 3 | Steering calibration sweeps, button-advanced in **raw microseconds** (never in an angle unit — calibrating against a mapping's own input is circular). Center trim, per-side limit finding, and protractor measurement phases — see [Calibration tooling](tuning.md#calibration-tooling) |
 | 4 | Done |
 
 Refusal (motor switch OFF) is a *separate* standalone 5-blink pattern with different timing

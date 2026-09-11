@@ -13,7 +13,7 @@ This page documents the verified hardware components and physical specifications
 | **Control Board** | **WHEELTEC C30D V2.1** | STM32F407VET6 MCU mounted on acrylic protector plate |
 | **Drive Motors** | `MG513P3012V` (×2) | 12V DC geared motors (1:30 reduction ratio), 330 RPM max speed, driving rear wheels (`lb_joint`, `rb_joint`) |
 | **Wheel Encoders** | **Hall Encoders** (2.54mm pitch, 6-pin) | 2 units mounted on drive motors (Model: `MG513P3012V`) |
-| **Steering Servo** | Model `HWZ020` (4.8V – 7.4V) | Front Ackermann steering servo (`left_joint`, `right_joint`). **Stall Torque:** 1.96 N·m (20 kg·cm). **Max Speed:** 6.54 rad/s (0.16s / 60°). **Mechanical Limits:** $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) |
+| **Steering Servo** | Model `HWZ020` (4.8V – 7.4V) | Front Ackermann steering servo (`left_joint`, `right_joint`). **Stall Torque:** 1.96 N·m (20 kg·cm). **Max Speed:** 6.54 rad/s (0.16s / 60°). **Datasheet travel:** $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) — the servo's own internal range, *not* the angle this chassis's linkage achieves at the wheel (measured: left $+35.0^\circ$, right $-29.5^\circ$) |
 | **Motor Driver** | Dual AT8236 H-Bridge | Board-integrated motor driver (`src/motor.c`) |
 | **Onboard SBC (Host)** | **Raspberry Pi 4 Model B (4GB)** | Runs ROS2 Jazzy + `mdp_bridge`, connected to STM32 via USB Type-C |
 | **Camera** | **RPi Camera Module V2** | Sony IMX219 8MP sensor connected via CSI flexi cable. Driver: `ros-jazzy-v4l2-camera` (`v4l2_camera_node` publishing `/image_raw`) + `ros-jazzy-compressed-image-transport` (`/image_raw/compressed` for streaming) + `ros-jazzy-cv-bridge` |
@@ -34,7 +34,7 @@ This page documents the verified hardware components and physical specifications
 | **Wheelbase ($L$)** | `0.1433 m` (143.3 mm) | `wheelbase: 0.1433` | Measured front-to-rear axle center distance matching URDF CAD mesh |
 | **Steering Kingpin Width ($W_s$)** | `0.1040 m` (104 mm) | `steering_track_width: 0.104` | Distance between left and right steering kingpin pivot axes (used for Ackermann angle kinematics) |
 | **Traction Track Width ($W_t$)** | `0.1600 m` (160 mm) | `traction_track_width: 0.16` | Distance between left and right rear wheel centers |
-| **Steering Joint Limits** | $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) | `lower="-0.39" upper="0.39"` | Mechanical steering knuckle range limit in URDF |
+| **Steering Joint Limits** | left $+35.0^\circ$ / right $-29.5^\circ$ ($+0.6109$ / $-0.5149\text{ rad}$) | `lower="-0.5149" upper="0.6109"` | Measured at the wheel with a protractor — asymmetric. The sim URDF still carries the symmetric datasheet $\pm 0.39$; see [Servo Range & Steering Calibration](stm32/tuning.md#servo-range-steering-calibration) |
 | **Steering Max Effort** | 1.96 N·m (Stall Torque) | `effort="10.0"` | URDF physics joint limit (prevents solver contact locking in Gazebo) |
 | **Steering Max Speed** | ~6.54 rad/s (375°/s) | `velocity="5.0"` | URDF physics max turn rate for `left_joint` & `right_joint` |
 

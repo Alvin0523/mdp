@@ -92,9 +92,12 @@ before hardware is actually driven, one step per driver:
 - **Motors**: `rad_s_to_pct()` converts target rad/s → PWM% via `pct = (rad_s / 34.56) × 100`
   (34.56 rad/s = the motor's rated max speed post-gearbox). That's the *feedforward* baseline — the
   PID's incremental correction is added on top, still in PWM% terms, before being written to the timer.
-- **Servo**: `SERVO_ANGLE_SCALE_RAD` converts commanded rad → microseconds directly (0.7854 rad / 45°
-  maps to 900µs off the 1500µs center) — no PWM% intermediate step, since there's no PID on the servo
-  at all (open-loop, see [Steering Servo Driver](#steering-servo-driver-servoc)).
+- **Servo**: a **real** wheel angle in rad → microseconds, by linear interpolation between measured
+  endpoints with a **separate slope per side** (center `1490µs`; `+35.0°` → `840µs`, `−29.5°` →
+  `2400µs`). No PWM% intermediate step, since there's no PID on the servo at all (open-loop, see
+  [Steering Servo Driver](#steering-servo-driver-servoc)). Replaces the single shared
+  `SERVO_ANGLE_SCALE_RAD` gain, and before that WHEELTEC's cubic — see
+  [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration).
 
 ### AT8236 Motor Driver (`motor.c`)
 
@@ -204,7 +207,7 @@ schematics (`references/`).
 
 | Function | Pins | Peripheral | Signal / Details |
 | --- | --- | --- | --- |
-| **Steering Servo** | `PB15` | TIM12_CH2 | 50 Hz PWM (600–2400µs configured range, ~960–2320µs actual operating span — see [Command Units](#command-units) / [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) |
+| **Steering Servo** | `PB15` | TIM12_CH2 | 50 Hz PWM (600–2500µs calibration bound, **840–2400µs** measured operating span, center **1490µs** — see [Command Units](#command-units) / [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) |
 | **IMU Sensor** | `PB10` (SCL), `PB11` (SDA) | Bit-banged software I2C (GPIO, `GPIO_MODE_OUTPUT_OD`) - **not** the hardware `I2C2` peripheral | ICM-20948 (9-DOF Gyro/Accel/Mag - only accel+gyro registers are read, magnetometer unused). Polled (`imu_update()`), not interrupt-driven - no `INT` pin connected in firmware |
 | **Battery AD** | `PB0` | ADC1_CH8 | Voltage measurement via resistor divider |
 | **Car Type Select** | `PB1` | ADC1_CH9 | Potentiometer voltage reading |

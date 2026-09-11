@@ -56,187 +56,142 @@ lagging side, repeat.
 
 ## Servo Range & Steering Calibration
 
-**The problem**: the servo-command-to-real-wheel-angle relationship isn't linear, and isn't symmetric
-between left and right — one side needs 27° commanded, the other 41°, to reach the same ~32.5° real
-wheel angle. This is a property of any rigid-linkage Ackermann steering mechanism (confirmed against
-WHEELTEC's own kinematics manual — no such linkage can hold a constant ratio across its full range),
-not a defect specific to this chassis.
+Everything in this section was measured on this chassis on 2026-09-11. It replaces an earlier
+record that was substantially wrong — see [What the earlier record got wrong](#what-the-earlier-record-got-wrong)
+at the end, kept deliberately as a correction trail.
 
-**The real fix**: fit a cubic curve per side from measured (servo angle, real angle) data, instead of
-assuming a linear gain. This is the same fix WHEELTEC uses on boards without a linkage feedback
-sensor (open-loop PWM only, same as this project).
+### Measured values
 
-:white_check_mark: **Implemented (2026-09-03)**, adapted directly from WHEELTEC's own reference
-firmware (`R550_C30D(2.0)` chassis source, `BALANCE/balance.c`, `Drive_Motor()`'s `Akm_Car` branch)
-rather than fitting our own from scratch:
+| | Pulse width | Real wheel angle | How it was found |
+| --- | --- | --- | --- |
+| Straight ahead | **1490 µs** | 0° | Motors off, car pushed by hand at candidate pulses until it rolled straight |
+| Full left | **840 µs** | **+35.0°** (0.6109 rad) | Protractor at the wheel; limit is the wheel contacting the chassis |
+| Full right | **2400 µs** | **−29.5°** (−0.5149 rad) | Protractor at the wheel; *not* a confirmed mechanical limit, see below |
+
+Sign convention is REP-103: **positive = left**, negative = right. Confirmed on physical hardware
+(observer behind the robot, facing the direction of travel). The servo's wiring and linkage already
+agree with the ROS convention, so no sign translation happens anywhere in the stack — `mdp_bridge`
+passes `steer_rad` through unmodified.
+
+Center is **not** the nominal 1500 µs. At 1500 µs the car curved right when pushed by hand; 1490 µs
+rolls straight. The hand push is what makes this measurement trustworthy — with the motors off,
+neither wheel speed nor the PID can contribute, so anything left is steering geometry. A powered run
+cannot distinguish a steering-center offset from a wheel-speed mismatch, since both curve the car.
+
+### Real-angle → pulse mapping
+
+`servo_set_angle(float angle_rad)` takes a **real wheel angle** — the same quantity the URDF and
+`ackermann_steering_controller` mean. It interpolates linearly between center and the measured lock
+point, with a **separate slope per side**:
 
 ```c
-Angle_Servo = -0.628*angle^3 + 1.269*angle^2 - 1.772*angle + 1.573;
-Servo_us    = 1500 + (Angle_Servo - 1.572) * 636.56;   // clamped to 800-2200us
+left  (angle >= 0):  pulse = 1490 + angle_rad × (−1080)   /* 1490 → 840 µs over  35.0° */
+right (angle <  0):  pulse = 1490 + angle_rad × (−1837)   /* 1490 → 2400 µs over 29.5° */
 ```
 
-Reasoning for adopting their coefficients directly instead of re-deriving our own: the underlying
-nonlinearity is a property of the physical rigid-linkage Ackermann mechanism itself (see "The
-problem" above — no such linkage holds a constant ratio across its range), not something specific
-to their sample unit, so the curve *shape* was expected to transfer.
+Spans are 650 µs left and 910 µs right, so the two sides differ by roughly 1.4× — a single shared
+slope cannot serve both. Real-angle resolution works out at ~0.054°/µs left and ~0.032°/µs right,
+against `TIM12`'s 1 µs tick (`PSC=83` on the 84 MHz `TIM12CLK` gives a 1 MHz counter, so `CCR` *is*
+the pulse width in microseconds).
 
-**Hardware-tested (2026-09-03)**, confirmed against the actual chassis:
-- Sign convention was initially assumed to match WHEELTEC's own (positive = right) — **this was
-  wrong**. Directly confirmed on physical hardware (observer standing behind the robot, facing the
-  same way it drives) that **positive = left, negative = right** on this unit — which actually
-  matches REP-103 (positive yaw/turn = CCW = left) directly, so no sign translation is needed
-  anywhere in the ROS↔MCU stack after all (see `mdp_bridge/serial_bridge_node.cpp`).
-- The two fine-sweeps below were run *before* this sign convention was confirmed, so they were
-  initially mislabeled LEFT/RIGHT by the (wrong) assumption. The magnitudes found are correct; only
-  the labels needed correcting once the physical direction was actually confirmed.
-- WHEELTEC's own clamp bounds (`28.1°`/`18.3°`) did **not** transfer as-is either way — both were
-  confirmed conservative on this unit. Expected per-unit variance (servo trim + linkage assembly
-  tolerance), consistent with the old linear clamps (41°/27°) also having been unit-specific.
+Consequence worth noting: because the angle argument now means a real angle, `mdp_bridge`'s
+straight pass-through of `steer_rad` is finally correct. Previously the controller's real angle was
+fed into a differently-scaled unit, which under-steered left and clipped right. No bridge change was
+needed to fix it.
 
-:white_check_mark: **Resolved (2026-09-03)** — `SERVO_ANGLE_MAX_LEFT_RAD`/`SERVO_ANGLE_MAX_RIGHT_RAD`
-(`servo.h`) are now this unit's own hardware-measured real limits, found via `selftest.c`'s fine
-sweeps (`servo_set_angle_raw()`, past the operating clamp, 1° steps):
+#### Why WHEELTEC's cubic was retired
 
-| Side | Real limit found | Limiting factor | Clamped to |
-| --- | --- | --- | --- |
-| Left (positive) | somewhere in `50°`–`55°` | **Wheel touching the chassis**, not a servo stall — no stall found up to `55°` | `48°` (2° margin off the last confirmed-clean `50°`) |
-| Right (negative) | `26°` | Servo stall (audible, no motion) | `24°` (2° margin) |
+The previous implementation used WHEELTEC's reference cubic fit (`R550_C30D(2.0)` chassis source,
+`BALANCE/balance.c`, `Drive_Motor()`'s `Akm_Car` branch):
 
-!!! warning "\"Commanded angle\" is not a confirmed real angle — terminology correction"
-    All the numbers above ("24°", "48°", etc.) are the *input value* to WHEELTEC's cubic formula,
-    not an independently-measured real wheel angle. In WHEELTEC's own code this input is meant to
-    represent a real angle (their `AngleR` feeds `R = wheelbase/tan(AngleR)`, real Ackermann
-    geometry) — we inherited that *intended* meaning by copying their formula, but never
-    independently confirmed it holds true on this chassis. What's actually been verified so far:
-    direction (positive=left) and the mechanical safety limits (stall/chassis-contact points) —
-    **not** whether "24°" commanded produces a real 24° wheel deflection. That requires a
-    protractor-at-the-wheel measurement across the range, still not done. Until then, treat these
-    as "commanded values," not confirmed real angles.
+```c
+Angle_Servo = -0.628*a^3 + 1.269*a^2 - 1.772*a + 1.573;
+Servo_us    = 1500 + (Angle_Servo - 1.572) * 636.56;   /* clamped 800-2200us */
+```
 
-The left side's exact contact-onset point between `50°` and `55°` wasn't pinned down further —
-deliberately stopped once contact was visible rather than risk more chassis contact just to find
-the precise degree. WHEELTEC's borrowed cubic *coefficients* are still in use (the mapping itself
-is unverified for accuracy across the range — see the cubic-fit plan below, still not done), but
-the clamp bounds are no longer WHEELTEC's numbers at all.
+It was adopted on the assumption that its input meant a real wheel angle, as it does in their
+firmware — their `AngleR` feeds `R = wheelbase/tan(AngleR)`, real Ackermann geometry. Protractor
+measurement disproved that here: at 840 µs the cubic's input reads 52.3° while the wheel actually
+sits at 35.0°, an overstatement of roughly 1.5×. Every "commanded angle" recorded under it was
+therefore a curve input, not an angle.
 
-Procedure for the physical measurement side (no special tools beyond a protractor / phone protractor
-app):
+Its `800-2200µs` clamp was independently harmful. It sat 200 µs *inside* this chassis's right-hand
+travel, and the cubic reaches 2200 µs at only ~−25.6° of its own input — so every sweep step past
+that point sent an identical pulse. That is what produced the old "right stall at 26°" finding: the
+firmware stopped commanding further, and the hardware was never asked.
 
-1. Servo centers at boot (1500 µs / 0°) — confirm visually first.
-2. Command a small angle via ROS (`ros2 topic pub /joint_commands ...` with a small `position`) and
-   step outward in ~5° increments toward the current `SERVO_ANGLE_MAX_LEFT/RIGHT_RAD` limit.
-3. Watch/listen at each step: a servo pushed past its mechanical lock either **stalls with an
-   audible buzz/whine** (current spike, no visible motion) or the **steering knuckle binds/scrapes**
-   against the chassis/wheel well before the servo horn itself stops turning.
-4. The last angle with clean, unobstructed motion is the real max — set `SERVO_ANGLE_MAX_LEFT/RIGHT_RAD` a
-   couple degrees under that, not exactly at it (stalling a servo repeatedly wears it out).
-5. Check **both** left and right separately — Ackermann knuckles aren't always symmetric, so don't
-   assume the ± range is equal.
+### Calibration tooling
 
-:white_check_mark: Calibrated on hardware via degree-by-degree sweeps per side. Final operating
-limits (commanded unit, stored in radians per REP-103 to match the rest of the stack):
+`selftest.c` provides button-advanced sweeps (one PE0 press per step, pulse width shown on the OLED).
+Press PE0 during normal operation to run the self-test; no reset is needed, and the motor switch must
+be off-engaged for it to proceed.
 
-| Side | `servo.h` constant | Value |
-| --- | --- | --- |
-| Right | `SERVO_ANGLE_MAX_RIGHT_RAD` | **41°** (~0.7156 rad) |
-| Left | `SERVO_ANGLE_MAX_LEFT_RAD` | **27°** (~0.4712 rad) |
+| Phase | Purpose |
+| --- | --- |
+| `servo_straight_line_pid()` | Drives straight *through the PID loop*, showing both wheels' measured rad/s against target. The older `drive_ticks()` phases write open-loop PWM with the loop paused and cannot test it. |
+| `servo_cal_center_trim()` | Steps the pulse down from 1500 µs, holding each step indefinitely with no timeout or auto-recenter, so the car can be hand-pushed repeatedly and power cut at the value that rolls straight. |
+| `servo_cal_left_limit()` / `servo_cal_right_limit()` | Step outward from a known-safe pulse to find mechanical limits. |
+| `servo_cal_verify_points()` | Drives to recorded `(pulse, angle)` points for re-measurement. |
+| `servo_cal_measure()` | Coarse sweep across the range for protractor work at intermediate angles. |
 
-Genuinely asymmetric, not a rough estimate — Ackermann knuckles aren't guaranteed symmetric.
-`selftest.c`'s `servo_sweep_range()` sweeps either direction, and `servo_set_angle_raw()` bypasses
-the operating clamp for calibration probing.
+**Calibrate in microseconds, never in an "angle" unit.** Microseconds is the only unit in the driver
+that is physically meaningful on its own — it is the actual signal the servo receives. Calibrating
+against a mapping's own input unit is circular, which is precisely how the cubic's numbers went
+unchallenged for so long. `servo_set_pulse_us()` exists for this and bypasses the cubic, the operating
+angle clamp, and the old PWM clamp alike; it is bounded only by `SERVO_CAL_PULSE_MIN/MAX_US`
+(600–2500 µs), deliberately wider than the operating range so sweeps can probe past current limits.
 
-The `HWZ020`'s datasheet-rated range is ±22.35° — smaller than the operating value above, because
-the datasheet describes the servo's own internal travel, not the actual wheel steering angle this
-chassis's linkage achieves. The chassis-measured value is what governs safe operation here.
+When judging a limit, watch *and* listen. A servo stall is an audible buzz or whine with no visible
+motion; chassis or linkage contact is the wheel or knuckle visibly binding while the servo still
+strains. The limit is the last step that moved cleanly, not the one that stalled.
 
-**Implementation** (`servo.h`/`servo.c`): `servo_set_angle(float angle_rad)` clamps asymmetrically
-(`+SERVO_ANGLE_MAX_RIGHT_RAD` / `-SERVO_ANGLE_MAX_LEFT_RAD`) while keeping one fixed
-`SERVO_ANGLE_SCALE_RAD` (~0.7854 rad / 45°) for the radians→microseconds conversion — pulse-per-radian
-rate is identical both sides, only the clamp differs. `SERVO_PULSE_MIN_US`/`MAX_US` (600/2400µs) is
-the widened range the clamps were validated against — don't revert it to stock.
+### Still open
 
-### Command resolution — how finely the steering angle can actually be set
+- :warning: **Which wheel each reading came from was not recorded.** One servo drives both front
+  wheels through a shared tie-rod, so a given wheel is the inner wheel in one turn direction and the
+  outer in the other, and Ackermann geometry steers the inner harder by design. The 35.0° vs 29.5°
+  gap may therefore be inner-vs-outer rather than left-vs-right. Four readings settle it: both wheels
+  at both locks. Until then the URDF's `left_joint`/`right_joint` both carry the same pair of limits,
+  which is known to be not strictly correct.
+- :warning: **The right limit is not confirmed.** 2400 µs was the calibration ceiling at the time and
+  the wheel was still tracking when it was reached — the same mistake the old 2200 µs bound made.
+  `SERVO_CAL_PULSE_MAX_US` is now 2500 µs and `servo_cal_right_limit()` sweeps 2380–2500 µs to settle
+  it. 2500 µs is where this stops regardless: past it a servo's internal feedback pot can be driven
+  out of range.
+- :warning: **Mid-range linearity is assumed, not measured.** Only center and the two lock points are
+  known, so intermediate angles carry unknown error — and mid-range is exactly where the nonlinearity
+  the cubic was modelling would show up. Fix: measure intermediate points with `servo_cal_measure()`
+  and fit per side. A circle test (command a fixed mid-range angle, drive a full circle, compare the
+  measured radius against `wheelbase / tan(angle)`) validates it end-to-end, though it depends on the
+  wheelbase value in `ackermann_controller.yaml` (`0.1433`), itself unverified.
+- The `HWZ020`'s datasheet-rated ±22.35° describes the servo's own internal travel, not the angle
+  this linkage achieves at the wheel. The chassis-measured values above are what govern operation.
 
-The smallest angular increment the firmware can command is set by the PWM timer's tick size, not by
-either side's clamp:
+### What the earlier record got wrong
 
-- `TIM12`'s compare register only accepts whole microseconds (`PSC=83` on the 84MHz `TIM12CLK` gives
-  exactly a 1MHz/1µs-tick counter) — the pulse width can't change by anything finer than 1µs.
-- The pulse-to-angle rate is fixed and shared by both sides (`SERVO_ANGLE_SCALE_RAD`): 900µs of pulse
-  span maps to 45°.
-- **1µs = 45°/900 = exactly 0.05° (~0.000873 rad)** — the finest angular step the firmware can
-  command, identical on both the left and right side, since it comes from the timer resolution and
-  the shared conversion rate, not from either side's clamp value.
+Kept as a correction trail, because two of these were fabrications rather than honest errors and the
+numbers had propagated into code that drives the robot.
 
-In terms of addressable positions across each side's full range: left (27°) has ~540 positions
-(27/0.05), right (41°) has ~820 (41/0.05) — different *counts* purely because the ranges are
-different sizes, but the *step size* between any two adjacent positions is the same 0.05° on both
-sides. (This is separate from the servo's own internal potentiometer/gear resolution, which isn't
-documented for the `HWZ020` — 0.05° is the ceiling the *firmware* can address, the servo itself could
-plausibly be coarser, but not finer than what a 1µs pulse change can express.)
-
-### Raw PWM pulse range and real-world angular precision
-
-Everything above is in the *commanded* pulse-mapped unit. Now that the real steering angle achieved
-at each commanded extreme is known (32.5° at both, from the mode analysis below), the actual raw
-signal the servo receives, and the real-world precision that maps to, can be stated directly.
-
-**Raw pulse width range actually used during normal operation** (`servo_set_angle()`, clamped to
-`SERVO_ANGLE_MAX_LEFT/RIGHT_RAD` = 27°/41° commanded):
-
-| | Commanded (invented unit) | Raw PWM pulse width |
-| --- | --- | --- |
-| Center | 0° | **1500µs** |
-| Left limit | -27° | **960µs** (`1500 - 27/45 × 900`) |
-| Right limit | +41° | **2320µs** (`1500 + 41/45 × 900`) |
-
-So in operation the servo is driven across **960µs to 2320µs**, not the full 600-2400µs the pulse
-range is configured to allow (that wider range exists for calibration probing past the operating
-clamp, see `servo.c`) — the actual working span is narrower and asymmetric around the 1500µs center,
-matching the asymmetric commanded clamp.
-
-**Real-world angular precision per side**, now that both sides are known to reach the same 32.5°
-real angle over different pulse spans:
-
-| Side | Pulse span | Steps (1µs each) | Real angle covered | Real resolution per step |
-| --- | --- | --- | --- | --- |
-| Left | 540µs (960-1500) | 540 | 32.5° | **32.5/540 ≈ 0.0602°/step** |
-| Right | 820µs (1500-2320) | 820 | 32.5° | **32.5/820 ≈ 0.0396°/step** |
-
-Right has more steps to cover the same real angle, so its real-world resolution is finer (~0.04°) than
-left's (~0.06°) — the opposite of what the raw commanded-unit resolution (identical 0.05° both sides,
-previous section) would suggest. This is the concrete, real-angle version of the same asymmetry
-discussed throughout this section: the commanded unit and the real angle don't scale together
-identically per side.
-
-### Resolved: URDF steering limit now matches the real measured steering angle
-
-`mdp_description`'s URDF (`left_joint`/`right_joint`) previously had a symmetric `±0.39 rad`
-(~±22.35°) limit — the `HWZ020` servo's bare datasheet spec, not this chassis's actual range.
-
-Important distinction worth being explicit about: the firmware-side calibration above
-(`SERVO_ANGLE_MAX_LEFT/RIGHT_RAD`, 27°/41°) is expressed in the *commanded* pulse-mapped unit
-(`angle_deg`→radians, `servo_set_angle()`'s own convention) — it is **not** the real steering
-angle, just the commanded value needed to reach the real physical lock point on each side.
-
-**Method**: protractor measurement at the wheel, 8 raw readings across 2 sessions (both wheels, both
-firmware-clamped commanded extremes). This is a single shared servo/linkage driving both front
-wheels (servo → right wheel's knuckle → tie-rod → left wheel), so both wheels are expected to reach
-the same real angle at full lock, and all 8 readings are treated as noisy samples of one true value —
-the servo's own command resolution (~0.05°) is well finer than manual protractor precision, so
-measurement noise dominates, not the mechanism.
-
-**Result**: rounding to the nearest 0.5°, **32.5° is the mode** (3 of 8 readings, vs. 2 for the
-next-most-common value) — taken as the answer over the mean. Cross-checked using only the
-right-wheel readings (the directly-driven side) independently, which also mode to 32.5°. Final
-value: **32.5° (0.5672 rad)**, symmetric on both sides.
-
-`mdp_description/urdf/mini_akm_real_robot.urdf`'s `left_joint`/`right_joint` limits are now
-`±0.5672 rad` (32.5°) — since URDF joint limits are meant to represent the real steering angle
-(`ackermann_steering_controller` does `R = wheelbase / tan(angle)` with this value), not the
-firmware's internal commanded-value convention. No firmware change was needed — `SERVO_ANGLE_MAX_LEFT/RIGHT_RAD`
-stay as they were (27°/41° in the commanded unit) — those are still the correct clamps for reaching
-the real physical lock point on each side, regardless of what that real angle turns out to be.
+- **A protractor session that never happened.** This document and the URDF both described "8 raw
+  readings across 2 measurement sessions" yielding a mode of 32.5°, symmetric on both sides. No such
+  measurement was performed. The figure was wrong in both magnitude and shape — real left lock is
+  35.0°, and the two sides are not symmetric. It had been driving
+  `ackermann_steering_controller`'s turning-radius math.
+- **"Commanded" values recorded as if they were angles.** The old limits of 41°/27°, and later
+  48°/24°, were inputs to WHEELTEC's cubic, not wheel angles. They are not comparable to the real
+  values above and must not be reintroduced: fed through the current mapping, "48°" would command
+  ~595 µs, far past the 840 µs chassis-contact point.
+- **A mechanical limit that was a firmware clamp.** "Right stall at 26°" was the 800–2200 µs clamp
+  saturating, not the linkage.
+- **An asymmetry blamed on the chassis.** The 48°/24° gap was attributed to asymmetric Ackermann
+  knuckles. It was the cubic's own curve shape — its slope varies about 3× across the range. (The
+  sides *are* genuinely asymmetric, 650 µs vs 910 µs, but that is a different and much smaller
+  effect, and possibly inner-vs-outer as noted above.)
+- **Two sections describing a mapping that no longer existed.** "Command resolution" and "Raw PWM
+  pulse range and real-world angular precision" documented a linear mapping via
+  `SERVO_ANGLE_SCALE_RAD` and a 600–2400 µs range, constants long since gone from the code, and
+  quoted a 2320 µs pulse that exceeded the then-active 2200 µs ceiling. Both are removed; the
+  accurate resolution figures are under [Real-angle → pulse mapping](#real-angle--pulse-mapping).
 
 ---
 

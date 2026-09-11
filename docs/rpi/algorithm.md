@@ -48,13 +48,17 @@ single-coordinated-state-machine model anyway (`task1_runner.py` needs exactly o
 publisher so it can synchronize path-following with checkpoint stops/YOLO scans).
 
 !!! warning "Known limitation — not yet safe to trust on the real course"
-    - **Min turning radius is `43.34cm`** (`planning_constants.py`), derived from the STM32
-      firmware's *current* right-side steering clamp (`18.3°`, confirmed conservative — see
-      [Firmware Architecture](../stm32/tuning.md#servo-range-steering-calibration)), not the
-      theoretical `22.5cm` a full `32.5°` lock would give. Confirmed consequence: **routes near
-      tight arena corners can fail to find any path at all** — a real kinematic limit (a turning
-      circle that wide can't escape a tight corner within the wall margin), not a bug. Revisit
-      once the right-side servo fine-sweep happens and the clamp widens.
+    - **Min turning radius is `25.3cm`** (`planning_constants.py`), now *derived* from a real
+      protractor-measured steering angle rather than hand-set: the right side is the binding
+      direction at `−29.5°`, and `14.33cm / tan(29.5°) = 25.3cm` — see
+      [Servo Range & Steering Calibration](../stm32/tuning.md#servo-range-steering-calibration).
+      This supersedes the earlier `43.34cm` (from `18.3°`) and a later hand-set `25.0cm` override;
+      both of those rested on values that were inputs to WHEELTEC's cubic PWM fit, not wheel angles,
+      and so were never valid inputs to the Ackermann relation. Consequence, now much reduced but
+      not gone: **routes near tight arena corners may still fail to find any path** — a real
+      kinematic limit, not a bug. The right-side limit is itself unconfirmed (the wheel was still
+      tracking at the calibration ceiling), and if it opens up this radius only gets smaller, so
+      planning stays conservative.
     - **Planning is slow**: ~50s confirmed for some individual legs even in open space. Likely too
       slow to run live between checkpoints as-is — not yet profiled/optimized.
     - `task1_runner.py`'s start pose is a placeholder (`(0.15, 0.15)`, one margin-width off both
@@ -78,3 +82,39 @@ where this sits relative to Vision and RPi.
   `/odometry/filtered` (see [ROS2 EKF Localization](ros2_ekf_localization.md#this-robots-specific-fusion)).
 - **Outputs**: `/cmd_vel`, consumed by `ackermann_steering_controller` on the RPi (see [ROS2 Control](ros2_control.md)).
 - **Pixi tasks**: `pixi run task1` / `pixi run task2` (run alongside `pixi run real` or `pixi run sim`) — see [Quickstart: Pixi Task Reference](../quickstart.md#pixi-task-reference-mdp_ros).
+
+## Coordinate convention: everything the planner touches is in the arena frame
+
+`mdp_algorithm` works in exactly one coordinate system and has no notion of a TF frame at all: arena
+coordinates, origin at the arena's bottom-left corner, axes along the arena walls, centimetres inside
+`occupancy_map.py`/`hybrid_astar.py` and metres at the `mdp_bringup` boundary. There are no frame-name
+strings and no `tf2` imports anywhere in the package, and a property test
+(`test_frame_preservation.test_mdp_algorithm_has_no_frame_awareness`) enforces that — which frame the
+arena is drawn in depends on how the robot was launched, not on how a route is planned.
+
+`mdp_bringup` owns the frame question. In ROS terms the arena frame is `map` (see
+[ROS2 EKF Localization: the `map` → `odom` → `base` chain](ros2_ekf_localization.md#the-map--odom--base-frame-chain)),
+and the rules are:
+
+- **Every arena-referenced publisher stamps the arena frame.** `task1_runner.py` reads it once from its
+  `arena_frame` parameter (default `map`) and uses it for all eleven arena publish sites: the occupancy
+  grid, grid lines, placement-zone and start-box outlines, obstacle cubes and labels, checkpoint arrows
+  and labels, the path line strip, the Hybrid A* search-progress markers, and `/planned_path`. Stamping
+  these `odom` is what drew the whole arena rotated by the start yaw and offset by the start position.
+- **Body-frame data is not arena data.** `/cmd_vel` is a twist in `base_link` and stays that way. A
+  blanket rename of every `frame_id` in the runner is a bug, not a fix.
+- **Poses coming *in* get converted, not relabelled.** `/odometry/filtered` reports in `odom`. The
+  runner looks up `arena_frame` ← `odom` in TF and transforms the pose before handing it to
+  `PurePursuitController`, so the pose and the planned path are in one frame and the tracking error at
+  `t=0` is zero rather than a constant rotation plus offset. `PurePursuitController` itself is
+  frame-agnostic; its contract is just that pose and path agree. (The standalone `PurePursuitFollower`
+  node in `pure_pursuit_follower.py` does *not* do this conversion — it tracks in the dead-reckoning
+  frame, and its docstring says so.)
+- **The start pose is declared once per launch file** and feeds all three of its consumers: the Gazebo
+  spawn (or the physical placement it documents), the static `map` → `odom` transform, and the runner's
+  `start_x`/`start_y`/`start_yaw` parameters, which are what the planner plans the first leg from. When
+  those numbers disagreed, the arena rendered offset from the robot by the difference.
+
+Obstacle coordinates on `/obstacle_setup` are arena metres, as they always were, and the planner's
+numeric output for a given obstacle layout is unchanged by any of the above — the frame work is about
+which frame the same numbers are declared to live in.
