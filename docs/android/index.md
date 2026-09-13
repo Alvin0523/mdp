@@ -21,13 +21,17 @@ the app sends/receives, since that's the part that has to stay in sync across re
 
 - Interactive movement commands (buttons/gestures/tilt — manual text entry is explicitly disallowed by the rubric).
 - Obstacle placement: `(x, y)` + assigned obstacle number, sent on touch-drag release.
+- Obstacle delete: `OBSTACLE_DELETE, <Obstacle Number>`
 - Target face orientation per obstacle (`N`/`S`/`E`/`W`).
+- end of set up signal: `SETUP_COMPLETE`
+- Begin the run: `START, <task_id>` - task 1 (image recognition), task 2 (fastest car) 
 
 **Robot → App** (over the same link):
 
 - `TARGET, <Obstacle_ID>, <Target_ID>` — sent when a target symbol is identified (Task 1).
 - `ROBOT, <x>, <y>, <direction>` — robot position/heading updates for the app's live 2D map.
 - Status text updates (e.g. `"ready to start"`, `"looking for target 2"`) — must be selective/formatted, not raw log streaming (rubric C.4).
+- Acknowledge command: `ACK, <original_command>`
 
 ## How it fits into the system
 
