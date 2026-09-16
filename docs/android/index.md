@@ -48,6 +48,7 @@ Movement commands
 - Status text updates (e.g. `"ready to start"`, `"looking for target 2"`) — must be selective/formatted, not raw log streaming (rubric C.4).
 - Acknowledge command: `ACK, <original_command>`
 
+message from robot to app
 - robot status string `STATUS: <text>`
 - live position `ROBOT| <row>, <col>, <DIRECTION>`
 - detected obstacle `TARGET, <obstacleid>, <imagevalue>`
