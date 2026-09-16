@@ -24,7 +24,22 @@ the app sends/receives, since that's the part that has to stay in sync across re
 - Obstacle delete: `OBSTACLE_DELETE, <Obstacle Number>`
 - Target face orientation per obstacle (`N`/`S`/`E`/`W`).
 - end of set up signal: `SETUP_COMPLETE`
-- Begin the run: `START, <task_id>` - task 1 (image recognition), task 2 (fastest car) 
+- Begin the run: `START, <task_id>` - task 1 (image recognition), task 2 (fastest car)
+
+Movement commands 
+- move forward: `f`
+- turn forward right `fr`
+- turn back right `br`
+- move back `b`
+- turn forward left `f1`
+- turn back left `b1`
+- invalid move forward: `obstacle`
+
+- start `BEGIN`
+- clear map `CLEAR`
+
+- robot coordinate update `ROBOT, ,x>, <y>, <DIR>`
+- obstacle report `OBSTACLE, ,id>, <x>, <y>, <BEARING>`
 
 **Robot → App** (over the same link):
 
