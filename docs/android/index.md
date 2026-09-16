@@ -48,6 +48,13 @@ Movement commands
 - Status text updates (e.g. `"ready to start"`, `"looking for target 2"`) — must be selective/formatted, not raw log streaming (rubric C.4).
 - Acknowledge command: `ACK, <original_command>`
 
+- robot status string `STATUS: <text>`
+- live position `ROBOT| <row>, <col>, <DIRECTION>`
+- detected obstacle `TARGET, <obstacleid>, <imagevalue>`
+- direction of arrow (task 2) `ARROW, ,obstacleID>, <arrowValue>`
+- movement executed (passed to `PathTranslator`) `MOVE, <distance_cm>, <direction>`
+- stop `stop`
+
 ## How it fits into the system
 
 See [Subsystems](../index.md#subsystems) for where this
