@@ -23,7 +23,7 @@ This repository serves as the central meta-workspace for the **Mini Ackermann Ro
 | Component / Submodule | Role & Description | Submodule / Repository Link |
 |---|---|---|
 | [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: `ackermann_steering_controller`, `mdp_bridge` (STM32 serial + Android Bluetooth bridge), `mdp_algorithm` (Reeds-Shepp/Dubins TSP planning, spline planning, Pure Pursuit), `mdp_vision` (YOLO26 detection), Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
-| [`mdp_stm32/`](mdp_stm32) | STM32 bare-metal (STM32Cube HAL via PlatformIO) firmware: AT8236 motor PWM, HWZ020 servo steering, Hall encoder odometry, ICM-20948 IMU, and a custom binary serial protocol over `USART3` | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
+| [`mdp_stm32/`](mdp_stm32) | STM32 bare-metal (STM32Cube HAL via PlatformIO) firmware: 100 Hz wheel-speed PI control with AT8236 drivers, calibrated HWZ020 steering, Hall encoder feedback, ICM-20948 IMU, analog IR sensing, and a custom binary serial protocol over `USART3` (debug on `USART1`) | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
 | `docs/` | Comprehensive technical documentation site managed via [Zensical](https://zensical.org) | Built with Zensical |
 
 ---

@@ -22,6 +22,7 @@ graph TD
   end
 
   subgraph SENSING["Sensing"]
+    IR["ir_sensor.c<br/>Analog IR distance"]
     ENC["encoder.c<br/>Hall encoders"]
     IMUD["imu.c<br/>ICM-20948"]
     BATT["battery.c<br/>Battery ADC"]
@@ -32,7 +33,7 @@ graph TD
     OLED["oled.c<br/>Status display"]
   end
 
-  subgraph COMM["usart.c / protocol.c"]
+  subgraph COMM["usart.c / protocol.h"]
     RX["CommandPacket RX"]
     TX["TelemetryPacket TX"]
   end
@@ -49,6 +50,7 @@ graph TD
   ENC --> TX
   IMUD --> TX
   BATT --> TX
+  IR --> TX
   TX -.->|"Serial UART<br/>USART3, TelemetryPacket"| BRIDGE
 ```
 <p align="center"><strong>Fig. 1</strong> — STM32 System Overview</p>
@@ -64,9 +66,6 @@ graph TD
 - **Closed-loop wheel-speed PID runs on the STM32**, not the Pi/EKF — only place with low-latency
   access to both PWM timers and encoder counters in the same cycle.
 - **Custom binary protocol over `USART3`** — see [Serial Protocol](serial_protocol.md).
-
-See [Firmware Architecture](architecture.md) for the full reasoning/implementation, and
-[Control Tuning & Calibration](tuning.md) for PID/servo control theory.
 
 ## Folder & File Hierarchy
 
@@ -96,18 +95,16 @@ mdp_stm32/
 
 ## Overview: motor, servo & telemetry flow
 
-Per-signal detail behind Fig. 1's boxes — 2 driven wheels + 1 steering servo, with the servo path's
-cubic correction stage marked as planned (see
-[Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) since it isn't
-implemented yet. Telemetry packs in IMU, battery voltage, and the motor switch state alongside
-encoder feedback every 100Hz tick:
+Two driven wheels use 100 Hz wheel-speed PI control with feedforward. The steering servo uses
+[calibrated per-side linear interpolation](tuning.md#servo-range-steering-calibration).
+Telemetry includes encoder counts, IMU readings, cached battery voltage and IR readings, and motor-switch state.
 
 ```mermaid
 flowchart LR
     CMD["/cmd_vel<br/>(linear.x, angular.z)"] --> KIN["ackermann_steering_controller<br/>kinematics (Pi)"]
 
     KIN -->|"left/right wheel<br/>target rad/s"| MPID
-    KIN -->|"steer_rad<br/>(target road wheel angle)"| SCUBIC
+    KIN -->|"steer_rad<br/>(target road wheel angle)"| SMAP
 
     subgraph MOTOR["Motor control - per wheel (mdp_stm32)"]
         direction LR
@@ -120,7 +117,7 @@ flowchart LR
 
     subgraph SERVO["Steering control (mdp_stm32)"]
         direction LR
-        SCUBIC["Cubic correction<br/>(PLANNED - not yet<br/>implemented, see below)"] --> SPWM["PWM<br/>(servo_set_angle)"]
+        SMAP["Per-side linear interpolation<br/>(angle to pulse width)"] --> SPWM["PWM<br/>(servo_set_angle)"]
         SPWM --> SHW["HWZ020 servo"]
         SHW --> SLINK["Tie-rod linkage<br/>(mechanical, asymmetric)"]
         SLINK --> SANGLE["Front wheel<br/>steering angle"]
@@ -131,7 +128,7 @@ flowchart LR
         IMUSENS["ICM-20948 IMU<br/>(imu_update)"] --> TPKT
         BATT["Battery ADC<br/>(battery_read_voltage)"] --> TPKT
         SW["Motor ON/OFF switch<br/>(motor_estop_engaged)"] --> TPKT
-        TPKT["TelemetryPacket<br/>(usart_send_telemetry)"]
+        TPKT["TelemetryPacket<br/>(uart_send_telemetry)"]
     end
 
     MMOTOR -.->|"encoder ticks"| TPKT
@@ -153,7 +150,7 @@ flowchart LR
 - [x] Bringup (LED/printf) — verified on hardware
 - [x] AT8236 motor PWM — verified on hardware; locked-antiphase drive required, see [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)
 - [x] HWZ020 steering servo — calibrated on hardware in **real wheel angle**: center `1490µs`, left `+35.0°` @ `840µs`, right `−29.5°` @ `2400µs`. WHEELTEC's cubic retired in favour of per-side linear interpolation between measured endpoints. See [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)
-- [x] URDF steering limits — now asymmetric `lower="-0.5149" upper="0.6109"` (−29.5°/+35.0°), from protractor readings. Replaces a symmetric `±0.5672 rad` (32.5°) whose stated measurement was never performed, see [What the earlier record got wrong](tuning.md#what-the-earlier-record-got-wrong)
+- [x] URDF steering limits — now asymmetric `lower="-0.5149" upper="0.6109"` (−29.5°/+35.0°), from protractor readings; not yet re-validated on hardware. Replaces a symmetric `±0.5672 rad` (32.5°) whose stated measurement was never performed, see [What the earlier record got wrong](tuning.md#what-the-earlier-record-got-wrong)
 - [ ] Steering — **which wheel** each protractor reading came from was not recorded, so `left_joint`/`right_joint` still share one limit pair when Ackermann geometry says they should differ. Right limit (`2400µs`) also unconfirmed — the wheel was still tracking there. See [Still open](tuning.md#still-open)
 - [ ] Closed-loop wheel-speed PID — implemented, **not bench-tuned or hardware-tested**. `MOTOR_PID_KP=4.0f`/`KI=0.5f` are untuned placeholders. **Next priority** — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)
 - [x] `PD3` motor switch gating — implemented, functionally confirmed; polarity not yet cross-checked with a multimeter
@@ -165,7 +162,7 @@ flowchart LR
 - [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
 - [x] Automated self-test (`selftest.c`) — verified on hardware
 - [ ] Ultrasonic (HC-SR04) driver — not started
-- [ ] IR distance sensors (Sharp GP2Y0A21YK ×2) driver — not started
+- [x] IR distance sensor (Sharp GP2Y0A21YK) driver - completed for one channel on PC2/ADC1_CH12, with raw ADC, voltage, and estimated distance on OLED. Two-channel integration is not present in this checkout.
 
 ---
 
@@ -200,49 +197,38 @@ If, after tuning, the car still curves during a straight `/cmd_vel` command, see
 
 ## Verification Checklist (post-flash bring-up)
 
-!!! note "`printf` debug text and the binary protocol share `USART3`"
-    Since the protocol went in, `pixi run monitor` shows readable boot-banner/telemetry-line text interleaved with raw binary garbage from the packet stream — expected, not a bug. The framed protocol resyncs on sync bytes and rejects bad checksums regardless.
+!!! note "Separate debug and protocol UARTs"
+    Debug `printf` output uses USART1 (USB Port 1); the Raspberry Pi binary protocol uses
+    USART3 (USB Port 3). Connect the serial monitor to USART1 for the boot banner and debug output.
 
 **No host needed:**
 
-1. `pixi run flash` then `pixi run monitor` — confirm the boot banner prints (amid binary noise), PE8 LED blinks, OLED cycles pages via the button.
+1. `pixi run flash` then `pixi run monitor` — confirm the boot banner prints, PE8 LED blinks, OLED cycles pages via the button.
 2. **Encoders:** spin a rear wheel by hand, watch OLED page 3 (`Enc L`/`Enc R`) — counts should change and sign should flip with direction.
 3. **Motor switch (`PD3`):** toggle it, watch OLED page 3's `ESTOP` field flip READY/ENGAGED. Polarity is an *assumption*, not yet physically verified — if it reads backwards, flip the comparison in `motor_estop_engaged()` (`motor.c`).
 4. **Servo:** should visibly center on boot. Real steering needs a host command (see below).
-5. **Motors:** will **not** spin at all without an active host link — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
+5. **Motors (normal operation):** remain stopped without an active host link; the self-test below is an exception — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
 
-**Automated drive/steer self-test (no host needed):** runs a scripted sequence — forward 1 wheel revolution, backward 1 wheel revolution, steer left, steer right, return to center. Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`).
+**Straight-line PI self-test (no host needed):** The self-test centers steering and runs a timed straight-line PI test. PE8 blinks once to start, twice when done, or five times if PD3 disables motors. Other tests are commented out.
+Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`).
 
 `PE0` (the user button) is dual-purpose, depending on *when* you press it and, during normal
 operation, the state of the `PD3` motor ON/OFF switch:
 
 | When you press it | `PD3` state | What happens |
 | --- | --- | --- |
-| Held down at the exact moment the board resets/powers on | either | Skips normal startup, runs the self-test instead |
+| Held through reset/power-on | Motor ON (ready) | Runs self-test before the main loop |
+| Held through reset/power-on | Motor OFF (disabled) | Refuses self-test, then enters the main loop |
 | Board already running normally | Motor ON (ready) | Runs the self-test sequence (can actually drive the motors) |
 | Board already running normally | Motor OFF (disabled) | Cycles the OLED page instead (self-test would just refuse anyway) |
 
-`selftest_run_if_requested()` checks the pin's level **once**, right after peripheral init and
-*before* the main loop starts — it is not watching for a long-press while the firmware is already
-running. To trigger it: hold `PE0` down, power-cycle (or hit physical reset) *while still holding
-it*, and keep holding for a second or two after power returns — you'll see the LED start its
-1-2-3-4-5-6 blink pattern once the sequence begins, at which point you can let go. Refuses to run
-if the `PD3` motor switch is in the OFF (disabled) position.
+To trigger at boot, hold PE0 through reset with the PD3 motor switch enabled until the self-test starts.
+The OLED displays test status. Steering calibration routines are disabled by default; see
+[Calibration tooling](tuning.md#calibration-tooling) for details.
 
-Only `PE8` is a GPIO-controllable LED on this board (confirmed against the resource-allocation PDF — the `LED1`-`LED4` silkscreen labels on the schematic are hardwired power-rail/SWD indicators, not firmware-drivable). So each phase blinks `PE8` a distinct number of times instead of lighting separate LEDs:
-
-| Blinks | Phase |
-| --- | --- |
-| 1 | Forward, 1 wheel revolution |
-| 2 | Backward, 1 wheel revolution |
-| 3 | Steering calibration sweeps, button-advanced in **raw microseconds** (never in an angle unit — calibrating against a mapping's own input is circular). Center trim, per-side limit finding, and protractor measurement phases — see [Calibration tooling](tuning.md#calibration-tooling) |
-| 4 | Done |
-
-Refusal (motor switch OFF) is a *separate* standalone 5-blink pattern with different timing
-(100ms on/off vs. the phases' 150ms on/off) — not part of the numbered sequence above, so it can't
-be confused with any of these phase counts.
-
-The OLED also prints the current phase. Each drive phase has a 5s safety timeout (`SELFTEST_DRIVE_TIMEOUT_MS`) in case the wheels aren't actually turning (e.g. propped up wrong, or a real motor/encoder fault) — it won't hang forever waiting for encoder ticks that never arrive.
+!!! warning "Bridge telemetry layout needs updating"
+    The IR firmware sends 64-byte telemetry; the checked-out bridge expects 54 bytes.
+    Resolve the [packet mismatch](serial_protocol.md) before running the bridge verification below.
 
 **With the ROS2 bridge running** (wheels off the ground first):
 
@@ -256,15 +242,6 @@ ros2 topic echo /imu/data       # live accel/gyro
 ros2 topic echo /estop          # should match the PD3 switch state
 
 ros2 topic pub /joint_commands sensor_msgs/msg/JointState \
-  "{name: ['lb_joint','rb_joint','left_joint','right_joint'], velocity: [2.0,2.0,0,0], position: [0,0,0.2,0.2]}" --once
+  "{name: ['lb_joint','rb_joint','left_joint','right_joint'], velocity: [2.0,2.0], position: [0.2,0.2]}" --once
 ```
 Wheels should spin slowly and the servo should turn — confirms the full STM32 -> Pi -> STM32 loop.
-
-## Not Yet Verified On Hardware
-
-- Closed-loop wheel-speed PID — implemented, not bench-tuned or hardware-tested (see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)).
-- `PD3` motor switch polarity — only confirmed functionally (self-test refusal), not with a multimeter.
-- Battery voltage ADC divider ratio (11x) — sourced from vendor firmware, not cross-checked with a multimeter.
-- Wheel diameter / effective rolling radius for ticks→real-distance conversion — unconfirmed.
-- Main loop rate tiers (100Hz/5Hz) and URDF steering limits — implemented/updated, not yet re-validated on hardware.
-
