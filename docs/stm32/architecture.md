@@ -28,7 +28,7 @@ picture and build/flash/tuning steps, see [Overview](index.md).
 | 2 | `USART3` (RX) | per-byte, ~115200 baud | Command packet framing (`g_last_command`) | `usart.c` |
 | 3 (lowest) | `EXTI0` | on press | Button debounce flag | `button.c` |
 | — (not an IRQ) | Main loop, fast tier | 100 Hz, tick-interval | Command/safety gating, IMU read, telemetry TX (interrupt-driven) | `main.c` |
-| — (not an IRQ) | Main loop, slow tier | ~5 Hz, tick-interval | OLED render, debug `printf`, battery ADC, heartbeat LED | `main.c` |
+| — (not an IRQ) | Main loop, slow tier | ~5 Hz, tick-interval | OLED render, debug `printf`, battery/IR ADC, heartbeat LED | `main.c` |
 
 **Adding something new:**
 
@@ -47,12 +47,12 @@ IMU/encoder data to the Pi, even though the PID ISR already samples at 100Hz int
 | Tier | Rate | What's in it | Why this rate |
 | --- | --- | --- | --- |
 | Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, telemetry build+send | Matches the PID's own 100Hz sampling 1:1 |
-| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery ADC, heartbeat LED | Human-facing / slow-changing; also the 2 slowest ops (bit-banged OLED, blocking printf) |
+| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery/IR ADC, heartbeat LED | Human-facing / slow-changing; also the 2 slowest ops (bit-banged OLED, blocking printf) |
 | Always | every raw loop pass | Button/self-test-request check, OLED page-advance check | Cheap enough not to need tiering |
 
 !!! note "Fast tier only works because telemetry TX is interrupt-driven"
     `uart_send_telemetry()` uses `HAL_UART_Transmit_IT`, not blocking. A blocking send of the
-    54-byte packet would take ~4.7ms at 115200 baud — ~47% of the 10ms period on its own. Also
+    64-byte packet would take ~5.6ms at 115200 baud — ~56% of the 10ms period on its own. Also
     drops worst-case motor-switch-off reaction time from ~100ms (pre-tiering) to ~20ms.
 
 !!! tip "Why the PID stays at 100Hz, not higher"
@@ -63,9 +63,9 @@ IMU/encoder data to the Pi, even though the PID ISR already samples at 100Hz int
 
 **Bandwidth** (`USART3` @ 115200 baud ≈ 11520 B/s):
 
-- Telemetry: 54 B/packet @ 100Hz
+- Telemetry: 64 B/packet @ 100Hz
 - Commands: 16 B/packet @ ~50Hz
-- Combined ≈ 6200 B/s (~54% of capacity) — margin remains
+- TX telemetry: 6400 B/s (~56% of TX capacity); RX commands: 800 B/s (~7% of RX capacity). UART is full-duplex.
 - `USART1` (debug printf) is separate hardware, doesn't compete
 
 Battery voltage / measured rad/s are cached in persistent locals — the slow tier displays whatever
@@ -87,7 +87,7 @@ before hardware is actually driven, one step per driver:
 | `CommandPacket` (wire, `USART3`) | **rad/s** (`left_wheel_rad_s`/`right_wheel_rad_s`), **rad** (`steer_rad`) | crosses Pi↔STM32 |
 | `motor.c` internal | **PWM %** (0–100, signed for direction) | STM32, after conversion |
 | Motor hardware PWM output | raw timer compare-register count (duty cycle) | STM32, electrical signal |
-| `servo.c` internal | **microseconds** pulse width (600–2400µs) | STM32, after conversion |
+| `servo.c` internal | **microseconds** pulse width (840-2400 us operating; 600-2500 us calibration) | STM32, after conversion |
 
 - **Motors**: `rad_s_to_pct()` converts target rad/s → PWM% via `pct = (rad_s / 34.56) × 100`
   (34.56 rad/s = the motor's rated max speed post-gearbox). That's the *feedforward* baseline — the
@@ -209,9 +209,22 @@ schematics (`references/`).
 | --- | --- | --- | --- |
 | **Steering Servo** | `PB15` | TIM12_CH2 | 50 Hz PWM (600–2500µs calibration bound, **840–2400µs** measured operating span, center **1490µs** — see [Command Units](#command-units) / [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) |
 | **IMU Sensor** | `PB10` (SCL), `PB11` (SDA) | Bit-banged software I2C (GPIO, `GPIO_MODE_OUTPUT_OD`) - **not** the hardware `I2C2` peripheral | ICM-20948 (9-DOF Gyro/Accel/Mag - only accel+gyro registers are read, magnetometer unused). Polled (`imu_update()`), not interrupt-driven - no `INT` pin connected in firmware |
+| **IR distance sensor** | `PC2` | ADC1_CH12 | One active channel; raw ADC, voltage, and estimated distance sampled at ~5 Hz |
 | **Battery AD** | `PB0` | ADC1_CH8 | Voltage measurement via resistor divider |
 | **Car Type Select** | `PB1` | ADC1_CH9 | Potentiometer voltage reading |
 | **OLED Display** | `PD11`, `PD12`, `PD13`, `PD14` | GPIO | 0.96" OLED SPI Bit-banged display |
 | **Status LED** | `PE8` | GPIO | Board status LED |
 | **User Button** | `PE0` | GPIO | Onboard push button |
 | **Buzzer** | `PA8` | GPIO | Onboard buzzer |
+
+### IR Distance Sensor (`ir_sensor.c`)
+
+The current driver reads one Sharp GP2Y0A21YK channel on PC2/ADC1_CH12.
+The slow main-loop tier samples it at approximately 5 Hz; OLED page 2 displays raw ADC,
+voltage, and estimated distance. Distance is calculated as
+`6.3028 / (raw / 4095)^1.226` and clamped to 10-80 cm; raw zero returns 80 cm.
+ADC failures also return raw zero, so 80 cm does not distinguish an error from a far reading.
+The ultrasonic display remains a hardcoded 18.5 cm placeholder.
+
+IR readings are included in the STM32 telemetry packet; the checked-out ROS decoder still
+needs the matching fields (see [Serial Protocol](serial_protocol.md)).

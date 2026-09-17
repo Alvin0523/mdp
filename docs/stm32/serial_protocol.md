@@ -13,6 +13,12 @@ Implementations:
 - **STM32 side:** `mdp_stm32/include/protocol.h`, `mdp_stm32/src/usart.c`
 - **ROS2 side:** `mdp_ros/src/mdp_bridge/include/mdp_bridge/protocol.hpp`, `mdp_ros/src/mdp_bridge/src/serial_bridge_node.cpp`
 
+!!! warning "Current IR telemetry requires a bridge update"
+    The STM32 packet is now 64 bytes, including IR fields before `uptime_ms`. The checked-out
+    ROS bridge still defines the earlier 54-byte packet without those fields. Update the bridge
+    layout and decoder together before expecting compatible telemetry. IR values are sampled
+    at approximately 5 Hz and cached for the 100 Hz telemetry stream.
+
 These two headers are **hand-mirrored, not shared at build time** — the two repos have separate build systems (PlatformIO vs colcon). If you change one, update the other.
 
 ### Framing
@@ -41,6 +47,9 @@ Sent from `main.c`'s "fast" tier, **100Hz** (`FAST_PERIOD_MS`), via interrupt-dr
 | `imu_ready` | `uint8` | 1 = IMU detected and operational |
 | `estop` | `uint8` | 1 = onboard `PD3` motor switch engaged |
 | `battery_v` | `float` | Battery pack voltage (V), `PB0`/ADC1_CH8 |
+| `ir_raw` | `uint16` | IR ADC reading (0-4095), PC2/ADC1_CH12 |
+| `ir_voltage` | `float` | IR sensor voltage (V) |
+| `ir_distance_cm` | `float` | Estimated IR distance, clamped to 10-80 cm |
 | `uptime_ms` | `uint32` | Firmware `HAL_GetTick()` at send time |
 
 The bridge node differentiates `enc_left`/`enc_right` against the previous packet's value and `uptime_ms` delta to compute wheel angular velocity — no separate delta field is sent.
@@ -57,9 +66,9 @@ Sent whenever `/joint_commands` updates.
 | --- | --- | --- |
 | `left_wheel_rad_s` | `float` | Target Motor A (rear left) angular velocity |
 | `right_wheel_rad_s` | `float` | Target Motor B (rear right) angular velocity |
-| `steer_rad` | `float` | Target steering angle (radians). **Positive = right, negative = left** — this matches `servo_set_angle()`'s convention (`mdp_stm32/src/servo.c`), which is the **opposite** sign from ROS's `left_joint`/`right_joint` (REP-103: positive = left). `mdp_bridge`'s `serial_bridge_node.cpp` negates the angle when converting in both directions — see the note in [RPi: ROS2 Jazzy](../rpi/ros2_jazzy.md#core-topic-specifications). |
+| `steer_rad` | `float` | Target steering angle (radians): **positive = left, negative = right**. The bridge passes the angle through without sign inversion. |
 
-**rad/s -> PWM percent:** open-loop, `pct = (rad_s / 34.56) * 100`, clamped to ±100%. `34.56 rad/s` = `MG513P3012V`'s rated max output speed (330 RPM, already post-1:30-gearbox per `docs/hardware.md`). There is no closed-loop encoder-based speed regulation yet — actual speed at a given commanded rad/s varies with battery voltage and load.
+**rad/s -> PWM percent:** the 100 Hz wheel-speed loop adds incremental PI correction to the feedforward baseline `pct = (rad_s / 34.56) * 100`, then clamps output to +/-100%. Encoder feedback closes the loop; gains remain untuned.
 
 **One servo, two steering joints:** `ackermann_steering_controller` commands `left_joint` and `right_joint` independently (true Ackermann geometry has slightly different inner/outer wheel angles), but this chassis has only **one physical steering servo**. The bridge node averages the two commanded angles into the single `steer_rad` sent to the MCU — a small-angle approximation, not exact per-wheel Ackermann steering.
 

@@ -17,17 +17,18 @@ A dedicated `TIM7` ISR runs at 100Hz and closes the loop per wheel:
 ```mermaid
 flowchart LR
     TARGET["Target rad/s<br/>(g_last_command)"] --> PI
-    ENC["encoder_get_delta_a/b()<br/>ticks since last call"] --> CONV["× 2π/1560<br/>→ measured rad/s"]
-    CONV --> PI["Incremental PI<br/>Bias = measured - target<br/>Pwm += KP·(Bias-Last_bias) + KI·Bias"]
-    PI --> OUT["motor_set_speed()<br/>PWM %"]
+    ENC["encoder_get_delta_a/b()<br/>ticks since last call"] --> CONV["× 2π/1560 × 100 Hz<br/>→ measured rad/s"]
+    CONV --> PI["Incremental PI<br/>Bias = target - measured<br/>Pwm += KP·(Bias-Last_bias) + KI·Bias"]
+    PI --> SUM["Feedforward + correction<br/>clamp to +/-100%"]
+    SUM --> OUT["motor_set_speed()<br/>PWM %"]
     OUT --> MOTOR["AT8236 → motor"]
     MOTOR -.->|"ticks"| ENC
 ```
 <p align="center"><strong>Fig. 3</strong> — Wheel-Speed PID Loop (per wheel)</p>
 
-Incremental PI (accumulates `Pwm` from `Bias` deltas) rather than a positional PID — naturally
-rate-limits output changes, which matters for not stalling the AT8236's gate drive (see the
-locked-antiphase note in [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)).
+The loop accumulates a PI correction from error changes and adds it to the speed-based
+feedforward baseline. Correction and final PWM output are clamped; this is not an explicit
+output slew-rate limiter.
 
 The safety layers wrap the loop and always win: the 500ms stale-command fail-safe
 (`uart_command_is_stale`) and the `PD3` motor switch check zero the PWM output unconditionally,
@@ -85,8 +86,8 @@ cannot distinguish a steering-center offset from a wheel-speed mismatch, since b
 point, with a **separate slope per side**:
 
 ```c
-left  (angle >= 0):  pulse = 1490 + angle_rad × (−1080)   /* 1490 → 840 µs over  35.0° */
-right (angle <  0):  pulse = 1490 + angle_rad × (−1837)   /* 1490 → 2400 µs over 29.5° */
+left  (angle >= 0):  pulse = 1490 + angle_rad × (−1064.1)   /* 1490 → 840 µs over  35.0° */
+right (angle <  0):  pulse = 1490 + angle_rad × (−1767.4)   /* 1490 → 2400 µs over 29.5° */
 ```
 
 Spans are 650 µs left and 910 µs right, so the two sides differ by roughly 1.4× — a single shared
@@ -124,7 +125,8 @@ firmware stopped commanding further, and the hardware was never asked.
 
 `selftest.c` provides button-advanced sweeps (one PE0 press per step, pulse width shown on the OLED).
 Press PE0 during normal operation to run the self-test; no reset is needed, and the motor switch must
-be off-engaged for it to proceed.
+be enabled for it to proceed. Only the straight-line PI test is currently enabled;
+calibration sweeps must be uncommented in `selftest_run()` before use.
 
 | Phase | Purpose |
 | --- | --- |
@@ -137,8 +139,8 @@ be off-engaged for it to proceed.
 **Calibrate in microseconds, never in an "angle" unit.** Microseconds is the only unit in the driver
 that is physically meaningful on its own — it is the actual signal the servo receives. Calibrating
 against a mapping's own input unit is circular, which is precisely how the cubic's numbers went
-unchallenged for so long. `servo_set_pulse_us()` exists for this and bypasses the cubic, the operating
-angle clamp, and the old PWM clamp alike; it is bounded only by `SERVO_CAL_PULSE_MIN/MAX_US`
+unchallenged for so long. `servo_set_pulse_us()` exists for this and bypasses the angle-to-pulse mapping and operating
+angle clamp; it is bounded only by `SERVO_CAL_PULSE_MIN/MAX_US`
 (600–2500 µs), deliberately wider than the operating range so sweeps can probe past current limits.
 
 When judging a limit, watch *and* listen. A servo stall is an audible buzz or whine with no visible
