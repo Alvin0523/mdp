@@ -73,12 +73,12 @@ graph TD
 mdp_stm32/
 ├── platformio.ini            # Board/toolchain config, build flags
 ├── include/                  # Headers - one per driver
-│   ├── motor.h, servo.h, encoder.h, imu.h, battery.h, button.h, oled.h
+│   ├── motor.h, servo.h, encoder.h, imu.h, battery.h, ir_sensor.h, button.h, oled.h
 │   ├── usart.h, protocol.h   # Serial link to mdp_ros
 │   └── selftest.h
 └── src/                      # Implementation - one .c per driver, matches include/
     ├── main.c                # Boot sequence + main loop (fast/slow rate tiers)
-    ├── motor.c, servo.c, encoder.c, imu.c, battery.c, button.c, oled.c
+    ├── motor.c, servo.c, encoder.c, imu.c, battery.c, ir_sensor.c, button.c, oled.c
     ├── usart.c                # Binary protocol framing/TX/RX
     └── selftest.c             # Scripted drive/steer self-test
 ```
@@ -127,6 +127,7 @@ flowchart LR
         direction LR
         IMUSENS["ICM-20948 IMU<br/>(imu_update)"] --> TPKT
         BATT["Battery ADC<br/>(battery_read_voltage)"] --> TPKT
+        IRSENS["Analog IR sensor<br/>(ir_sensor_read_raw)"] --> TPKT
         SW["Motor ON/OFF switch<br/>(motor_estop_engaged)"] --> TPKT
         TPKT["TelemetryPacket<br/>(uart_send_telemetry)"]
     end
@@ -207,7 +208,8 @@ If, after tuning, the car still curves during a straight `/cmd_vel` command, see
 2. **Encoders:** spin a rear wheel by hand, watch OLED page 3 (`Enc L`/`Enc R`) — counts should change and sign should flip with direction.
 3. **Motor switch (`PD3`):** toggle it, watch OLED page 3's `ESTOP` field flip READY/ENGAGED. Polarity is an *assumption*, not yet physically verified — if it reads backwards, flip the comparison in `motor_estop_engaged()` (`motor.c`).
 4. **Servo:** should visibly center on boot. Real steering needs a host command (see below).
-5. **Motors (normal operation):** remain stopped without an active host link; the self-test below is an exception — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
+5. **IR sensor:** switch to OLED page 2, move an obstacle/hand in front of `PC2` (10–50 cm) — confirm `IR raw` increases and `cm` distance decreases accordingly.
+6. **Motors (normal operation):** remain stopped without an active host link; the self-test below is an exception — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
 
 **Straight-line PI self-test (no host needed):** The self-test centers steering and runs a timed straight-line PI test. PE8 blinks once to start, twice when done, or five times if PD3 disables motors. Other tests are commented out.
 Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`).
