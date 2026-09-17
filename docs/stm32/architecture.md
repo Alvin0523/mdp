@@ -46,8 +46,8 @@ IMU/encoder data to the Pi, even though the PID ISR already samples at 100Hz int
 
 | Tier | Rate | What's in it | Why this rate |
 | --- | --- | --- | --- |
-| Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, telemetry build+send | Matches the PID's own 100Hz sampling 1:1 |
-| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery/IR ADC, heartbeat LED | Human-facing / slow-changing; also the 2 slowest ops (bit-banged OLED, blocking printf) |
+| Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, telemetry build+send (including cached battery & IR) | Matches the PID's own 100Hz sampling 1:1 |
+| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery & IR ADC polling, heartbeat LED | Human-facing / slow-changing; also the 2 slowest ops (bit-banged OLED, blocking printf) |
 | Always | every raw loop pass | Button/self-test-request check, OLED page-advance check | Cheap enough not to need tiering |
 
 !!! note "Fast tier only works because telemetry TX is interrupt-driven"
@@ -164,6 +164,14 @@ Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). Op
   confirmed from the schematic PDF (visual layout, not extractable text).
 - Not yet cross-checked with a multimeter on this board.
 
+### IR Distance Sensor (`ir_sensor.c`)
+
+- Hardware: One analog Sharp GP2Y0A21YK distance sensor wired to `PC2` (`ADC1_CH12`).
+- Powered via the board's 5V rail; analog output (0.0 to 3.1V) is sampled by the 3.3V-tolerant 12-bit ADC (`HAL_ADC` single-conversion polling).
+- Sampled in the slow main-loop tier (~5 Hz) via `ir_sensor_read_raw()` to keep ADC polling latency out of the fast loop.
+- Distance calculation: `6.3028 / (raw / 4095)^1.226`, clamped to 10–80 cm. Raw zero returns 80 cm (ADC conversion failures also fail-safe to 80 cm).
+- Cached readings (`ir_raw`, `ir_voltage`, `ir_distance_cm`) are rendered on OLED page 2 and packed into the 100 Hz telemetry stream over `USART3` (see [Serial Protocol](serial_protocol.md)).
+
 ---
 
 ## Pinouts & Peripherals
@@ -216,15 +224,3 @@ schematics (`references/`).
 | **Status LED** | `PE8` | GPIO | Board status LED |
 | **User Button** | `PE0` | GPIO | Onboard push button |
 | **Buzzer** | `PA8` | GPIO | Onboard buzzer |
-
-### IR Distance Sensor (`ir_sensor.c`)
-
-The current driver reads one Sharp GP2Y0A21YK channel on PC2/ADC1_CH12.
-The slow main-loop tier samples it at approximately 5 Hz; OLED page 2 displays raw ADC,
-voltage, and estimated distance. Distance is calculated as
-`6.3028 / (raw / 4095)^1.226` and clamped to 10-80 cm; raw zero returns 80 cm.
-ADC failures also return raw zero, so 80 cm does not distinguish an error from a far reading.
-The ultrasonic display remains a hardcoded 18.5 cm placeholder.
-
-IR readings are included in the STM32 telemetry packet; the checked-out ROS decoder still
-needs the matching fields (see [Serial Protocol](serial_protocol.md)).

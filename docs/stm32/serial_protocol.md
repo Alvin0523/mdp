@@ -4,8 +4,6 @@ icon: lucide/cable
 
 # Serial Protocol (`mdp_stm32` ↔ `mdp_bridge`)
 
-## Serial Protocol
-
 Custom lightweight binary protocol over `USART3` (Type-C Port 3, `PD8`/`PD9`, 115200 baud) linking the STM32 firmware to the `mdp_bridge` ROS2 node on the Pi.
 
 Implementations:
@@ -32,25 +30,36 @@ Both packet types start with 2 sync bytes and a type byte, so a receiver can res
 - `checksum` is an XOR of every byte from `type` through the last payload byte (sync bytes excluded).
 - Both sides are little-endian (Cortex-M4 and aarch64/x86_64 Pi) — no byte-swapping.
 
-### Telemetry Packet (STM32 -> Pi)
+### Telemetry Packet (STM32 -> Pi) — 64 Bytes
 
 Sent from `main.c`'s "fast" tier, **100Hz** (`FAST_PERIOD_MS`), via interrupt-driven TX (`HAL_UART_Transmit_IT`, not blocking) — matches the motor PID's own 100Hz encoder sampling 1:1, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation) for the full rate-tier breakdown and why a blocking transmit wouldn't have been viable at this rate. Was 10Hz (tied to OLED/debug-print rate, blocking TX) before that split.
 
+**Fixed packet size:** `64 bytes` (expanded from 54 bytes with the addition of IR distance sensor telemetry).
+
 | Field | Type | Meaning |
-| --- | --- | --- |
+| :--- | :--- | :--- |
+| `sync0` | `uint8` | Frame sync byte 0 (`0xAA`) |
+| `sync1` | `uint8` | Frame sync byte 1 (`0x55`) |
+| `type` | `uint8` | Packet type (`0x01` = Telemetry) |
 | `enc_left` | `int32` | Cumulative Motor A (rear left) encoder ticks |
 | `enc_right` | `int32` | Cumulative Motor B (rear right) encoder ticks |
 | `steer_deg` | `float` | Steering angle currently applied to the servo (deg) |
-| `accel_x/y/z` | `float` | Accelerometer, m/s^2 |
-| `gyro_x/y/z` | `float` | Gyroscope, deg/s |
-| `yaw_deg` | `float` | Bias-corrected gyro-Z integration (deg) — no accel/mag fusion, so it will still drift over time; roll/pitch are not estimated at all |
+| `accel_x/y/z` | `float[3]` | Accelerometer readings (m/s^2) |
+| `gyro_x/y/z` | `float[3]` | Gyroscope readings (deg/s) |
+| `yaw_deg` | `float` | Bias-corrected gyro-Z integration (deg) — no accel/mag fusion |
 | `imu_ready` | `uint8` | 1 = IMU detected and operational |
 | `estop` | `uint8` | 1 = onboard `PD3` motor switch engaged |
-| `battery_v` | `float` | Battery pack voltage (V), `PB0`/ADC1_CH8 |
-| `ir_raw` | `uint16` | IR ADC reading (0-4095), PC2/ADC1_CH12 |
-| `ir_voltage` | `float` | IR sensor voltage (V) |
-| `ir_distance_cm` | `float` | Estimated IR distance, clamped to 10-80 cm |
-| `uptime_ms` | `uint32` | Firmware `HAL_GetTick()` at send time |
+| `battery_v` | `float` | Battery pack voltage (V), `PB0`/ADC1_CH8 (11x divider) |
+| `ir_raw` | `uint16` | Analog IR 12-bit ADC reading (0–4095), `PC2`/ADC1_CH12 |
+| `ir_voltage` | `float` | Analog IR sensor voltage (0.0 to 3.3V) |
+| `ir_distance_cm` | `float` | Estimated IR distance, clamped to 10–80 cm |
+| `uptime_ms` | `uint32` | Firmware `HAL_GetTick()` timestamp at send time |
+| `checksum` | `uint8` | XOR of all bytes from `type` through `uptime_ms` |
+
+!!! important "Strict field ordering"
+    The three IR fields (`ir_raw`, `ir_voltage`, `ir_distance_cm`) are positioned **immediately before `uptime_ms`**, not at the end of the packet. An outdated 54-byte bridge decoder reading this 64-byte stream will misalign `uptime_ms` and fail checksum validation on every frame.
+    
+    *Hardware pin:* The analog IR sensor is wired to `PC2` (ADC1 Channel 12).
 
 The bridge node differentiates `enc_left`/`enc_right` against the previous packet's value and `uptime_ms` delta to compute wheel angular velocity — no separate delta field is sent.
 
@@ -58,15 +67,21 @@ The bridge node differentiates `enc_left`/`enc_right` against the previous packe
 
 **ADC raw -> volts:** `raw / 4095.0 * 3.3 * 11.0` (12-bit ADC, 3.3V reference, 11x resistor-divider ratio), sourced from WHEELTEC's C30D basic-example firmware (`references/WHEELTEC/.../03-ADC采集电压值与电位器值/ADC.zip` → `bsp_adc.c`/`main.c`, `Battery_Ch = 8`) for this exact board line — the divider ratio couldn't be confirmed from the schematic PDF's visual layout, so it's taken from the vendor's own working example instead of guessed.
 
-### Command Packet (Pi -> STM32)
+### Command Packet (Pi -> STM32) — 16 Bytes
 
-Sent whenever `/joint_commands` updates.
+Sent whenever `/joint_commands` updates on the host (typically matching `ros2_control`'s update rate, e.g. 50Hz).
+
+**Fixed packet size:** `16 bytes`.
 
 | Field | Type | Meaning |
-| --- | --- | --- |
-| `left_wheel_rad_s` | `float` | Target Motor A (rear left) angular velocity |
-| `right_wheel_rad_s` | `float` | Target Motor B (rear right) angular velocity |
+| :--- | :--- | :--- |
+| `sync0` | `uint8` | Frame sync byte 0 (`0xAA`) |
+| `sync1` | `uint8` | Frame sync byte 1 (`0x55`) |
+| `type` | `uint8` | Packet type (`0x02` = Command) |
+| `left_wheel_rad_s` | `float` | Target Motor A (rear left) angular velocity (rad/s) |
+| `right_wheel_rad_s` | `float` | Target Motor B (rear right) angular velocity (rad/s) |
 | `steer_rad` | `float` | Target steering angle (radians): **positive = left, negative = right**. The bridge passes the angle through without sign inversion. |
+| `checksum` | `uint8` | XOR of all bytes from `type` through `steer_rad` |
 
 **rad/s -> PWM percent:** the 100 Hz wheel-speed loop adds incremental PI correction to the feedforward baseline `pct = (rad_s / 34.56) * 100`, then clamps output to +/-100%. Encoder feedback closes the loop; gains remain untuned.
 
