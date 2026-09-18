@@ -224,3 +224,23 @@ schematics (`references/`).
 | **Status LED** | `PE8` | GPIO | Board status LED |
 | **User Button** | `PE0` | GPIO | Onboard push button |
 | **Buzzer** | `PA8` | GPIO | Onboard buzzer |
+
+### IR Distance Sensor (`ir_sensor.c`)
+
+The current driver reads one Sharp GP2Y0A21YK channel on PC2/ADC1_CH12.
+The slow main-loop tier samples it at approximately 5 Hz; OLED page 2 displays raw ADC,
+voltage, and estimated distance. Distance is calculated as
+`6.3028 / (raw / 4095)^1.226` and clamped to 10-80 cm; raw zero returns 80 cm.
+ADC failures also return raw zero, so 80 cm does not distinguish an error from a far reading.
+The ultrasonic display uses the HC-SR04 driver (`ultrasonic.c`). The
+driver assigns PA2 (H1 pin 9) to TRIG and PA3 (H1 pin 11) to
+ECHO through a voltage divider, using TIM5 CH4/CH3 to capture both edges of TI4
+at 1 MHz. These H1 pins are shown on sheet 1 of the supplied C30D schematic.
+Verify the physical board wiring before use. The current header enables the
+driver in the normal build; `ULTRASONIC_ENABLED=0` disables it. Measurements
+are scheduled at 100 ms intervals, with a 30 ms timeout and 300 ms freshness
+limit. Invalid or disabled readings show `--` on OLED page 2. Results are also
+printed on USART1; the binary telemetry protocol is unchanged.
+
+IR readings are included in the STM32 telemetry packet; the checked-out ROS decoder still
+needs the matching fields (see [Serial Protocol](serial_protocol.md)).

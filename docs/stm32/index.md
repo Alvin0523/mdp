@@ -162,7 +162,7 @@ flowchart LR
 - [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run real` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md#serial-protocol)
 - [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
 - [x] Automated self-test (`selftest.c`) — verified on hardware
-- [ ] Ultrasonic (HC-SR04) driver — not started
+- [ ] Ultrasonic (HC-SR04) — driver implemented; hardware validation pending
 - [x] IR distance sensor (Sharp GP2Y0A21YK) driver - completed for one channel on PC2/ADC1_CH12, with raw ADC, voltage, and estimated distance on OLED. Two-channel integration is not present in this checkout.
 
 ---
