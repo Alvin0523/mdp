@@ -7,10 +7,9 @@ icon: lucide/camera
 Camera-based target/arrow recognition for Task 1 (image recognition) and Task 2 (arrow detection),
 running as ROS2 nodes inside `mdp_ros` on the RPi.
 
-!!! note "Stub page — fill in as the Vision subsystem's own detail lands here"
-    This page currently only reflects what's actually in the repo. Add architecture rationale, model
-    training notes, accuracy/false-positive tracking, and camera calibration detail here as that work
-    happens.
+!!! note "Still missing: model training notes and accuracy tracking"
+    This page covers what's actually in the repo file-by-file, but YOLO26 training/dataset notes,
+    accuracy/false-positive tracking, and camera calibration detail aren't written up yet.
 
 ## What's actually in the repo
 
@@ -18,12 +17,12 @@ running as ROS2 nodes inside `mdp_ros` on the RPi.
 `libcamera`/`camera_ros` packages — mirroring how `mdp_algorithm/` holds `mdp_planning` +
 `wayp_plan_tools`.
 
-Package: `mdp_ros/src/mdp_vision/mdp_yolo` — description in `setup.py`: *"Vision stack for MDP robot"*.
+Package: `mdp_ros/src/mdp_vision` — description in `setup.py`: *"Vision stack for MDP robot"*.
 
 | File | Role |
 | --- | --- |
-| `mdp_yolo/yolo_detector.py` | Ultralytics YOLO detector node |
-| `mdp_yolo/camera_publisher.py` | Standalone webcam publisher — dev-only, for testing without the RPi camera (`pixi run vision`) |
+| `mdp_vision/yolo_detector.py` | Ultralytics YOLO detector node |
+| `mdp_vision/camera_publisher.py` | Standalone webcam publisher — dev-only, for testing without the RPi camera (`pixi run vision`) |
 | `launch/vision.launch.py` | Launches the standalone dev-machine vision test path |
 | `models/yolo26n_ncnn_model/` | Exported/converted YOLO26 model (NCNN format, for embedded inference) |
 

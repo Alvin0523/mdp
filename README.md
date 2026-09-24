@@ -34,7 +34,7 @@ This repository serves as the central meta-workspace for the **Mini Ackermann Ro
 |---|---|
 | **Host (`mdp_ros`)** | ROS 2 Jazzy, `ros2_control` / `ackermann_steering_controller`, `topic_based_ros2_control`, `robot_localization` (EKF), Gazebo Sim (`gz_ros2_control`), Foxglove Bridge |
 | **Firmware (`mdp_stm32`)** | STM32F407VET6, bare-metal STM32Cube HAL via PlatformIO, custom binary serial protocol |
-| **Vision & Planning** | Ultralytics YOLO26 (`mdp_yolo`), Reeds-Shepp/Dubins TSP solver, spline planning, Pure Pursuit (`mdp_algorithm`) |
+| **Vision & Planning** | Ultralytics YOLO26 (`mdp_vision`), Reeds-Shepp/Dubins TSP solver, spline planning, Pure Pursuit (`mdp_algorithm`) |
 | **Tooling** | [Pixi](https://pixi.sh) (`robostack-jazzy`), [Zensical](https://zensical.org) docs site |
 
 See [System Architecture](https://alvin0523.github.io/mdp/) for the full breakdown.

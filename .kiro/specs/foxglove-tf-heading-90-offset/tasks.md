@@ -1,0 +1,219 @@
+# Implementation Plan
+
+- [x] 1. Set up the test framework and the pure pose-transform surface for property tests
+  - **PREREQUISITE**: The workspace has no test suite yet, so no property test can run until this exists
+  - Add `hypothesis` (and `pytest` if not already resolved through the ROS test stack) to `mdp_ros/pixi.toml` dependencies with pinned versions
+  - Create `src/mdp_bringup/test/` and `src/mdp_algorithm/test/` pytest directories, wired into `CMakeLists.txt` so `pixi run test` (`colcon test`) discovers them
+  - Add a placeholder/smoke test in each and confirm `pixi run test` runs and reports them
+  - Note the seam the property tests will target: a pure 2D pose helper (compose, invert, yaw normalisation) that derives `T_map_odom` from a start pose without needing a ROS graph, per Testing Strategy in design.md
+  - Do NOT implement the helper or any production code here - only the test scaffolding
+  - _Requirements: 2.1, 2.5_
+
+- [x] 2. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Arena and robot render in agreement
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Scope the property to the concrete reported start pose `(0.15, 0.15, pi/2)` for reproducibility, then widen the generator over `x`, `y` in the arena and `yaw` over `[-pi, pi]`
+  - Encode `isBugCondition(input)` from design.md: `arena_marker_frame == 'odom'` AND no arena-to-`odom` transform in the TF tree AND start pose != `(0, 0, 0)`
+  - Assert an arena frame exists in the TF tree and that composing the published `map -> odom` with the `odom -> base` transform at `odom` creation reproduces the arena start pose (heading `yaw`, position `(x, y)`)
+  - Assert every arena-referenced publisher stamps the arena frame, not `'odom'`: `/occupancy_grid`, `/grid_markers`, `/obstacle_markers`, `/checkpoint_markers`, `/planned_path`, path markers, search progress
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found: `odom` is the TF root with no `map`; robot TF origin renders at the drawn arena `(0, 0)` corner with heading 90 degrees clockwise of arena +Y; an obstacle at `(1.0, 1.0)` renders about 1.6 m from its Gazebo counterpart
+  - Mark task complete when test is written, run, and failure is documented
+  - **DONE** - `src/mdp_bringup/test/test_arena_frame_agreement.py`, run on unfixed code: **4 failed, 2 passed** (the 2 passes are the bug-condition premise and the `/cmd_vel` body-frame scope guard). Static/structural: the launch description is introspected in-process (no Gazebo started) and the runner's `frame_id` literals are read off the AST. Observed counterexamples:
+    - `no node broadcasts map -> odom in task1_sim.launch.py; launch node executables are ['create', 'parameter_bridge', 'publish_test_obstacles.py', 'robot_state_publisher', 'spawner', 'task1_runner.py', 'yolo_detector.py']` - `odom` is the TF root, no `map` exists
+    - all 11 arena `frame_id` literals say `'odom'`: `_publish_occupancy_grid:443`, `_publish_grid_lines:481/500/529`, `_publish_obstacle_markers:574/591`, `_publish_checkpoint_markers:637/655`, `_publish_current_path:697`, `_publish_search_progress:730`, `_publish_planned_route:820`
+    - explicit example `(0.15, 0.15, pi/2)`: `rendered heading 0.000 rad vs arena start yaw 1.571 rad (90.0 deg off); arena -> odom transform published: None`, position error 0.212 m - the robot renders on the drawn arena's `(0, 0)` corner, not inside the drawn start box
+    - widened generator: fails for every start pose that is not exactly `(0, 0, 0)`, so `pi/2` is one point on a continuum
+    - `marker for arena (1.000, 1.000) renders at (-0.850, 1.150), 1.856 m away` (off the 2 m arena entirely; the whole arena is drawn rotated `pi/2` about the spawn point)
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4_
+
+- [x] 3. Write path-tracking frame-consistency exploration test
+  - **Property 3: Bug Condition** - Path tracking is frame-consistent
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the control-side instance of the bug
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **BLOCKER TO NOTE**: `/odometry/filtered` has no publisher in the Task 1 sim (root cause 4), so `odom_callback` never fires and `current_pose` stays at its constructor default `(0.0, 0.0, pi/2)`. Record that observation as its own counterexample (`ros2 topic info /odometry/filtered` shows zero publishers) before attempting the tracking assertion
+  - Use the interim relay of `/ackermann_steering_controller/odometry` -> `/odometry/filtered` (design.md Decision 5 stopgap) purely as a test fixture so the tracking assertion can execute on unfixed code
+  - Assert the pose the follower consumes is in the same frame as the planned path: at `t=0` the heading error and position error against the first waypoint of `leg_paths[0]` are within tolerance of zero
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS with a heading error of about `pi/2` and a position error of about 0.21 m
+  - Document counterexamples found
+  - Mark task complete when test is written, run, and failure is documented
+  - **DONE** - `src/mdp_bringup/test/test_path_tracking_frame_consistency.py`, run on unfixed code: **4 failed, 2 passed** (the 2 passes are the hardware contrast case - `real.launch.py` does run `ekf_node` - and the relay-stopgap scope guard). The relay is modelled in a pure helper rather than launched, so the missing-publisher blocker does not mask the tracking assertion. Observed counterexamples:
+    - `/odometry/filtered has no publisher in task1_sim.launch.py; launch node executables are ['create', 'parameter_bridge', 'publish_test_obstacles.py', 'robot_state_publisher', 'spawner', 'task1_runner.py', 'yolo_detector.py']` - the structural form of `ros2 topic info /odometry/filtered` showing zero publishers
+    - `task1_runner.current_pose stays at its constructor default (0.0, 0.0, 1.570796326795) for the whole sim run: /odometry/filtered has no publisher, so odom_callback never fires`
+    - real planner output for `config/test_obstacles.yaml` (visiting order `[0, 1, 4, 2, 3]`, first checkpoint `(0.500, 0.800, -3.142)`): `heading error 1.5708 rad (90.0 deg): follower pose (0.0, 0.0, 0.0) (odom frame) vs leg 0 first waypoint (0.150, 0.200, 1.571) (arena frame)`; position error `hypot(0.150, 0.200) = 0.250 m`, not the anticipated 0.212 m, because Hybrid A*'s first node snaps `y` to the planner's 10 cm grid - same defect, slightly larger number
+    - widened generator: fails for every start pose other than exactly `(0, 0, 0)`
+  - _Requirements: 1.5, 2.5_
+
+- [x] 4. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Non-buggy inputs render and behave identically
+  - **IMPORTANT**: Follow observation-first methodology - record actual unfixed behavior first, then assert it
+  - Observe on UNFIXED code with start pose `(0, 0, 0)` (the `NOT C` branch, where `T_map_odom` is identity): record published geometry values for the occupancy grid, grid lines, placement-zone and start-box outlines, obstacle cubes/labels, checkpoint arrows/labels and planned path
+  - Observe on UNFIXED code: `plan_visiting_order` / `plan_leg` output for `config/test_obstacles.yaml` - visiting order, checkpoints, unreachable list, occupancy grid contents
+  - Observe on UNFIXED code: obstacle centres for a given `/obstacle_setup` string in arena metres; `/yolo_result` handling; `TARGET,...` and `ROBOT,...` Bluetooth strings; `/start_run` accept/reject per state
+  - Write property-based test: for the identity start pose and randomly generated arena-coordinate marker inputs, fixed and original published geometry values are equal (only `frame_id` differs, naming a frame that coincides with `odom`)
+  - Write property-based test: transforming a random `odom`-frame pose into the arena frame and back returns the original pose, and the transform preserves relative distances and bearings (rigid - no scale or shear)
+  - Write example tests asserting the recorded planner numerics, `/obstacle_setup` interpretation, and vision/Bluetooth/`go` behavior are unchanged, and that `mdp_algorithm` gains no frame awareness
+  - Write a test asserting `config/ekf.yaml` is byte-identical to its pre-fix content (hardware untouched; the sim overlay must be a separate file)
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - **DONE** - `src/mdp_bringup/test/test_frame_preservation.py`, run on unfixed code: **16 passed in ~12 s** (`pixi run pytest src/mdp_bringup/test/test_frame_preservation.py`). No Gazebo: the `Task1Runner` node is constructed in-process (`rclpy.init()`, no spin), each publisher's `publish` is replaced with a capture hook, and the publish methods are called directly, so what is asserted is the actual outgoing message. Recorded baselines now pinned in the file:
+    - published geometry digests for the identity start pose `(0, 0, 0)`, `frame_id` deliberately excluded (the one field the fix may change): `occupancy_grid b59193b7...`, `grid_markers 076d3130...`, `obstacle_markers cd20d7ab...`, `checkpoint_markers d73b37f9...`, `planned_path 3768d929...`, `path_markers 380a0d4e...`, `search_progress 7314727e...`
+    - planner numerics for `config/test_obstacles.yaml`: visiting order `[0, 1, 4, 2, 3]`, no unreachable obstacles, checkpoints `(0.5, 0.8, -pi)`, `(1.0, 0.4, pi/2)`, `(1.5, 0.7, -pi)`, `(1.7, 1.7, 0.0)`, `(1.1, 1.8, -pi/2)`; grid 40x40 at 0.1 m, 60 occupied cells, digest `75d9c034...`; leg 0 is `(30, (0.05, 0.0, 0.0))` for the identity pose and `(24, (0.15, 0.2, pi/2))` for the reported pose (the `y` snap to the planner's 10 cm grid is why it reads 0.2)
+    - `/obstacle_setup` in metres lands cube centres exactly on the given coordinates, labels `#N [facing] (x, y)` at one decimal, and a second setup while `PLANNING_PATH` is ignored
+    - `config/ekf.yaml` byte-identical: 9563 bytes, sha256 `1b1a73c2...c128845`, plus a guard that no sim overlay has been folded into it
+    - the two arena publishers agree on ONE frame name (pre-fix `'odom'`), and `mdp_algorithm` contains no frame identifier
+    - **Test-authoring note**: the three property tests (`test_published_marker_geometry_equals_the_arena_input`, `test_arena_odom_round_trip_returns_the_original_pose`, `test_arena_transform_is_rigid`) initially errored with hypothesis `InvalidArgument: min_value=-3.141592653589793 cannot be exactly represented as a float of width 32`. `width=32` is deliberate (the assertions compare published fields for exact equality against the generated input), so the bounds are now snapped through a module-level `f32()` helper (`struct.pack`/`unpack('f', ...)`) rather than dropping the width. Not a behavioral finding.
+  - _Requirements: 3.1, 3.2, 3.3, 3.6, 3.7_
+
+- [x] 5. Write single-broadcaster preservation test (BEFORE implementing fix)
+  - **Property 4: Preservation** - Single `odom -> base` broadcaster
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe on UNFIXED code: parse `/tf` and count publishers of `odom -> base_footprint` (sim, `ackermann_steering_controller`) and `odom -> base_link` (hardware, `ekf_node`) - record exactly one each
+  - Observe on UNFIXED code: `odom -> base` and `/odometry/filtered` continuity while driving a leg, to establish the jump-free baseline
+  - Write property-based test: for random start poses, the number of publishers of the `odom -> base` edge stays exactly one, and the new `map -> odom` edge has exactly one publisher
+  - Write a test asserting `map -> odom` never changes during a run (it is static, so it must never jump)
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: The single-`odom -> base` and continuity assertions PASS; the `map -> odom` assertions fail only because the edge does not exist yet - scope them so the pre-fix run documents that absence rather than masking it
+  - Mark task complete when tests are written, run, and the baseline is recorded
+  - **DONE** - `src/mdp_bringup/test/test_single_broadcaster_preservation.py`, run on unfixed code: **9 passed, 2 xfailed in ~35 s** (`pixi run pytest src/mdp_bringup/test/test_single_broadcaster_preservation.py`). The 2 xfails are `test_map_to_odom_edge_exists` parametrized over both launch files, marked `xfail(strict=False)` exactly as this task required: pre-fix the edge does not exist, so the run documents that absence instead of masking it, and it reports XPASS once 6.2/6.3 add the broadcaster - task 6.11 sees the flip without editing the file. Ownership is read from the launch graph and the YAML it loads (`enable_odom_tf`, `publish_tf`, `world_frame`/`odom_frame`/`base_link_frame`, plus any `static_transform_publisher` frames) in-process - no Gazebo, which also lets the hardware graph be checked with no robot present. Baseline recorded:
+    - `task1_sim.launch.py`: `odom -> base_footprint` has exactly one owner, `ackermann_steering_controller` (`ackermann_controller.yaml`, `enable_odom_tf: true`); no `ekf_node` in the graph yet
+    - `real.launch.py`: `odom -> base_link` has exactly one owner, `ekf_filter_node` (`ekf.yaml`, `publish_tf: true`, `world_frame: odom`); the hardware controller stands down explicitly via `real_controller.yaml` `enable_odom_tf: false`
+    - the broadcaster count is start-pose independent across randomly generated poses, so nothing about the spawn pose can add a second owner
+    - two holes a `/tf` capture would cover are closed explicitly: `robot_state_publisher` cannot own the edge (the URDF has no `odom` link) and the Gazebo `/tf` bridge carries no such edge (nothing runs a pose-publisher system)
+    - `map -> odom`: zero owners in both launch files pre-fix. Runtime `odom -> base` continuity is not measurable pre-fix because `/odometry/filtered` has no publisher in sim (already recorded as a counterexample in task 3); what is checkable and is what the fix could break - a single dead-reckoning owner plus a constant transform stacked on top - is covered by `test_static_map_to_odom_never_jumps`
+  - _Requirements: 3.4, 3.5_
+
+- [x] 6. Fix for the arena/`odom` frame conflation behind the 90-degree Foxglove heading offset
+  - **DONE** - arena frame is `map`, the start pose is declared once per launch file and feeds the Gazebo spawn / the static `map -> odom` broadcaster / `task1_runner`'s planning pose, all 11 arena publish sites stamp `arena_frame`, and `odom_callback` converts the incoming `odom` pose through TF before the follower ever sees it. Final per-file counts (`pixi run pytest src/mdp_bringup/test/<file>`):
+    - `test_arena_frame_agreement.py`: **7 passed**
+    - `test_path_tracking_frame_consistency.py`: **7 passed**
+    - `test_frame_preservation.py`: **16 passed**
+    - `test_single_broadcaster_preservation.py`: **9 passed, 2 xpassed** (the two `test_map_to_odom_edge_exists` cases, `xfail(strict=False)` pre-fix - the XPASS is the edge appearing)
+    - `test_smoke.py`: **5 passed**
+
+  - [x] 6.1 Introduce the arena `map` frame and the pure pose-transform helper
+    - Adopt `map` as the arena frame: origin at the arena's bottom-left corner, axes matching the planner's arena coordinates, chain `map -> odom -> base_footprint`/`base_link`
+    - Add the pure 2D pose helper the property tests target: derive `T_map_odom` from a start pose, compose, invert, normalise yaw across the `+/-pi` wrap
+    - `T_map_odom` is numerically the arena start pose, since `odom` is created at the spawn/power-on pose with identity orientation
+    - Keep `mdp_algorithm` free of any frame concept - it stays in arena centimetres
+    - _Bug_Condition: isBugCondition(input) - no transform relates arena_frame to `odom`_
+    - _Expected_Behavior: TF tree contains a chain relating the arena frame to `odom`_
+    - _Preservation: planner numerics unchanged (3.3)_
+    - **DONE** - `src/mdp_bringup/scripts/pose_transform.py`: `normalise_yaw`, `compose`, `invert`, `t_map_odom_from_start_pose`, standard library only (no ROS, no numpy), so the property tests can import it with no graph running. `T_map_odom` is derived as `start_pose * (odom pose at creation)^-1` rather than asserted to equal the start pose, so the identity start pose falls out as the identity transform. Lives in `mdp_bringup` (not `mdp_algorithm`) because frames are a deployment concern; installed to `lib/mdp_bringup` beside `task1_runner.py` so it resolves as a sibling module at runtime, and `test/conftest.py` puts `scripts/` on `sys.path` for the same import in tests. `mdp_algorithm` gained no frame concept (still enforced by `test_frame_preservation.test_mdp_algorithm_has_no_frame_awareness`).
+    - _Requirements: 2.3, 3.3_
+
+  - [x] 6.2 Declare the start pose once and publish the static `map -> odom` transform in the sim launch
+    - In `mdp_bringup/launch/task1_sim.launch.py`, declare the start pose once and reuse it for the `create` spawn arguments (`-x -y -Y`), addressing the three-literal duplication (root cause 5)
+    - Add a `static_transform_publisher` node owning `map -> odom` with translation `(start_x, start_y, 0)` and yaw `start_yaw`
+    - Pass `start_x`/`start_y`/`start_yaw` as parameters to `task1_runner` so its planning `start_pose` reads the same source instead of its own literal
+    - Do NOT give this edge to `ekf_node`, `robot_state_publisher` or the Gazebo TF bridge
+    - _Bug_Condition: isBugCondition(input) where no arena-to-`odom` transform exists_
+    - _Expected_Behavior: T_map_odom equals the robot's arena start pose_
+    - _Preservation: exactly one broadcaster of `odom -> base_footprint` (3.4)_
+    - **DONE** - `launch/task1_sim.launch.py`: `START_X, START_Y = 0.15, 0.15`, `START_YAW = math.pi / 2.0` declared once at the top and consumed by all three sites - `create`'s `-x -y -Y`, the `map_to_odom_static_tf` node (`tf2_ros static_transform_publisher`, `--frame-id map --child-frame-id odom`, `--x/--y/--yaw` from the same constants) and `task1_runner`'s `{'start_x', 'start_y', 'start_yaw'}` parameters. Root cause 5's three-literal duplication is gone: there is now one authority per launch file. The edge is owned by the static broadcaster alone - not `ekf_node` (`publish_tf: false` in the sim overlay), not `robot_state_publisher` (no `odom` link in the URDF), not the Gazebo TF bridge.
+    - _Requirements: 2.3, 2.4, 3.4_
+
+  - [x] 6.3 Publish the static `map -> odom` transform in the hardware launch
+    - In `mdp_bringup/launch/real.launch.py`, add `start_x`, `start_y`, `start_yaw` launch arguments defaulting to the documented start pose and overridable per run to match actual placement in the 40 cm start box
+    - Add a `static_transform_publisher` node owning `map -> odom` from those arguments
+    - Pass the same `start_*` values as parameters to `task1_runner`
+    - Leave `ekf.yaml` untouched: `world_frame` stays `odom` and `publish_tf` keeps owning `odom -> base_link`
+    - _Bug_Condition: isBugCondition(input) on hardware with a non-identity placement in the start box_
+    - _Expected_Behavior: rendered arena pose equals the placed pose for any in-box placement_
+    - _Preservation: hardware EKF config and its sole ownership of `odom -> base_link` unchanged (3.4, 3.5)_
+    - **DONE** - `launch/real.launch.py`: `start_x`, `start_y`, `start_yaw` launch arguments defaulting to `(0.15, 0.15, pi/2)` and overridable per run (`ros2 launch mdp_bringup real.launch.py start_x:=0.2 start_y:=0.1 start_yaw:=1.5708`) for actual placement in the 40 cm start box. Same `map_to_odom_static_tf` node shape as the sim, plus the same values passed to `task1_runner`. The start pose is resolved to plain floats while the description is being built (`_launch_arg`) rather than left as a `LaunchConfiguration`: it has to go onto `static_transform_publisher`'s command line AND into the runner's parameters, and resolving once is what keeps those two numerically identical. `config/ekf.yaml` untouched (`world_frame: odom`, `publish_tf: true`), so `ekf_filter_node` keeps sole ownership of `odom -> base_link` - byte-identity is pinned by `test_frame_preservation`.
+    - _Requirements: 2.3, 2.4, 3.4, 3.5_
+
+  - [x] 6.4 Apply the `arena_frame` parameter at all ten arena-referenced publish sites in `task1_runner`
+    - Declare one `arena_frame` parameter in `_declare_viz_params` with default `'map'`
+    - Replace the hardcoded `'odom'` with `arena_frame` at all ten sites: `_publish_occupancy_grid`; `_publish_grid_lines` (`grid_lines`, `placement_zone_outline`, `start_box_outline` - 3 markers); `_publish_obstacle_markers` (cube + label - 2); `_publish_checkpoint_markers` (arrow + label - 2); `_publish_current_path`; `_publish_path_markers`; `_publish_search_progress`
+    - Leave every coordinate value untouched - the numbers were always arena coordinates
+    - Keep `/cmd_vel` at `frame_id: 'base_link'` (body-frame twist, not arena data)
+    - Document the new parameter in `mdp_bringup/config/occupancy_grid_viz.yaml`
+    - Flag but do NOT change `task2_runner.py`'s `/planned_path` hardcoded `'odom'` - its waypoints are carpark-relative, so the label there is a separate convention decision
+    - _Bug_Condition: isBugCondition(input) where arena_marker_frame = 'odom'_
+    - _Expected_Behavior: arena data published in a frame whose origin and axes match the arena_
+    - _Preservation: published geometry values identical; `/cmd_vel`, `/joint_states`, `/imu/data`, camera topics unchanged_
+    - **DONE** - one `arena_frame` parameter declared in `_declare_viz_params` (default `'map'`), read once into `self.arena_frame`, and applied at every arena publish site.
+    - **Correction to this task's own description**: there are **eleven** publish sites across **seven** methods, not ten, and there is no `_publish_path_markers` method - the two path publishers are `_publish_current_path` (the `/path_markers` line strip, plus a header for the playhead markers) and `_publish_planned_route` (`/planned_path`, called by `_publish_current_path`). The eleven `self.arena_frame` assignments, by line: `_publish_occupancy_grid:532`; `_publish_grid_lines:570/589/618` (grid lines, placement-zone outline, start-box outline); `_publish_obstacle_markers:663/680` (cube + label); `_publish_checkpoint_markers:726/744` (arrow + label); `_publish_current_path:786/819`; `_publish_planned_route:909`. Task 2's counterexample already listed 11 literals, so the "ten sites" figure in this task description was the miscount, not the code.
+    - Not a single coordinate value changed - the numbers were always arena coordinates, which is why the preservation digests hold. `send_cmd` still stamps `'base_link'` at line 353 (body-frame twist, deliberately excluded; guarded by `test_arena_frame_agreement.test_odom_frame_publishers_are_only_body_frame_data`). `arena_frame` documented in `config/occupancy_grid_viz.yaml` under a new `--- Frames ---` block. `task2_runner.py`'s `/planned_path` hardcoded `'odom'` left alone as instructed - its waypoints are carpark-relative, so that label is a separate convention decision.
+    - _Requirements: 2.1, 2.2, 2.4, 3.1, 3.6_
+
+  - [x] 6.5 Give `task1_runner` a TF-based arena-frame pose lookup
+    - Add a `tf2_ros.Buffer` and `TransformListener` to `task1_runner`, matching the pattern `task2_runner` already uses
+    - In `odom_callback`, wrap the incoming `/odometry/filtered` pose as a `PoseStamped` with the message's own header and transform it into `arena_frame` via `lookup_transform(arena_frame, msg.header.frame_id, msg.header.stamp)` + `tf2_geometry_msgs.do_transform_pose`
+    - Assign the transformed `(x, y, yaw)` to `self.current_pose` and to `follower.update_pose`
+    - On lookup failure (TF not ready, extrapolation), skip the update and keep the previous pose - no raw untransformed fallback, which would reintroduce the bug intermittently - and log at throttled warn level
+    - Leave `PurePursuitController` unchanged (frame-agnostic); the contract becomes "path and pose are both in the arena frame"
+    - Note in the standalone `PurePursuitFollower` node's docstring that it operates in `odom` and is not arena-frame aware
+    - Add `tf2_ros` and `tf2_geometry_msgs` exec dependencies to `mdp_bringup/package.xml` if absent
+    - _Bug_Condition: isBugCondition(input) - raw `odom`-frame pose consumed as an arena pose_
+    - _Expected_Behavior: the pose the follower consumes is in the same frame as the planned path_
+    - _Preservation: `/odometry/filtered` remains an `odom`-frame message; `odom -> base` continuity (3.5)_
+    - **DONE** - `tf2_ros.Buffer` + `TransformListener` added to `Task1Runner.__init__` (the pattern `task2_runner` already used). `odom_callback` wraps `msg.pose.pose` in a `PoseStamped` carrying the message's own header, looks up `lookup_transform(self.arena_frame, msg.header.frame_id, msg.header.stamp)` and converts via `tf2_geometry_msgs.do_transform_pose`; the transformed `(x, y, yaw)` goes to both `self.current_pose` and `follower.update_pose`. On lookup failure the previous pose is kept and the update dropped - no raw fallback, which would have reintroduced the 90-degree error intermittently and without a symptom - logged at `warn` with `throttle_duration_sec=2.0`. The transform comes from TF rather than the `start_*` parameters so the launch file's broadcaster stays the single authority and a real localization source could replace it with no code change. `PurePursuitController` unchanged (frame-agnostic; the contract is now "path and pose are both in the arena frame"), and `tf2_geometry_msgs` added to `package.xml` as an `exec_depend` (`tf2_ros` was already there).
+    - _Requirements: 2.5, 3.5_
+
+  - [x] 6.6 Add `ekf_node` to the Task 1 sim launch with a sim overlay config
+    - Create `mdp_bringup/config/ekf_sim.yaml` as a separate overlay so hardware `ekf.yaml` is provably untouched
+    - Overlay values: `publish_tf: false` (the `ackermann_steering_controller` already owns `odom -> base_footprint`, so the EKF must not create a second broadcaster), `use_sim_time: true`, and no `imu0` input (no IMU is bridged from Gazebo; a configured-but-silent `imu0` interacts with `sensor_timeout: 0.5` and produces prediction-only stretches)
+    - Add the `ekf_node` to `task1_sim.launch.py` so `/odometry/filtered` actually has a publisher in sim
+    - Remove any relay stopgap used as a test fixture in task 3 - the final state must match the hardware graph
+    - _Bug_Condition: isBugCondition(input) - required before control-side fix checking is meaningful_
+    - _Expected_Behavior: `/odometry/filtered` flows in sim so the arena-frame pose can be validated end to end_
+    - _Preservation: exactly one broadcaster of `odom -> base_footprint` in sim (3.4); `ekf.yaml` unmodified (3.5)_
+    - **DONE** - new `config/ekf_sim.yaml` overlay (hardware `ekf.yaml` provably untouched) with the three values that must differ in sim: `publish_tf: false` so `ackermann_steering_controller` keeps sole ownership of `odom -> base_footprint`, `use_sim_time: true` for Gazebo's `/clock`, and no `imu0` (nothing bridges an IMU out of Gazebo; a configured-but-silent input interacts with `sensor_timeout: 0.5` and produces prediction-only stretches). `odom0: /ackermann_steering_controller/odometry`, `world_frame: odom`. `ekf_node` added to `task1_sim.launch.py` as a pure estimator - it publishes `/odometry/filtered` and broadcasts no TF at all - so the topic finally has a publisher in sim. No relay stopgap was ever added to a launch file, so nothing to remove: task 3 injected the odometry message directly in a test helper instead, and `test_relay_stopgap_is_not_in_the_launch_graph` still guards against one being shipped.
+    - _Requirements: 2.5, 3.4, 3.5_
+
+  - [x] 6.7 Update documentation for the frame convention
+    - In `docs/rpi/ros2_ekf_localization.md`, document the `map -> odom -> base` chain and who broadcasts each edge in sim vs hardware
+    - In `docs/rpi/algorithm.md`, document the arena-frame convention for planner and visualization data
+    - Note that a second `robot_localization` instance could later replace the static `map -> odom` broadcaster with no `frame_id` changes
+    - **DONE** - `docs/rpi/ros2_ekf_localization.md` (+51 lines): the `map -> odom -> base_footprint`/`base_link` chain per REP-105 and who owns each edge in sim vs hardware, including the note that a second `robot_localization` instance could take over `map -> odom` with no `frame_id` change in any node. `docs/rpi/algorithm.md` (+36 lines): the arena-frame convention for planner and visualization data, and why `mdp_algorithm` stays in arena centimetres with no frame concept.
+    - _Requirements: 2.2, 2.3_
+
+  - [x] 6.8 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Arena and robot render in agreement
+    - **IMPORTANT**: Re-run the SAME test from task 2 - do NOT write a new test
+    - The test from task 2 encodes the expected behavior; passing confirms it is satisfied
+    - **EXPECTED OUTCOME**: Test PASSES (robot renders at `(0.15, 0.15)` inside the drawn start box, heading along arena +Y, obstacle/checkpoint/path geometry coincident with the Gazebo arena)
+    - **DONE** - `test_arena_frame_agreement.py`: **7 passed** (6 originally + the one split out below). All four pre-fix failures cleared: `map -> odom` has exactly one broadcaster in `task1_sim.launch.py`, no arena publish site stamps `'odom'`, the rendered pose reproduces the arena start pose for the reported `(0.15, 0.15, pi/2)` and across the widened generator, and an arena marker at `(1.0, 1.0)` lands on its Gazebo counterpart.
+    - **Two oracles in this file had to be corrected** - they asserted properties of the pre-fix fixture rather than of the behaviour, so they were unsatisfiable by any correct implementation and would have gone red on a working fix. Assertions were not weakened; what each test is for is unchanged. Documented in the module docstring:
+      - `test_bug_condition_holds_for_the_reported_start_pose` asserted the LIVE code still exhibits the bug (arena frames `== {'odom'}`, no published arena transform) - satisfiable only while the bug exists. Its job was to pin the premise, so it now evaluates `is_bug_condition` (bugfix.md's `isBugCondition`, transcribed) against a MODELLED pre-fix state and checks the classifier rejects each near miss. Renamed `test_bug_condition_classifies_the_reported_pre_fix_scene`; the live spawn pose is still read from the launch file and still required to equal `(0.15, 0.15, pi/2)`, so the premise stays anchored to the real scene.
+      - `test_rendered_robot_pose_equals_arena_start_pose` generated an arbitrary `(x, y, yaw)` and compared it against the launch file's fixed transform literal, so every generated pose but that one literal failed by construction - generator and oracle described different scenes. The invariant does not depend on the launch file's numbers: for ANY start pose, the `map -> odom` transform DERIVED from it (through the production `pose_transform.t_map_odom_from_start_pose`) composed with the identity `odom -> base` reproduces the pose. The launch-file-specific claim it used to conflate in is now its own concrete test, `test_launch_publishes_the_transform_its_spawn_pose_implies` - and that one is the real regression guard, since it is what fails if someone edits the spawn pose without editing the transform, which is how the reported 90 degrees got in.
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+  - [x] 6.9 Verify path-tracking exploration test now passes
+    - **Property 3: Expected Behavior** - Path tracking is frame-consistent
+    - **IMPORTANT**: Re-run the SAME test from task 3 - do NOT write a new test
+    - **EXPECTED OUTCOME**: Test PASSES - heading and position error at the start pose within tolerance of zero instead of `pi/2` and 0.21 m
+    - **DONE** - `test_path_tracking_frame_consistency.py`: **7 passed** (6 originally + the TF-failure test added below). `/odometry/filtered` now has a publisher in sim, the runner's pose is no longer pinned to its constructor default, and the heading error at `t=0` is zero rather than `pi/2`.
+    - **A third oracle had to be corrected**, same class of test-design bug as the two in 6.8. `pose_the_follower_consumes` hardcoded the pre-fix behaviour (`odom_frame_pose_at_t0 = (0, 0, 0)`; construct a bare `PurePursuitController`; `update_pose(*that)`) and never called `task1_runner` at all, so it returned `(0, 0, 0)` regardless of the implementation - `heading_err < 1e-6` was unsatisfiable by construction. It was measuring a model of the bug, not the code. It now exercises the real path: a `Task1Runner` constructed in-process (`rclpy.init()`, no spin, no Gazebo - the `TappedRunner` pattern from `test_frame_preservation.py`), its `tf_buffer` seeded with the static `map -> odom` derived from the start pose via `pose_transform.t_map_odom_from_start_pose`, one `Odometry` message stamped in `odom` placing the robot at the `odom` origin at `t=0`, and the returned value is `follower.current_pose` - so the `PoseStamped` wrap, the TF lookup, `do_transform_pose` and the yaw extraction are all under test. Both tests keep their intent: at `t=0` the follower's pose must coincide with leg 0's first waypoint, for the reported start pose (still against the real-planner leg-0 fixture) and for any start pose.
+    - One tolerance moved with it, for the same reason. In the concrete case the waypoint is real Hybrid A* output and its first expanded node snaps `y` to the planner's 10 cm grid - leg 0 from `(0.15, 0.15, pi/2)` starts at `(0.15, 0.2, pi/2)`, the value `test_frame_preservation.BASELINE_LEG0` already records - so a frame-correct pose sits 0.05 m from that waypoint and `position_err < 1e-6` was a second thing no correct implementation could satisfy: it asserted the planner has infinite resolution. The position tolerance is now one grid cell (`occupancy_map.CELL_SIZE_CM`), and the exact claim is made where it actually holds - the pose the follower reads must equal the arena start pose to `1e-9`. Pre-fix that pose was `(0, 0, 0)`, 0.25 m and `pi/2` away, so both assertions still fail on unfixed code. The widened property test needs no allowance and keeps `1e-6` on both.
+    - Added `test_pose_is_not_updated_when_the_arena_transform_is_missing`: with an unseeded buffer, neither `follower.current_pose` nor `node.current_pose` may move. This is the branch a passing tracking assertion cannot distinguish - a raw fallback would look correct whenever TF happened to be up and silently reintroduce the 90 degrees whenever it was not.
+    - _Requirements: 2.5_
+
+  - [x] 6.10 Verify preservation tests still pass
+    - **Property 2: Preservation** - Non-buggy inputs render and behave identically
+    - **IMPORTANT**: Re-run the SAME tests from task 4 - do NOT write new tests
+    - **EXPECTED OUTCOME**: Tests PASS (identity start pose renders unchanged, planner numerics identical, `/obstacle_setup` interpretation unchanged, vision/Bluetooth/`go` unchanged, `ekf.yaml` unmodified)
+    - Confirm no regressions after the fix
+    - **DONE** - `test_frame_preservation.py`: **16 passed**, unchanged file, no baseline edited. Every recorded geometry digest for the identity start pose still matches, the arena publishers still agree on ONE frame (now `'map'`, which for that start pose is numerically the same frame as `'odom'`), planner numerics and leg 0 are identical for both start poses, `/obstacle_setup` interpretation and the vision/Bluetooth/`go` behaviour are unchanged, and `config/ekf.yaml` is still 9563 bytes / sha256 `1b1a73c2...c128845`. The three rigid-transform properties now run against the production `pose_transform` helper rather than the file's reference implementation (`_load_pose_transform` switches over automatically once 6.1 lands) and pass.
+    - _Requirements: 3.1, 3.2, 3.3, 3.6, 3.7_
+
+  - [x] 6.11 Verify single-broadcaster preservation tests still pass
+    - **Property 4: Preservation** - Single `odom -> base` broadcaster
+    - **IMPORTANT**: Re-run the SAME tests from task 5 - do NOT write new tests
+    - **EXPECTED OUTCOME**: Tests PASS - exactly one publisher of `odom -> base_footprint` (sim, even with `ekf_node` added) and of `odom -> base_link` (hardware), exactly one publisher of `map -> odom`, and no jumps in either edge
+    - **DONE** - `test_single_broadcaster_preservation.py`: **9 passed, 2 xpassed**, unchanged file. The two XPASSes are exactly the flip this task was scoped to see: `test_map_to_odom_edge_exists` was marked `xfail(strict=False)` pre-fix over both launch files, and now that 6.2/6.3 have added the broadcaster it reports XPASS with no edit to the file. `odom -> base_footprint` still has exactly one owner in sim (`ackermann_steering_controller`) despite `ekf_node` joining the graph, because `ekf_sim.yaml` sets `publish_tf: false`; `odom -> base_link` still has exactly one owner on hardware (`ekf_filter_node`); `map -> odom` has exactly one owner in each; and the count stays start-pose independent across generated poses.
+    - _Requirements: 3.4, 3.5_
+
+- [ ] 7. Checkpoint - Ensure all tests pass
+  - Run `pixi run test` and confirm the full suite is green
+  - Run the integration checks from design.md: full `pixi run sim1` + `go` with Foxglove (arena and robot agree throughout, robot starts inside the drawn start box, markers stay coincident while driving), and a non-default `start_x`/`start_y`/`start_yaw` override on the hardware launch
+  - Ensure all tests pass, ask the user if questions arise

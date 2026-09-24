@@ -74,7 +74,7 @@ project's launch files and the topics that connect everything.
 | **`/odometry/filtered`** | `nav_msgs/Odometry` | Output | `robot_localization` (`ekf_node`) ➔ Autonomy Nodes | Fused, drift-free odometry combining rear wheel encoders ($v_x$) and IMU yaw ($\theta_{\text{yaw}}$). |
 | **`/tf` / `/tf_static`** | `tf2_msgs/TFMessage` | Output | `robot_state_publisher` / `ekf_node` ➔ All Nodes | Coordinate transform tree connecting `odom` ➔ `base_link` ➔ wheel/sensor links. |
 | **`/clock`** | `rosgraph_msgs/Clock` | Input | `ros_gz_bridge` ➔ All ROS Nodes | Simulation clock synchronization topic (active when `use_sim_time:=true`). |
-| **`/estop`** | `std_msgs/Bool` | Output | `mdp_bridge` | Onboard `PD3` motor switch state. Not yet consumed by any node - informational only. |
+| **`/estop`** | `std_msgs/Bool` | Output | `mdp_bridge` | Onboard `PD3` motor switch state (true = engaged). Consumed by `task1_runner` (blocks start, aborts a run) and forwarded to the tablet as `ESTOP:ON/OFF` by `bluetooth_bridge_node`. |
 | **`/battery_state`** | `sensor_msgs/BatteryState` | Output | `mdp_bridge` | Pack voltage from the STM32's ADC. Not yet consumed by any node - informational only. |
 | **`/hardware_bridge/link_ok`** | `std_msgs/Bool` | Output | `mdp_bridge` | Serial-link watchdog - false if no valid telemetry frame in the last 500ms (mirrors the MCU's own command-timeout window). Not yet consumed by any node - informational only. |
 | **`/yolo_result`** | `std_msgs/String` | Output | `yolo_detector` ➔ `task1_runner` / `task2_runner` | Detected target/arrow label string. |

@@ -26,7 +26,7 @@ graph LR
 | --- | --- |
 | 📱 [**Android**](android/index.md) | separate repo, not part of this monorepo |
 | 🖥️ [**Raspberry Pi**](rpi/index.md) | `mdp_ros/` |
-| 👁️ [**Vision**](rpi/vision.md) | `mdp_ros/src/mdp_vision/mdp_yolo/` |
+| 👁️ [**Vision**](rpi/vision.md) | `mdp_ros/src/mdp_vision/` |
 | 🧭 [**Algorithm**](rpi/algorithm.md) | `mdp_ros/src/mdp_algorithm/` |
 | ⚡ [**STM32**](stm32/index.md) | `mdp_stm32/` |
 

@@ -75,7 +75,6 @@ nav = [
     { "Dev Workflow & Setup" = "dev_workflow.md" },
     { "Troubleshooting" = "troubleshooting.md" },
     { "References & Datasheets" = "references.md" },
-    { "Docs Authoring Reference" = "authoring_reference.md" },
   ] },
 ]
 
