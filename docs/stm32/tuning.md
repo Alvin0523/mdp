@@ -212,7 +212,11 @@ imu_update():                        serial_bridge_node:
                                                 |
                                                 v
                                       robot_localization ekf_node:
-                                        fuses angular_velocity_z (yaw rate)
+                                        fuses angular_velocity_z (yaw rate,
+                                        from BOTH this IMU input AND
+                                        ackermann_steering_controller's own
+                                        wheel-derived vyaw - redundant on
+                                        purpose, see "Fix applied" below)
                                         + ackermann_steering_controller's
                                         v_x (wheel odometry)
                                         -> /odometry/filtered, odom->base_link TF
@@ -229,14 +233,24 @@ for yaw at all in that configuration.
 
 ### Fix applied (config-only)
 
-- :white_check_mark: `ekf.yaml`'s `imu0_config` now fuses only `angular_velocity_z`, `orientation`
-  fusion turned off. The EKF integrates yaw itself, weighted against wheel-odometry heading from
-  `ackermann_steering_controller`, with proper process-noise modeling — that's the actual purpose of
-  running an EKF instead of trusting one sensor's raw integration. **Not yet re-validated on
-  physical hardware** — re-run the `robot_localization` on-hardware check next time the robot's up.
-- `g_imu_data.yaw`/the orientation quaternion in `serial_bridge_node.cpp` are now dead weight from
-  the EKF's perspective (nothing consumes `orientation` anymore) but are left in place for now —
-  still useful for OLED display / debugging telemetry. Not removed as part of this change.
+- :white_check_mark: `ekf.yaml`'s `imu0_config` fuses only `angular_velocity_z` (`vyaw`),
+  `orientation` fusion turned off entirely. The MCU's own gyro-integrated `yaw_deg` has no drift
+  correction, so fusing it as a position measurement would just hand the EKF that same uncorrected
+  integration a second time — the EKF integrates yaw itself instead, with proper process-noise
+  modeling, which is the actual purpose of running an EKF instead of trusting one sensor's raw
+  integration.
+- `g_imu_data.yaw`/the orientation quaternion in `serial_bridge_node.cpp` are dead weight from the
+  EKF's perspective (nothing consumes `orientation` anymore) but are left in place — still useful
+  for OLED display / debugging telemetry. Not removed as part of this change.
+- **Later refinement**: `vyaw` was initially fused from the IMU alone, on the assumption it was the
+  better source. A hardware finding showed that made the IMU link a single point of failure — a
+  dead/invalid IMU left the EKF with zero yaw-rate input at all, dead-reckoning straight regardless
+  of actual steering. `ekf.yaml`'s `odom0_config` now also fuses `vyaw` from
+  `ackermann_steering_controller`'s own wheel-derived estimate, so both sources feed the same state
+  variable weighted by their respective covariances — see [ROS2 EKF Localization: This robot's
+  specific fusion](../rpi/ros2_ekf_localization.md#this-robots-specific-fusion) for the full
+  current picture. **Not yet re-validated on physical hardware** — re-run the `robot_localization`
+  on-hardware check next time the robot's up.
 
 ### Why not fuse the magnetometer today
 

@@ -27,12 +27,14 @@ The key design choice per sensor is `<sensor>_config`: a 15-element boolean mask
 
 ## This robot's specific fusion
 
-Only two of the fifteen state variables actually get outside correction here — `vx` (from wheel odometry) and `yaw`/`vyaw` (from the IMU). `x`/`y` position is **not** corrected by anything; it's purely the EKF's own integral of `vx` and `yaw` over time. That's the entire point: it replaces `ackermann_steering_controller`'s own dead-reckoned position estimate (which inherits error from the single-servo Ackermann approximation — see [ROS2 Jazzy: Core Topic Specifications](ros2_jazzy.md#core-topic-specifications)) with one integrated from a heading source the STM32-side IMU derives independently of the drivetrain.
+Only two of the fifteen state variables actually get outside correction here — `vx` (wheel odometry only) and `vyaw` (fused redundantly from **both** wheel odometry and the IMU). `x`/`y`/`yaw` position is **not** corrected by anything; it's purely the EKF's own integral of `vx` and `vyaw` over time. That's the entire point: it replaces `ackermann_steering_controller`'s own dead-reckoned position estimate (which inherits error from the single-servo Ackermann approximation — see [ROS2 Jazzy: Core Topic Specifications](ros2_jazzy.md#core-topic-specifications)) with one integrated from a heading rate the STM32-side IMU derives independently of the drivetrain.
 
-| Input | Topic | Fused fields | Why only these |
+| Input | Topic | Fused fields | Why |
 | --- | --- | --- | --- |
-| Wheel odometry | `/ackermann_steering_controller/odometry` | `vx` only | `x/y/yaw` from this source already bakes in the single-servo Ackermann approximation - not double-counted here. |
-| IMU | `/imu/data` | `yaw`, `vyaw` | Both come from the STM32's gyro-Z (see `mdp_stm32/src/imu.c`) - `yaw` is bias-corrected gyro integration, `vyaw` is the instantaneous bias-corrected rate. Roll/pitch aren't fused: the bridge sets their covariance to `1e6` (`serial_bridge_node.cpp`) since they're never estimated, and `two_d_mode: true` discards them from the state entirely regardless. |
+| Wheel odometry | `/ackermann_steering_controller/odometry` | `vx`, `vyaw` | `x/y/yaw` from this source already bakes in the single-servo Ackermann approximation - not fused. `vyaw` here is the controller's own kinematic estimate from wheel speeds. |
+| IMU | `/imu/data` | `vyaw` only | Bias-corrected raw gyro-Z rate (see `mdp_stm32/src/imu.c`). Orientation (`yaw`) is deliberately **not** fused from either source - the MCU's own gyro-integrated `yaw` has no drift correction, so treating it as a position measurement would just hand the EKF that same uncorrected integration a second time. Roll/pitch aren't fused: the bridge sets their covariance to `1e6` (`serial_bridge_node.cpp`) since they're never estimated, and `two_d_mode: true` discards them from the state entirely regardless. |
+
+**Why `vyaw` comes from both sources, not just the IMU:** an earlier revision fused `vyaw` from the IMU alone on the reasoning that it was the better source. A hardware finding showed that made the IMU link a single point of failure - if it ever reported invalid/dead data, the EKF had *zero* yaw-rate input at all, and the robot would dead-reckon a straight line regardless of actual steering. `ekf.yaml` now fuses `vyaw` from both `odom0` and `imu0` simultaneously, weighted by each source's own covariance, so a dead IMU degrades yaw tracking instead of removing it entirely.
 
 Other notable settings in `ekf.yaml`:
 

@@ -1,0 +1,15 @@
+{
+  "pbtResults": {
+    "2. Write bug condition exploration test": {
+      "status": "passed",
+      "failingExample": "test_arena_frame_agreement.py - 4 failed, 2 passed on unfixed code (failure is the expected outcome).\n\nFalsifying explicit example: test_rendered_robot_pose_equals_arena_start_pose(x=0.15, y=0.15, yaw=1.5707963267948966)\n  AssertionError: rendered heading 0.000 rad vs arena start yaw 1.571 rad (90.0 deg off); arena -> odom transform published: None\n\nFalsifying example: test_arena_markers_land_on_their_gazebo_counterparts(ox=1.0, oy=1.0)\n  AssertionError: marker for arena (1.000, 1.000) renders at (-0.850, 1.150), 1.856 m away\n\nStructural failures:\n  no node broadcasts map -> odom in task1_sim.launch.py; launch node executables are ['create', 'parameter_bridge', 'publish_test_obstacles.py', 'robot_state_publisher', 'spawner', 'task1_runner.py', 'yolo_detector.py']\n  arena data stamped `odom` at _publish_occupancy_grid:443, _publish_grid_lines:481, _publish_grid_lines:500, _publish_grid_lines:529, _publish_obstacle_markers:574, _publish_obstacle_markers:591, _publish_checkpoint_markers:637, _publish_checkpoint_markers:655, _publish_current_path:697, _publish_search_progress:730, _publish_planned_route:820",
+      "lastRunTimestamp": 1789067470528
+    },
+    "3. Write path-tracking frame-consistency exploration test": {
+      "status": "passed",
+      "failingExample": "test_path_tracking_frame_consistency.py - 4 failed, 2 passed on unfixed code (failure is the expected outcome).\n\nFalsifying explicit example: test_tracking_error_at_start_is_zero_for_any_start_pose(x=0.15, y=0.15, yaw=1.5707963267948966)\n  AssertionError: heading error 1.5708 rad for arena start pose (0.150, 0.150, 1.571); follower consumed (0.0, 0.0, 0.0)\n\nReal-planner case (config/test_obstacles.yaml, visiting order [0, 1, 4, 2, 3], first checkpoint (0.500, 0.800, -3.142)):\n  AssertionError: heading error 1.5708 rad (90.0 deg): follower pose (0.0, 0.0, 0.0) (odom frame) vs leg 0 first waypoint (0.150, 0.200, 1.571) (arena frame)\n  position error hypot(0.150, 0.200) = 0.250 m (design.md anticipated 0.212 m from the un-snapped (0.15, 0.15) start pose; Hybrid A* snaps y to the 10 cm grid)\n\nBlocker counterexamples (root cause 4):\n  /odometry/filtered has no publisher in task1_sim.launch.py; launch node executables are ['create', 'parameter_bridge', 'publish_test_obstacles.py', 'robot_state_publisher', 'spawner', 'task1_runner.py', 'yolo_detector.py']\n  task1_runner.current_pose stays at its constructor default (0.0, 0.0, 1.570796326795) for the whole sim run: /odometry/filtered has no publisher, so odom_callback never fires",
+      "lastRunTimestamp": 1789067476919
+    }
+  },
+  "executionHistory": {}
+}

@@ -6,3 +6,6 @@
 	path = mdp_stm32
 	url = git@github.com:Alvin0523/mdp_stm32.git
 	branch = main
+[submodule "mdp_android"]
+	path = mdp_android
+	url = https://github.com/Albert-Lin227/mdp_group_14_clone.git

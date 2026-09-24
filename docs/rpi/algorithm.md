@@ -7,10 +7,10 @@ icon: lucide/route
 Path planning and the Task 1 & 2 autonomy state machines — running as ROS2 nodes inside `mdp_ros` on
 the RPi, consuming Vision's detections and producing `/cmd_vel` for the RPi's kinematics stack.
 
-!!! note "Stub page — fill in as the Algorithm subsystem's own detail lands here"
-    This page currently only reflects what's actually in the repo. Add the actual Reeds-Shepp/TSP
-    formulation, pure-pursuit tuning notes, and Task 1 & 2 state machine diagrams here as that work
-    happens.
+!!! note "Still missing: worked Reeds-Shepp/TSP formulation and state machine diagrams"
+    This page covers what's actually in the repo file-by-file, but the derivations behind
+    `reeds_shepp_curves.py`/`hybrid_astar.py` and a diagram of the Task 1 & 2 state machines
+    (`task1_runner.py`/`task2_runner.py`) aren't written up yet.
 
 ## What's actually in the repo
 
@@ -114,6 +114,9 @@ and the rules are:
   spawn (or the physical placement it documents), the static `map` → `odom` transform, and the runner's
   `start_x`/`start_y`/`start_yaw` parameters, which are what the planner plans the first leg from. When
   those numbers disagreed, the arena rendered offset from the robot by the difference.
+
+The tablet's obstacles arrive on a separate topic, `/obstacle_cells`, as integer grid cells `id:cx,cy,F`
+(e.g. `1:0,1,N|2:9,8,W`; cells 0–19, origin bottom-left, obstacle centred in its cell). The runner handles both.
 
 Obstacle coordinates on `/obstacle_setup` are arena metres, as they always were, and the planner's
 numeric output for a given obstacle layout is unchanged by any of the above — the frame work is about

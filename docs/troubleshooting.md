@@ -62,6 +62,27 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
     `spawner` is a short-lived CLI tool that calls a service to load/activate a controller inside `ros2_control_node` — it doesn't own that controller's actual topics, so remapping *it* has no effect. The controller's real subscriber/publisher topics live inside `ros2_control_node` (`controller_manager`) itself; put `remappings=` on that `Node(...)` instead. (In `sim.launch.py`, the equivalent remap correctly lives in the URDF's `gz_ros2_control` plugin `<ros><remapping>` block, since Gazebo owns that controller manager internally — that path was never affected by this.)
 
+??? question "`pixi run build` on the Pi: `libcamera` fails on a full/clean rebuild with missing headers (`linux/dma-heap.h`, `clone_args`/`SYS_clone3`, `GLES2/gl2.h`, ...)"
+
+    Only surfaces on a **full** rebuild (e.g. after `pixi run clean`, which wipes `build/`/`install/`/`log/`) — an incremental build never recompiles these files, so the gap goes unnoticed until then.
+
+    `libcamera`/`libpisp` build with a pinned cross-toolchain (`aarch64-conda-linux-gnu-c++`) from the pixi/conda environment, which carries its **own isolated sysroot** — it does not see the Pi's own `/usr/include`. Two independent gaps under that sysroot:
+
+    - **Stale kernel-uapi headers**: the sysroot's own `linux/dma-heap.h`, `linux/sched.h` (missing `struct clone_args`), and `asm-generic/unistd.h` (missing `__NR_clone3`) are older revisions than the Pi's system headers. Fix by diffing against the system copy to confirm it's a strict superset, then overwriting (back up first):
+      ```bash
+      SYSROOT=~/mdp/mdp_ros/.pixi/envs/default/aarch64-conda-linux-gnu/sysroot/usr/include
+      for f in linux/dma-heap.h linux/sched.h asm-generic/unistd.h; do
+        cp "$SYSROOT/$f" "$SYSROOT/$f.bak"
+        cp "/usr/include/$f" "$SYSROOT/$f"
+      done
+      ```
+
+    - **Missing GLES2 dev headers** (`GLES2/gl2.h`) for the optional GPU-accelerated software-ISP debayer path (`softisp-gpu` meson option, default `auto`) — not resolvable via pixi for `linux-aarch64` in this setup. Rather than chase down GL headers in the cross sysroot, disable the feature explicitly:
+      ```bash
+      colcon build --symlink-install --packages-select libcamera --meson-args -Dsoftisp-gpu=disabled
+      ```
+      Run this once to get `libcamera` built, then `pixi run build` again for the remaining packages — colcon should skip recompiling `libcamera` incrementally after that.
+
 ## :twisted_rightwards_arrows: Git / submodules
 
 ??? question "Cloned the repo but `mdp_ros/`/`mdp_stm32/` are empty"

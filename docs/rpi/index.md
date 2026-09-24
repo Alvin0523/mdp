@@ -103,8 +103,7 @@ mdp_ros/
     ├── mdp_algorithm/           # (Algorithm) - see algorithm.md
     │   ├── mdp_planning/        # Reeds-Shepp/Dubins curve + TSP solver, pure-pursuit follower
     │   └── wayp_plan_tools/     # vendored waypoint/planner utilities
-    ├── mdp_vision/              # (Vision) - see vision.md
-    │   ├── mdp_yolo/            # camera publisher + YOLO detector
+    ├── mdp_vision/              # (Vision) - camera publisher + YOLO detector, see vision.md
     │   ├── libcamera/           # external, gitignored - cloned on the Pi, real hardware only
     │   └── camera_ros/          # external, gitignored - cloned on the Pi, real hardware only
     ├── mdp_bridge/              # STM32 serial bridge (serial_bridge_node) + Android Bluetooth
