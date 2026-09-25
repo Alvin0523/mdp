@@ -81,47 +81,58 @@ Commands-only runbook to get the robot driving — for *why* any of this works, 
 
     ### 5. Launch
 
-    Find the STM32's serial device (varies by host):
+    Put the car in the start box facing North (arena +Y), flip the `PD3` motor switch **ON**, and find
+    the STM32's serial device (varies by host):
 
     ```bash
     ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null
     ```
 
-    ```bash
-    pixi run real serial_port:=/dev/ttyACM0   # substitute the device found above
-    ```
-
-    ### 6. Drive & Autonomy
-
-    Flip the `PD3` motor ON/OFF switch to ON — the wheels stay locked at 0% PWM until an active host
-    link exists (`pixi run real` must already be running) **and** the switch is ON. In a second terminal:
-
-    === "🕹️ Manual (teleop)"
-
-        ```bash
-        cd mdp_ros
-        pixi run teleop
-        ```
-
-        Key legend prints in that terminal.
-
-    === "🤖 Autonomous (Task Runner)"
-
-        ```bash
-        cd mdp_ros
-        pixi run task1   # Task 1: exploration + TSP planner
-        # or
-        pixi run task2   # Task 2: fastest path
-        ```
-
-        See [Algorithm](rpi/algorithm.md).
-
-    ### 7. (Optional) Visualize
+    Then, from `mdp_ros`, bring up the robot. All options are `name:=value` arguments appended to the
+    command, see [Launch arguments](#launch-arguments):
 
     ```bash
-    cd mdp_ros
-    pixi run foxglove   # foxglove_bridge on ws://localhost:8765
+    pixi run real task:=1                  # task 1 runner, obstacles from the tablet
+    pixi run real task:=1 vision:=true     # ...plus the Pi camera and YOLO
+    pixi run real task:=2 vision:=true     # task 2 runner
+    pixi run drive                         # bare car: no runner, no camera (motion tests)
     ```
+
+    `pixi run real` uses `/dev/ttyACM0`; add `serial_port:=/dev/ttyUSB0` if yours differs.
+
+    ### 6. Run
+
+    === "🤖 Task 1"
+
+        1. **Obstacles** — place them on the tablet and send. No tablet? `pixi run setup` publishes
+           `mdp_ros/src/mdp_bringup/config/test_obstacles.yaml` instead.
+        2. **Wait for the plan** — tablet `PLAN:DONE`, or `All legs planned.` in the launch terminal.
+        3. **Reset** — tablet Reset, or `pixi run reset`. Needed before every run.
+        4. **Go** — tablet BEGIN, or `pixi run go`.
+        5. **Stop** any time — tablet STOP, or `pixi run stop`. To run again: put the car back, reset, go.
+
+        At each checkpoint the car stops for 3 s while YOLO looks, then sends `TARGET,<obstacle>,<id>`.
+        If `go` does nothing, the launch terminal says why (still planning / reset first / no obstacles).
+
+    === "🏁 Task 2"
+
+        ```bash
+        pixi run go
+        ```
+
+        No obstacles and no reset needed.
+
+    === "🕹️ Manual"
+
+        With `pixi run drive` (or `task:=0`): the tablet's arrow buttons drive the car, or:
+
+        ```bash
+        pixi run teleop     # key legend prints in this terminal
+        ```
+
+    ### 7. Watch
+
+    See [Watching a run](#watching-a-run).
 
     Known issues and TODOs: [RPi](rpi/index.md#todo) and
     [STM32](stm32/index.md#todo).
@@ -146,40 +157,50 @@ Commands-only runbook to get the robot driving — for *why* any of this works, 
 
     ### 3. Launch
 
-    ```bash
-    pixi run sim
-    ```
-
-    ### 4. Drive & Autonomy
-
-    In a second terminal:
-
-    === "🕹️ Manual (teleop)"
-
-        ```bash
-        cd mdp_ros
-        pixi run teleop
-        ```
-
-        Key legend prints in that terminal.
-
-    === "🤖 Autonomous (Task Runner)"
-
-        ```bash
-        cd mdp_ros
-        pixi run task1   # Task 1: exploration + TSP planner
-        # or
-        pixi run task2   # Task 2: fastest path
-        ```
-
-        See [Algorithm](rpi/algorithm.md).
-
-    ### 5. (Optional) Visualize
+    From `mdp_ros`, same arguments as the real robot, see [Launch arguments](#launch-arguments):
 
     ```bash
-    cd mdp_ros
-    pixi run foxglove   # foxglove_bridge on ws://localhost:8765
+    pixi run sim task:=1 vision:=true      # task 1: Gazebo arena, obstacles from test_obstacles.yaml
+    pixi run sim task:=2 vision:=true      # task 2 arena
+    pixi run sim                           # bare car in the task 1 arena (drive it yourself)
+    pixi run sim task:=1 gui:=false        # no Gazebo window (lighter; watch in Foxglove)
     ```
+
+    In sim the obstacles are loaded automatically from
+    `mdp_ros/src/mdp_bringup/config/test_obstacles.yaml` — the same file places them in Gazebo and
+    sends them to the planner. Edit it (tablet cells `cell_x`/`cell_y` 0–19, `facing`, `symbol`) to
+    change the layout, or use the real tablet with `obstacles:=tablet` (pair it with the laptop so
+    `/dev/rfcomm0` exists).
+
+    ### 4. Run
+
+    === "🤖 Task 1"
+
+        Wait for `All legs planned.` in the launch terminal (about a minute), then in a second terminal:
+
+        ```bash
+        pixi run reset
+        pixi run go
+        ```
+
+        `pixi run stop` stops it. To run again: restart `pixi run sim …` (the car can't be put back by hand).
+
+    === "🏁 Task 2"
+
+        ```bash
+        pixi run go
+        ```
+
+    === "🕹️ Manual"
+
+        ```bash
+        pixi run teleop     # key legend prints in this terminal
+        ```
+
+    ### 5. Watch
+
+    See [Watching a run](#watching-a-run). Gazebo's true car pose is on `/sim/ground_truth` — plot it
+    against `/odometry/filtered` to see odometry drift.
 
 === "✅ Pre-run & Connection Tests"
 
@@ -193,7 +214,7 @@ Commands-only runbook to get the robot driving — for *why* any of this works, 
        means the firmware refuses to drive, the runner won't start and the tablet shows `ESTOP:ON`.
        (Switch polarity is still an unverified assumption, see [STM32](stm32/index.md).)
     3. **STM32 plugged in** — `ls /dev/ttyACM*` shows the device.
-    4. **Stack up** — `pixi run real1` running with no errors (it starts the serial bridge, the
+    4. **Stack up** — `pixi run real task:=1` running with no errors (it starts the serial bridge, the
        Bluetooth bridge and the runner).
     5. **Tablet connected** — the app shows *Connected to …*, and
        `ros2 topic echo /bluetooth_bridge/link_ok` prints `data: true`.
@@ -265,52 +286,79 @@ Commands-only runbook to get the robot driving — for *why* any of this works, 
 
 ---
 
-## Pixi Task Reference (`mdp_ros`)
+## Launch arguments
 
-Every task above, plus the ones the walkthroughs don't use directly:
+`pixi run real` and `pixi run sim` start the same launch file (`mdp_bringup/launch/mdp.launch.py`);
+append any of these:
+
+| Argument | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `task:=` | `0` `1` `2` | `0` | `0` bare car (tablet manual drive, no runner) · `1` explore + recognise · `2` slalom |
+| `vision:=` | `true` `false` | `false` | Camera + YOLO (`/yolo_result`, annotated image) |
+| `obstacles:=` | `tablet` `yaml` | real `tablet`, sim `yaml` | `yaml` also publishes `layout` once at start, like `pixi run setup`. The tablet link is up either way. |
+| `layout:=` | path | `config/test_obstacles.yaml` | Obstacle file (tablet cells). In sim it also places the Gazebo obstacles. |
+| `start_x:=` `start_y:=` `start_yaw:=` | metres, rad | task 0/1 `0.15 0.15 1.5708`, task 2 `0 0 0` | Where the car starts in the arena |
+| `gui:=` | `true` `false` | `true` | Sim only: Gazebo window |
+| `model:=` | model dir | `best_ncnn_model_v2` | YOLO model under `mdp_vision/models/` |
+| `serial_port:=` | device | `/dev/ttyACM0` (via `pixi run real`) | Real only: STM32 USART3 |
+| `bluetooth_device:=` | device | `/dev/rfcomm0` | Tablet RFCOMM link |
+
+Shortcuts: `pixi run sim1` / `sim2` = `sim task:=1` / `task:=2`; `pixi run drive` = `real task:=0 vision:=false`.
+
+---
+
+## Watching a run
+
+| What | How |
+| --- | --- |
+| Everything, visually | `pixi run foxglove`, then open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) in Foxglove and import `mdp_ros/foxglove/mdp_layout.json` once |
+| What the car is deciding | `pixi run runlog` — GO / leg → obstacle & checkpoint / arrived / YOLO / TARGET / next / finished |
+| Live numbers | `pixi run status` — state, checkpoint, distance left, chased waypoint, FWD/REV, speed, scan timer |
+| Tablet traffic | `pixi run btlog` — LINK UP/DOWN, `TABLET -> RPI …`, `RPI -> TABLET …` |
+| Everything else | `/rosout` (Foxglove Log panel) |
+| Record for later | `pixi run bag` (Ctrl+C to stop; saved in `mdp_ros/bags/`) |
+
+---
+
+## Pixi Task Reference (`mdp_ros`)
 
 **Workspace**
 
-| Task | Command |
+| Task | What it does |
 | --- | --- |
-| `pixi run build` | `colcon build --symlink-install` |
-| `pixi run test` | `colcon test` |
-| `pixi run clean` | `rm -rf build install log` |
+| `pixi run build` | Build all packages (`colcon build --symlink-install`) |
+| `pixi run test` | Run the package tests |
+| `pixi run clean` | Delete `build/ install/ log/` |
 
-**Simulation (Gazebo)**
+**Bring-up** (append [launch arguments](#launch-arguments))
 
-| Task | Command |
+| Task | What it does |
 | --- | --- |
-| `pixi run sim` | `ros2 launch mdp_bringup sim.launch.py` |
-| `pixi run sim-task2` | `ros2 launch mdp_bringup task2_sim.launch.py` — Gazebo Task 2 arena, YOLO detector & Task 2 runner |
+| `pixi run real` | Real robot (serial `/dev/ttyACM0`) |
+| `pixi run drive` | Real robot, bare car, no camera — motion tests |
+| `pixi run sim` | Gazebo |
+| `pixi run sim1` / `pixi run sim2` | Gazebo task 1 / task 2 |
+| `pixi run vision` | Camera + YOLO only, no robot |
 
-**Real hardware (Pi + STM32)**
+**Run control** (same for real and sim)
 
-| Task | Command |
+| Task | What it does |
 | --- | --- |
-| `pixi run real` | `ros2 launch mdp_bringup real.launch.py serial_port:=/dev/ttyACM0` |
-| `pixi run task1` | `ros2 run mdp_bringup task1_runner.py` — run alongside `real`/`sim`, not instead of it |
-| `pixi run task2` | `ros2 run mdp_bringup task2_runner.py` — run alongside `real`/`sim`, not instead of it |
-| `pixi run teleop` | `ros2 run teleop_twist_keyboard ...` — key legend prints in the terminal it runs in |
-| `pixi run go` | Call `/start_run` — start the planned run (same as the tablet's start) |
-| `pixi run stop` | Call `/stop_run` — halt the follower and planning, hold zeros |
-| `pixi run reset` | Call `/reset_run` — pose/odometry back to the start pose; obstacles and plan are kept |
-| `pixi run bt-send "<line>"` | Send a raw line to the tablet over Bluetooth |
-| `pixi run bt-rx` | Print every line the tablet sends |
+| `pixi run setup` | Send the obstacles in `test_obstacles.yaml` (instead of the tablet) |
+| `pixi run reset` | Reset the pose to the start pose — before every task 1 run |
+| `pixi run go` | Start the run (like the tablet's BEGIN) |
+| `pixi run stop` | Stop and hold zero speed |
+| `pixi run target <obstacle> <id>` | Debug: send `TARGET,<obstacle>,<id>` to the tablet |
+| `pixi run teleop` | Keyboard driving |
+| `pixi run dist <m>` / `rotate <deg>` / `circle` | Motion tests (bare car) |
 
-**Vision & debugging**
+**Watching**
 
-| Task | Command |
+| Task | What it does |
 | --- | --- |
-| `pixi run vision` | `ros2 launch mdp_vision vision.launch.py` — standalone webcam + YOLO, no RPi camera needed |
-| `pixi run foxglove` | `ros2 launch foxglove_bridge foxglove_bridge_launch.xml` |
-| `pixi run bag` | `ros2 bag record -a -o bags/rosbag2_<timestamp>` |
-
-`mdp_bridge`'s `serial_bridge_node` normally launches as part of `pixi run real`; to run it standalone instead:
-
-```bash
-ros2 run mdp_bridge serial_bridge_node --ros-args -p serial_port:=/dev/ttyUSB0
-```
+| `pixi run foxglove` | Foxglove bridge on port 8765 (display frame `map`) |
+| `pixi run status` / `runlog` / `btlog` | Live state / task events / tablet traffic |
+| `pixi run bag` / `bag-all` | Record all topics except / including camera images |
 
 ---
 
