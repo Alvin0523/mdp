@@ -52,11 +52,11 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ??? question "Teleop moves the rear wheels but front-wheel steering points the wrong direction"
 
-    Sign convention mismatch between two independently-authored subsystems: ROS's `left_joint`/`right_joint` (REP-103) treat positive angle as **left**, while `mdp_stm32`'s `servo_set_angle()` treats positive as **right**. `mdp_bridge`'s `serial_bridge_node.cpp` negates the angle at the boundary (both command and telemetry directions) to reconcile them — see [STM32: Serial Protocol](stm32/serial_protocol.md#serial-protocol) (Command Packet section). If this ever breaks again, check that negation is still present and applied symmetrically both ways, not just one.
+    Sign convention mismatch between two independently-authored subsystems: ROS's `left_joint`/`right_joint` (REP-103) treat positive angle as **left**, while `mdp_stm32`'s `servo_set_angle()` treats positive as **right**. `mdp_bridge`'s `serial_bridge_node.cpp` negates the angle at the boundary (both command and telemetry directions) to reconcile them — see [STM32: Serial Protocol](stm32/serial_protocol.md) (Command Packet section). If this ever breaks again, check that negation is still present and applied symmetrically both ways, not just one.
 
 ??? question "Teleop moves front steering but the rear wheels never spin, even though `/joint_commands` shows nonzero `velocity`"
 
-    `topic_based_ros2_control`'s `TopicBasedSystem` publishes `/joint_commands` with `name[]` listing every joint, but `position[]`/`velocity[]` as **separate, independently-indexed arrays** holding only the joints that use that interface type — not one slot per `name[]` entry. Code that reuses the same loop index across `name[]` and `position[]`/`velocity[]` will silently break for joints after the first interface-type group. See the full writeup in [RPi: ROS2 Jazzy](rpi/ros2_jazzy.md#core-topic-specifications).
+    `topic_based_ros2_control`'s `TopicBasedSystem` publishes `/joint_commands` with `name[]` listing every joint, but `position[]`/`velocity[]` as **separate, independently-indexed arrays** holding only the joints that use that interface type — not one slot per `name[]` entry. Code that reuses the same loop index across `name[]` and `position[]`/`velocity[]` will silently break for joints after the first interface-type group. See the full writeup in [RPi: ROS2 Jazzy](rpi/ros2_jazzy.md#topics).
 
 ??? question "A `remappings=` on a controller `spawner` node doesn't seem to do anything"
 

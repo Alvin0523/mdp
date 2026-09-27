@@ -4,46 +4,40 @@ icon: lucide/camera
 
 # Vision (`mdp_ros/src/mdp_vision`)
 
-Camera-based target/arrow recognition for Task 1 (image recognition) and Task 2 (arrow detection),
-running as ROS2 nodes inside `mdp_ros` on the RPi.
+Reads the symbols on the blocks: image IDs in task 1, left/right arrows in task 2.
 
-!!! note "Still missing: model training notes and accuracy tracking"
-    This page covers what's actually in the repo file-by-file, but YOLO26 training/dataset notes,
-    accuracy/false-positive tracking, and camera calibration detail aren't written up yet.
-
-## What's actually in the repo
-
-`mdp_vision/` is a folder holding the custom detection package plus (on real hardware) the vendored
-`libcamera`/`camera_ros` packages — mirroring how `mdp_algorithm/` holds `mdp_planning` +
-`wayp_plan_tools`.
-
-Package: `mdp_ros/src/mdp_vision` — description in `setup.py`: *"Vision stack for MDP robot"*.
-
-| File | Role |
+| Node | What |
 | --- | --- |
-| `mdp_vision/yolo_detector.py` | Ultralytics YOLO detector node |
-| `mdp_vision/camera_publisher.py` | Standalone webcam publisher — dev-only, for testing without the RPi camera (`pixi run vision`) |
-| `launch/vision.launch.py` | Launches the standalone dev-machine vision test path |
-| `models/yolo26n_ncnn_model/` | Exported/converted YOLO26 model (NCNN format, for embedded inference) |
+| `rpi_cam_publisher` | Pi Camera V2 (IMX219) via `rpicam-vid`, 640 × 480 @ 30 fps on `/image_raw` (plus a JPEG copy on `/image_raw/compressed` while something watches it, e.g. Foxglove). Real car only; in sim Gazebo's camera publishes `/camera/image_raw`. |
+| `yolo_detector` | YOLO (NCNN export) on the camera image → the symbol ID on `/yolo_result` (e.g. `20`; arrows `38` right / `39` left), and boxes drawn on `/yolo_result/image_annotated` |
 
-Also present (real hardware only, gitignored — see `mdp_ros/docs/pi-camera-vision.md`):
-`mdp_vision/libcamera` and `mdp_vision/camera_ros`, cloned from upstream and built from source,
-since the conda-forge `ros-jazzy-camera-ros`/`-libcamera` packages don't solve on `linux-aarch64`.
+**Models** (`mdp_vision/models/`): `mdp_v2_ncnn_model` (default) and `mdp_v1_ncnn_model` (older).
+Pick one with `model:=mdp_v1_ncnn_model`. The `_ncnn_model` folder suffix is required by Ultralytics.
 
-## How it fits into the system
+**Settings:** `mdp_bringup/config/vision.yaml` (image size, frame rate, JPEG quality, topics).
 
-Per the [Assessment & Checklist](../assessment_checklist.md), Task 1 requires detecting target
-symbols 20-50cm from the robot and identifying target IDs; Task 2 requires detecting Left/Right arrow
-symbols. See [Subsystems](../index.md#subsystems) for where this sits
-relative to Algorithm and RPi.
+## Running
 
-- **Real hardware path**: `pixi run real` uses the RPi Camera Module V2 via `camera_ros` (not
-  `camera_publisher.py`, which is the dev-only webcam substitute).
-- **Sim/dev path**: `pixi run vision` launches `camera_publisher.py` + `yolo_detector.py` standalone,
-  for testing detection logic without the actual RPi camera attached.
-- **Consumers**: detections are read by `task1_runner.py`/`task2_runner.py` (see [Algorithm](algorithm.md))
-  to drive the Task 1 & 2 state machines.
+| Command | What runs |
+| --- | --- |
+| `pixi run sim …` / `pixi run real …` | Camera + YOLO are on by default (`vision:=false` for off). In sim only YOLO runs, on Gazebo's camera. |
+| `pixi run vision` | Pi camera + YOLO alone, no car (`mdp_bringup/launch/vision.launch.py`) |
 
-## References
+## How the runners use it
 
-- [Ultralytics ROS Quickstart](../references.md) and [Ultralytics Raspberry Pi Guide](../references.md) — external docs linked from the main References page.
+- **Task 1:** at each stop the car waits 3 s. Every ID YOLO reports is counted, and the most frequent
+  one is sent to the tablet as `TARGET,<obstacle>,<id>` (`UNKNOWN` if none).
+- **Task 2:** the first arrow seen decides which side of block 1 to pass.
+
+## Where the camera sits
+
+In the URDF, at the middle of the chassis: 84 mm ahead of the rear axle, on the centre line,
+looking **left** in task 1 (so the car parks alongside each image) and forward in task 2. The
+runner reads that direction from the URDF, so moving the camera needs no code change.
+
+At a task 1 stop the rear axle is 20 cm from the block centre, so the image is about 29° to the side
+of the camera's view centre. The camera sees ±31°, so the image is in view but near the edge. In
+sim it reads 4 of 4. **TODO:** mount the real camera there and measure it
+([Quickstart → Measured car numbers](../quickstart.md#7-measured-car-numbers)).
+
+Still to write up: training data and model accuracy.

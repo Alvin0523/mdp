@@ -4,365 +4,304 @@ icon: lucide/play
 
 # Quickstart
 
-Commands-only runbook to get the robot driving — for *why* any of this works, see
-[RPi docs](rpi/index.md) and [STM32 docs](stm32/index.md).
+Everything needed to run the car, in sim or for real, with or without the tablet: the
+commands, the calibration, and every number we measured. For *why* things work, see the
+[RPi docs](rpi/index.md) and the [STM32 docs](stm32/index.md).
 
-!!! tip "Viewing this docs site locally"
-    From the `mdp` repo root: `pixi install` then `pixi run serve` — live-reloading preview at
-    `http://127.0.0.1:8000`.
+All `pixi run …` commands below run **from `mdp_ros/`**. Positions are always **tablet
+cells**: column, row `0`–`19`, 10 cm each, `(0,0)` bottom-left, plus a direction
+`N` `E` `S` `W`.
 
-!!! note "Sim vs. Real Hardware"
-    Same kinematics, swappable hardware plugin:
+!!! tip "This docs site locally"
+    From the `mdp` repo root: `pixi install`, then `pixi run serve` → `http://127.0.0.1:8000`.
 
-    ```mermaid
-    graph LR
-      ASC["ros2_control<br/>(ackermann_steering_controller)"]
-      ASC --> GZ["gz_ros2_control<br/>(Gazebo Sim)"]
-      ASC --> RT["topic_based_ros2_control<br/>(Real STM32)"]
-    ```
-    <p align="center"><strong>Fig. 1</strong> — Sim vs. Real Hardware</p>
+---
 
-    Full sequence: [RPi](rpi/index.md#end-to-end-control-telemetry-sequence).
+## 1. One-time setup
 
-=== "⚡ Real Hardware"
-
-    ### 1. Clone — on the Raspberry Pi
-
-    Everything below runs **on the robot's own Raspberry Pi** — it's both the ROS2 host and, if the
-    ST-Link is plugged into its USB, where you flash the STM32 from.
-
-    !!! tip "Connecting to the Pi"
-        SSH in over [Tailscale](https://tailscale.com/) — no need to be on the same LAN, or to know
-        the Pi's local IP.
+=== "💻 Laptop (sim)"
 
     ```bash
     git clone --recurse-submodules https://github.com/Alvin0523/mdp.git
-    cd mdp
+    cd mdp/mdp_ros
     pixi install
+    pixi run build
     ```
 
-    ### 2. Flash the STM32 firmware
+=== "🤖 Raspberry Pi (real car)"
 
-    Wire it up first: ST-Link to the STM32 board over SWD, then the ST-Link's own USB into the Pi —
-    `pixi run probe` (and `flash`) talk to the STM32 through that ST-Link, not through the board's
-    own USART3 serial port.
+    SSH in over [Tailscale](https://tailscale.com/) (no need to be on the same network).
 
     ```bash
-    cd mdp_stm32
-    pixi install       # PlatformIO + toolchain
+    git clone --recurse-submodules https://github.com/Alvin0523/mdp.git
+    cd mdp/mdp_ros
+    pixi install
+    pixi run build
+    ```
 
-    pixi run probe      # confirm ST-LINK/V2 + STM32F407 are detected
+    **Flash the STM32** (ST-Link on the board's SWD header, ST-Link USB into the Pi):
+
+    ```bash
+    cd ../mdp_stm32
+    pixi install
+    pixi run probe      # ST-LINK/V2 + STM32F407 detected?
     pixi run build
     pixi run flash
-    pixi run monitor    # optional: confirm boot banner + PE8 LED blink + OLED page cycling
+    pixi run monitor    # optional: boot banner, LED blink, OLED pages
     ```
 
-    ARM64 Linux hosts (e.g. RPi 64-bit OS) need a `platform_packages` override in `platformio.ini`
-    for the pinned toolchain — see [Troubleshooting](troubleshooting.md) if `pixi run build` fails there.
+    ARM64 hosts (the Pi) may need a `platform_packages` override if `build` fails, see
+    [Troubleshooting](troubleshooting.md).
 
-    ### 3. Pre-flight checks *(TBD — not yet performed)*
-
-    !!! tip "User button (`PE0`)"
-        Dual-purpose, depending on the motor switch:
-
-        - Motor **OFF** → press cycles the OLED page.
-        - Motor **ON** → press runs the self-test sequence (drives the motors — keep the wheels off
-          the ground).
-
-    Full checklist: [STM32: Verification Checklist](stm32/index.md#verification-checklist-post-flash-bring-up).
-
-    ### 4. Build the ROS2 side
+!!! warning "After pulling big changes: clean build"
+    If a package changed type or files were renamed (e.g. `mdp_bringup` became a Python package
+    on 2026-09-28), old build files get in the way:
 
     ```bash
-    cd mdp_ros
-    pixi install
+    pixi run clean
     pixi run build
     ```
 
-    ### 5. Launch
+---
 
-    Put the car in the start box facing North (arena +Y), flip the `PD3` motor switch **ON**, and find
-    the STM32's serial device (varies by host):
+## 2. Pick your run
 
-    ```bash
-    ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null
-    ```
+Two commands start everything: **`pixi run sim`** (Gazebo, laptop) and **`pixi run real`**
+(the car, on the Pi). The rest are [launch arguments](#launch-arguments) added after them.
 
-    Then, from `mdp_ros`, bring up the robot. All options are `name:=value` arguments appended to the
-    command, see [Launch arguments](#launch-arguments):
+| You want | Command | Obstacles come from |
+| --- | --- | --- |
+| **Sim, no tablet** | `pixi run sim task:=1` | `config/tasks.yaml`, sent automatically, plan starts by itself |
+| **Sim + tablet** | `pixi run sim task:=1 obstacles:=tablet` | The tablet (DONE). Gazebo's blocks change to match. |
+| **Real + tablet** (the real run) | `pixi run real task:=1` | The tablet (DONE) |
+| **Real, no tablet** | `pixi run real task:=1 obstacles:=yaml` | `config/tasks.yaml` |
+| Task 2 | `pixi run sim task:=2` / `pixi run real task:=2` | `config/tasks.yaml` (`task2`) |
+| **Bare car** (manual drive, calibration) | `pixi run sim` / `pixi run real` | none (`task:=0`) |
 
-    ```bash
-    pixi run real task:=1                  # task 1 runner, obstacles from the tablet
-    pixi run real task:=1 vision:=true     # ...plus the Pi camera and YOLO
-    pixi run real task:=2 vision:=true     # task 2 runner
-    pixi run drive                         # bare car: no runner, no camera (motion tests)
-    ```
+- **The tablet link is always on.** Even in "no tablet" runs a tablet can connect and send
+  obstacles, BEGIN, STOP, RESET or the arrow buttons. Without one, the bridge just keeps retrying
+  quietly.
+- **Camera + YOLO are on by default.** `vision:=false` turns them off.
+- **The car starts** with the middle of its rear axle over cell **(1,1) facing N**
+  (`start_cell:=` / `start_dir:=` to change). Task 2 starts in the carpark facing E.
 
-    `pixi run real` uses `/dev/ttyACM0`; add `serial_port:=/dev/ttyUSB0` if yours differs.
+### Connecting the tablet
 
-    ### 6. Run
+Pair the tablet with the machine (laptop for sim, Pi for real) once in Bluetooth settings, then
+open the link before starting (keep this terminal open):
 
-    === "🤖 Task 1"
+```bash
+sudo rfcomm listen /dev/rfcomm0 1
+```
 
-        1. **Obstacles** — place them on the tablet and send. No tablet? `pixi run setup` publishes
-           `mdp_ros/src/mdp_bringup/config/test_obstacles.yaml` instead.
-        2. **Wait for the plan** — tablet `PLAN:DONE`, or `All legs planned.` in the launch terminal.
-        3. **Reset** — tablet Reset, or `pixi run reset`. Needed before every run.
-        4. **Go** — tablet BEGIN, or `pixi run go`.
-        5. **Stop** any time — tablet STOP, or `pixi run stop`. To run again: put the car back, reset, go.
+The app connects; `LINK UP` shows in `pixi run btlog` and the tablet gets the car's position.
 
-        At each checkpoint the car stops for 3 s while YOLO looks, then sends `TARGET,<obstacle>,<id>`.
-        If `go` does nothing, the launch terminal says why (still planning / reset first / no obstacles).
+---
 
-    === "🏁 Task 2"
+## 3. Task 1 (explore + recognise)
 
-        ```bash
-        pixi run go
-        ```
+Steps are the same in sim and real; the **tablet** and **no-tablet** columns do the same thing.
 
-        No obstacles and no reset needed.
+| Step | With the tablet | Without (second terminal, `mdp_ros/`) | You'll see |
+| --- | --- | --- | --- |
+| 1. Obstacles | Place them, press **DONE** | nothing (`tasks.yaml` is sent at start), or `pixi run setup` to send it again | `OBSTACLES #1 (5,10)S …` |
+| 2. Wait for the plan | tablet **PLAN: DONE** | | `PLAN      done, 4 legs - waiting for GO` |
+| 3. Car in the start box, reset | **RESET** | `pixi run reset` | `RESET     done - at the start`, tablet **RESET: DONE** |
+| 4. Go | **BEGIN** (needs STATUS *Ready*) | `pixi run go` | `GO        1 -> 2 -> 4 -> 3` |
+| 5. Stop any time | **STOP** | `pixi run stop` | `STOP      at (9,5)E - reset before the next run` |
 
-    === "🕹️ Manual"
+What the launch terminal prints during a run (one line per event, cells not metres):
 
-        With `pixi run drive` (or `task:=0`): the tablet's arrow buttons drive the car, or:
+```text
+LEG 1/4   -> #1 (5,8)E  fwd REV fwd
+ARRIVED   #1 at (5,8)E (target (5,8)E, heading -8deg) - scanning
+TARGET    #1 = 20   (YOLO saw 20x22)
+...
+FINISHED  all obstacles visited
+```
 
-        ```bash
-        pixi run teleop     # key legend prints in this terminal
-        ```
+- At each stop the car waits 3 s while YOLO looks, then sends `TARGET,<obstacle>,<id>` to the
+  tablet (`UNKNOWN` if it saw nothing).
+- **Run again:** put the car back in the start box → RESET → BEGIN. The obstacles and plan are kept.
+  A reset during a run stops the run first.
+- **In sim, reset does not move the car in Gazebo** (nobody can pick it up). For a clean re-run,
+  restart `pixi run sim …`.
 
-    ### 7. Watch
+## 4. Task 2 (slalom)
 
-    See [Watching a run](#watching-a-run).
+```bash
+pixi run go
+```
 
-    Known issues and TODOs: [RPi](rpi/index.md#todo) and
-    [STM32](stm32/index.md#todo).
+No obstacles or reset needed. The car reads the first arrow with YOLO, passes block 1 on that
+side and block 2 on the other, then comes back to the carpark.
 
-=== "▶️ Simulation"
+## 5. Bare car: manual driving
 
-    ### 1. Clone — on your dev machine
+Start with `pixi run sim` or `pixi run real` (no `task:=`). Then:
 
-    ```bash
-    git clone --recurse-submodules https://github.com/Alvin0523/mdp.git
-    cd mdp
-    pixi install
-    ```
+- **Tablet arrow buttons** (f, b, fl, fr, bl, br): one short burst per tap.
+- **Keyboard:** `pixi run teleop` (the key legend prints in the terminal).
 
-    ### 2. Build
+---
 
-    ```bash
-    cd mdp_ros
-    pixi install
-    pixi run build
-    ```
+## 6. Calibration: `pixi run calib`
 
-    ### 3. Launch
+All on the **bare car** (`pixi run sim` / `pixi run real`, no `task:=`). `calib` refuses to start
+while task 1 or 2 is running. `pixi run calib <what> -h` lists each one's options.
 
-    From `mdp_ros`, same arguments as the real robot, see [Launch arguments](#launch-arguments):
+| Command | Checks | How you measure | Where the result goes |
+| --- | --- | --- | --- |
+| `pixi run calib straight 1.0` | **Wheel size**: does 1.0 m on the odometry = 1.0 m on the floor? | Tape the real distance; correction = measured ÷ 1.0 | URDF `wheel_radius` × correction |
+| `pixi run calib rotate 90` | **Heading (IMU / EKF)**: does a 90° turn end at 90°? (assessment A.4) | Floor lines / protractor | EKF / IMU settings |
+| `pixi run calib turn left` (and `right`) | **Turning circle** at full lock, per side | Mark the floor under the middle of the rear axle before and after: the car drives half a circle, so the two marks are **one diameter** apart. Radius = tape ÷ 2 | `navigation.yaml` `minimum_turning_radius_left` / `_right` (m) |
+| `pixi run calib goto 5 8 E` | **Planner + follower end to end**: stops in cell (5,8) facing E, around the `tasks.yaml` blocks (`--no-obstacles` for an empty arena) | Which cell it stopped in | `navigation.yaml` follower settings |
+| `pixi run around-obstacle` | Checklist demo: approach a block on the ultrasonic, drive a square round it | Watch it | — |
 
-    ```bash
-    pixi run sim task:=1 vision:=true      # task 1: Gazebo arena, obstacles from test_obstacles.yaml
-    pixi run sim task:=2 vision:=true      # task 2 arena
-    pixi run sim                           # bare car in the task 1 arena (drive it yourself)
-    pixi run sim task:=1 gui:=false        # no Gazebo window (lighter; watch in Foxglove)
-    ```
+`calib turn` also prints its own estimate of the radius (and Gazebo's true value in sim), to
+compare with the tape. In sim all three agree to within 3 mm.
 
-    In sim the obstacles are loaded automatically from
-    `mdp_ros/src/mdp_bringup/config/test_obstacles.yaml` — the same file places them in Gazebo and
-    sends them to the planner. Edit it (tablet cells `cell_x`/`cell_y` 0–19, `facing`, `symbol`) to
-    change the layout, or use the real tablet with `obstacles:=tablet` (pair it with the laptop so
-    `/dev/rfcomm0` exists).
+---
 
-    ### 4. Run
+## 7. Measured car numbers
 
-    === "🤖 Task 1"
+Every number measured on the car, where it lives, and how to re-measure it. Each lives in **one**
+file only; the launch copies the URDF's numbers into the controller and planner.
 
-        Wait for `All legs planned.` in the launch terminal (about a minute), then in a second terminal:
+| What | Value | How / when measured | Lives in | Re-measure with |
+| --- | --- | --- | --- | --- |
+| Wheelbase (rear axle → front axle) | **143 mm** | Tape, 2026-09-27 | URDF `wheelbase` | Tape |
+| Rear track (wheel centre to centre) | **162 mm** | Tape, 2026-09-27 | URDF `rear_track` | Tape |
+| Front track | **164 mm** | Tape, 2026-09-27 | URDF `front_track` | Tape |
+| Tyre rolling diameter (front = rear) | **66.2 mm** (radius 33.1 mm) | `calib straight`, 4 × 2.0 m: car went 1.018× what 65 mm predicted | URDF `wheel_radius` | `calib straight` |
+| Body outline | **230 × 190 mm**, 31 mm behind the rear axle, 199 mm ahead | Tape, 2026-09-27 | `navigation.yaml` `footprint_*` | Tape |
+| Steering limit left | **43.0°** at 850 µs (chassis contact) | Protractor at the wheel, 2026-09-18 | URDF `steer_left` + STM32 `servo.h` | Protractor |
+| Steering limit right | **32.5°** at 2400 µs (mechanical stop) | Protractor at the wheel, 2026-09-18 | URDF `steer_right` + STM32 `servo.h` | Protractor |
+| Servo centre (straight) | **1490 µs** | Pushing the car by hand at candidate pulses | STM32 `servo.c` | Same |
+| Turning radius left (full lock, 0.2 m/s) | **17.7 cm** (sim) · real: **TODO** | Gazebo circle fit, 2026-09-27 | `navigation.yaml` `minimum_turning_radius_left` | `calib turn left` |
+| Turning radius right | **25.7 cm** (sim) · real: **TODO** | Gazebo circle fit, 2026-09-27 | `navigation.yaml` `minimum_turning_radius_right` | `calib turn right` |
+| IMU position | 12 mm ahead of the rear axle, 26 mm right of centre, 95.5 mm above the table | Tape, 2026-09-28 | URDF `imu_joint` | Tape |
+| Camera position | Middle of the chassis: 84 mm ahead of the rear axle, on the centre line, 93 mm above the table, looking **left** in task 1, forward in task 2 · **TODO: mount + measure** | Placed 2026-09-28 (not yet measured on the car) | URDF `camera_joint` | Tape |
+| Battery | 3S Li-ion, 12.6 V full, 3400 mAh | Spec | — | OLED `B:xx.xV` |
 
-        ```bash
-        pixi run reset
-        pixi run go
-        ```
+Both front wheels always have the **same** angle: one servo drives the right wheel and a tie rod
+the left. That is why the controller's `steering_track_width` is ~0, and why the real turning circle
+is wider than wheelbase ÷ tan(angle) (tyre scrub): **measure it**, don't calculate it.
 
-        `pixi run stop` stops it. To run again: restart `pixi run sim …` (the car can't be put back by hand).
+!!! warning "STM32 firmware"
+    The 43.0° / 32.5° limits must also be in the firmware on the car (`mdp_stm32/include/servo.h`).
+    If the car was flashed before 2026-09-27, [flash it again](#1-one-time-setup).
 
-    === "🏁 Task 2"
+### Settings you'll tune: `config/navigation.yaml`
 
-        ```bash
-        pixi run go
-        ```
+Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.yaml`.
 
-    === "🕹️ Manual"
+| Setting | Now | What |
+| --- | --- | --- |
+| `task1_runner` `follower.desired_linear_vel` | 0.2 m/s | Task 1 speed |
+| `task2_runner` `fast_speed` / `slow_speed` | 0.45 / 0.22 m/s | Task 2, straights / tight curves |
+| `manual_speed_mps` | 0.15 m/s | Tablet arrow buttons |
+| `planner.checkpoint_standoff` | 0.20 m | Rear axle this far from the block centre at each stop |
+| `costmap.footprint_padding` | 0.03 m | Safety margin round the car |
+| `follower.xy_goal_tolerance` | 0.05 m | "Arrived" |
 
-        ```bash
-        pixi run teleop     # key legend prints in this terminal
-        ```
+Speeds can be changed **while running**, e.g.:
 
-    ### 5. Watch
+```bash
+pixi run -- ros2 param set /task1_runner follower.desired_linear_vel 0.3
+```
 
-    See [Watching a run](#watching-a-run). Gazebo's true car pose is on `/sim/ground_truth` — plot it
-    against `/odometry/filtered` to see odometry drift.
+The turning circles were measured at 0.2 m/s. Faster means wider turns than planned, so test in sim
+first.
 
-=== "✅ Pre-run & Connection Tests"
+The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, task 1 + 2),
+`bridges.yaml` (STM32 serial port, tablet device), `vision.yaml` (camera, YOLO),
+`controller.yaml` and `ekf.yaml` (ros2_control, localisation).
 
-    ### Pre-run checklist
+---
 
-    Before every run, in this order:
+## 8. Watching a run
 
-    1. **Battery** — OLED page 1 shows `B:xx.xV`; charge if low.
-    2. **E-stop (motor switch)** — the STM32's onboard `PD3` switch must be **ON**. The OLED shows
-       `ES:RDY` and `ros2 topic echo /estop` prints `data: false`. Engaged (`ES:ENG`, `data: true`)
-       means the firmware refuses to drive, the runner won't start and the tablet shows `ESTOP:ON`.
-       (Switch polarity is still an unverified assumption, see [STM32](stm32/index.md).)
-    3. **STM32 plugged in** — `ls /dev/ttyACM*` shows the device.
-    4. **Stack up** — `pixi run real task:=1` running with no errors (it starts the serial bridge, the
-       Bluetooth bridge and the runner).
-    5. **Tablet connected** — the app shows *Connected to …*, and
-       `ros2 topic echo /bluetooth_bridge/link_ok` prints `data: true`.
-    6. **Car at the start position**, then `pixi run reset` → tablet **Reset** indicator `DONE`.
-    7. **Obstacles sent** from the tablet → **Plan** indicator `PLANNING` then `DONE`.
-    8. Tablet status says **`Ready`** → press start. (`pixi run go` does the same from the Pi.)
+| What | How |
+| --- | --- |
+| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/mdp_layout.json` once. Tab **Run**: 3D arena, camera, state timeline, link lights, battery, GO/STOP/RESET buttons, logs. Tab **Health & tuning**: diagnostics, speed / steering / yaw-rate plots. |
+| The run, step by step | The launch terminal (lines like `LEG`, `ARRIVED`, `TARGET` above) |
+| Tablet traffic | `pixi run btlog`: `LINK UP/DOWN`, `TABLET -> RPI …`, `RPI -> TABLET …` |
+| Live numbers | `pixi run status`: state, target, distance left, gear, speed, scan |
+| Record for later | `pixi run bag` (Ctrl+C to stop, saved in `mdp_ros/bags/`) |
 
-    Stop at any time with the tablet's STOP toggle or `pixi run stop`; after a stop, put the car back and
-    `pixi run reset` — the plan is kept.
+---
 
-    ### Connection tests
+## 9. Before a real run
 
-    Run these from `mdp_ros` on the Pi with the stack up.
-
-    **Pi → tablet** — `bt-send` writes any raw line straight to the tablet:
-
-    ```bash
-    pixi run bt-send "STATUS:Ready"     # tablet status text changes
-    pixi run bt-send "ROBOT,4,4,N"      # robot icon moves (needs the new ROBOT handler in the app)
-    pixi run bt-send "TARGET,1,11"      # obstacle 1 shows target ID 11
-    pixi run bt-send "ESTOP:ON"         # e-stop indicator, once the app has one
-    ```
-
-    A generic Bluetooth terminal app shows these as plain text. Our own app only reacts to lines it
-    recognises; anything else logs *unknown message received*. Lines sent this way are **not** replayed
-    on reconnect.
-
-    **Tablet → Pi** — `bt-rx` prints every line the tablet sends:
-
-    ```bash
-    pixi run bt-rx      # then press buttons / place obstacles on the tablet
-    ```
-
-    Expect `OBSTACLE,n,x,y,F`, `DONE`, `BEGIN`, `STOP`, `f`/`b`/`fl`/`fr`/`bl`/`br`. Nothing appearing
-    usually means the app isn't ending its lines with `\n`.
-
-    **STM32 link** — wheels off the ground first:
-
-    ```bash
-    pixi run teleop     # i = forward, , = backward, k = stop
-    ```
-
-    **E-stop** — flip the motor switch and watch `ros2 topic echo /estop` change; with a run in
-    progress the runner aborts (`Stopped`).
-
-    **Wi-Fi** *(if the Pi is set up as the hotspot)* — join it from a laptop and open the Pi's fixed IP
-    in a browser; `ssh` to the same address to run the tasks.
-
-    ### Tablet ↔ Pi message reference
-
-    One `\n`-terminated line per message. Grid cells are 10 cm, `0`–`19`, origin bottom-left.
-
-    | Direction | Line | Meaning |
-    | --- | --- | --- |
-    | tablet → Pi | `OBSTACLE,<n>,<x>,<y>,<N/E/S/W>` | Obstacle *n*; `x`,`y` = cell × 10; facing `-1` = removed |
-    | tablet → Pi | `DONE` | All obstacles sent — plan now |
-    | tablet → Pi | `BEGIN` | Start the car (rejected unless *Ready*) |
-    | tablet → Pi | `STOP` | Stop everything (`pixi run stop`) |
-    | tablet → Pi | `f b fl fr bl br` | Manual drive, one short burst per tap |
-    | tablet → Pi | `CLEAR` | Tablet cleared its map (Pi resends the robot pose only) |
-    | Pi → tablet | `ROBOT,<x>,<y>,<N/E/S/W>` | Robot's bottom-left cell (0–18) and facing |
-    | Pi → tablet | `TARGET,<n>,<id>` | Image ID found on obstacle *n* |
-    | Pi → tablet | `PLAN:<WAITING\|PLANNING\|DONE>` | Obstacles received and planned |
-    | Pi → tablet | `RESET:<WAITING\|DONE>` | Car pose is at the start pose |
-    | Pi → tablet | `ESTOP:<ON\|OFF>` | STM32 motor switch engaged |
-    | Pi → tablet | `STATUS:<text>` | `Ready`, `Going to obstacle n`, `Scanning obstacle n`, `Finished`, `Stopped`, `Not ready` |
-
-    *Ready* = plan `DONE` **and** reset `DONE` **and** e-stop `OFF`.
+1. **Battery**: OLED page 1 `B:xx.xV`; charge if low.
+2. **Motor switch** (`PD3`) **ON**: OLED `ES:RDY`; Foxglove light *Motors ON*.
+3. **STM32 plugged in**: the Foxglove light *STM32 OK* once running.
+4. **Tablet connected**: *Tablet OK* light, `LINK UP` in `pixi run btlog`.
+5. **Car in the start box**, cell (1,1) facing N → RESET → tablet **RESET: DONE**.
+6. **Obstacles sent** → **PLAN: DONE** → tablet status **Ready** → BEGIN.
 
 ---
 
 ## Launch arguments
 
-`pixi run real` and `pixi run sim` start the same launch file (`mdp_bringup/launch/mdp.launch.py`);
-append any of these:
+Added after `pixi run sim` or `pixi run real` (both start `mdp_bringup/launch/mdp.launch.py`).
 
-| Argument | Values | Default | What it does |
+| Argument | Values | Default | What |
 | --- | --- | --- | --- |
-| `task:=` | `0` `1` `2` | `0` | `0` bare car (tablet manual drive, no runner) · `1` explore + recognise · `2` slalom |
-| `vision:=` | `true` `false` | `false` | Camera + YOLO (`/yolo_result`, annotated image) |
-| `obstacles:=` | `tablet` `yaml` | real `tablet`, sim `yaml` | `yaml` also publishes `layout` once at start, like `pixi run setup`. The tablet link is up either way. |
-| `layout:=` | path | `config/test_obstacles.yaml` | Obstacle file (tablet cells). In sim it also places the Gazebo obstacles. |
-| `start_x:=` `start_y:=` `start_yaw:=` | metres, rad | task 0/1 `0.15 0.15 1.5708`, task 2 `0 0 0` | Where the car starts in the arena |
+| `task:=` | `0` `1` `2` | `0` | `0` bare car (manual drive, calibration) · `1` explore + recognise · `2` slalom |
+| `vision:=` | `true` `false` | `true` | Camera + YOLO |
+| `model:=` | model folder | `mdp_v2_ncnn_model` | YOLO model under `mdp_vision/models/` (`mdp_v1_ncnn_model` = older) |
+| `obstacles:=` | `tablet` `yaml` | sim `yaml`, real `tablet` | `yaml` also sends `layout` once at start. The tablet link is on either way. |
+| `layout:=` | path | `config/tasks.yaml` | Obstacle layouts (task 1 in cells, task 2 in metres); in sim also Gazebo's blocks |
+| `start_cell:=` | `COL,ROW` | `1,1` | Cell under the middle of the rear axle at start |
+| `start_dir:=` | `N` `E` `S` `W` | `N` | Facing at start (task 2 without `start_cell`: carpark, facing E) |
 | `gui:=` | `true` `false` | `true` | Sim only: Gazebo window |
-| `model:=` | model dir | `best_ncnn_model_v2` | YOLO model under `mdp_vision/models/` |
-| `serial_port:=` | device | `/dev/ttyACM0` (via `pixi run real`) | Real only: STM32 USART3 |
-| `bluetooth_device:=` | device | `/dev/rfcomm0` | Tablet RFCOMM link |
+| `log:=` | `quiet` `full` | `quiet` | `full` shows every node's output |
+| `serial_port:=` | device | `bridges.yaml` (by-id path) | Real only: the STM32 |
+| `bluetooth_device:=` | device | `/dev/rfcomm0` | The tablet link |
 
-Shortcuts: `pixi run sim1` / `sim2` = `sim task:=1` / `task:=2`; `pixi run drive` = `real task:=0 vision:=false`.
+## All pixi tasks (`mdp_ros/`)
 
----
-
-## Watching a run
-
-| What | How |
+| Task | What |
 | --- | --- |
-| Everything, visually | `pixi run foxglove`, then open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) in Foxglove and import `mdp_ros/foxglove/mdp_layout.json` once |
-| What the car is deciding | `pixi run runlog` — GO / leg → obstacle & checkpoint / arrived / YOLO / TARGET / next / finished |
-| Live numbers | `pixi run status` — state, checkpoint, distance left, chased waypoint, FWD/REV, speed, scan timer |
-| Tablet traffic | `pixi run btlog` — LINK UP/DOWN, `TABLET -> RPI …`, `RPI -> TABLET …` |
-| Everything else | `/rosout` (Foxglove Log panel) |
-| Record for later | `pixi run bag` (Ctrl+C to stop; saved in `mdp_ros/bags/`) |
-
----
-
-## Pixi Task Reference (`mdp_ros`)
-
-**Workspace**
-
-| Task | What it does |
-| --- | --- |
-| `pixi run build` | Build all packages (`colcon build --symlink-install`) |
-| `pixi run test` | Run the package tests |
-| `pixi run clean` | Delete `build/ install/ log/` |
-
-**Bring-up** (append [launch arguments](#launch-arguments))
-
-| Task | What it does |
-| --- | --- |
-| `pixi run real` | Real robot (serial `/dev/ttyACM0`) |
-| `pixi run drive` | Real robot, bare car, no camera — motion tests |
-| `pixi run sim` | Gazebo |
-| `pixi run sim1` / `pixi run sim2` | Gazebo task 1 / task 2 |
-| `pixi run vision` | Camera + YOLO only, no robot |
-
-**Run control** (same for real and sim)
-
-| Task | What it does |
-| --- | --- |
-| `pixi run setup` | Send the obstacles in `test_obstacles.yaml` (instead of the tablet) |
-| `pixi run reset` | Reset the pose to the start pose — before every task 1 run |
-| `pixi run go` | Start the run (like the tablet's BEGIN) |
-| `pixi run stop` | Stop and hold zero speed |
-| `pixi run target <obstacle> <id>` | Debug: send `TARGET,<obstacle>,<id>` to the tablet |
+| `pixi run build` / `test` / `clean` | Build / run the tests / delete `build install log` |
+| `pixi run sim` / `real` | Start everything (+ [launch arguments](#launch-arguments)) |
+| `pixi run vision` | Camera + YOLO only, no car |
+| `pixi run setup` | Send the task 1 obstacles in `tasks.yaml`, like the tablet's DONE |
+| `pixi run reset` / `go` / `stop` | Reset to the start pose / start the run / stop |
+| `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib): `straight` · `rotate` · `turn` · `goto` |
+| `pixi run around-obstacle` | Checklist: drive round a block |
 | `pixi run teleop` | Keyboard driving |
-| `pixi run dist <m>` / `rotate <deg>` / `circle` | Motion tests (bare car) |
+| `pixi run foxglove` | Foxglove bridge, port 8765 |
+| `pixi run status` / `btlog` | Live numbers / tablet traffic |
+| `pixi run bag` / `bag-all` | Record everything except / including camera images |
+| `pixi run panels` / `import-symbols` | Regenerate the sim's symbol images |
 
-**Watching**
+## Tablet ↔ Pi messages
 
-| Task | What it does |
-| --- | --- |
-| `pixi run foxglove` | Foxglove bridge on port 8765 (display frame `map`) |
-| `pixi run status` / `runlog` / `btlog` | Live state / task events / tablet traffic |
-| `pixi run bag` / `bag-all` | Record all topics except / including camera images |
+One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 
----
+| Direction | Line | Meaning |
+| --- | --- | --- |
+| tablet → Pi | `OBSTACLE,<n>,<x>,<y>,<N/E/S/W>` | Obstacle *n*; `x`,`y` = cell × 10 |
+| tablet → Pi | `DONE` | All obstacles sent: plan now |
+| tablet → Pi | `BEGIN` | Start the run |
+| tablet → Pi | `STOP` | Stop |
+| tablet → Pi | `RESET` | Car is back at the start: reset the pose (like `pixi run reset`) |
+| tablet → Pi | `f` `b` `fl` `fr` `bl` `br` | Manual drive, one short burst per tap |
+| tablet → Pi | `CLEAR` | Tablet cleared its map (Pi resends the car's position) |
+| Pi → tablet | `ROBOT,<x>,<y>,<N/E/S/W>` | Cell under the middle of the rear axle, and facing (every 2 s and on change) |
+| Pi → tablet | `TARGET,<n>,<id>` | Image ID read on obstacle *n* (`UNKNOWN` if none) |
+| Pi → tablet | `PLAN:<WAITING\|PLANNING\|DONE>` | Plan state |
+| Pi → tablet | `RESET:<WAITING\|DONE>` | Car confirmed at the start pose |
+| Pi → tablet | `STATUS:<text>` | `Waiting`, `Ready`, `Going to obstacle n`, `Scanning obstacle n`, `Finished`, `Stopped` |
 
-## STM32 Build & Flash Reference (`mdp_stm32`)
+*Ready* = PLAN `DONE` and RESET `DONE`.
 
-Same commands as [step 2 of the Real Hardware walkthrough](#2-flash-the-stm32-firmware) above —
-no separate reference needed.
+**Test the link by hand** (stack running): the tablet → Pi direction shows in `pixi run btlog`
+as you press buttons. For Pi → tablet, send any line:
+
+```bash
+pixi run -- ros2 topic pub --once /bluetooth_tx std_msgs/msg/String "{data: 'STATUS:Ready'}"
+```

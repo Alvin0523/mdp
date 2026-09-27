@@ -2,60 +2,48 @@
 icon: lucide/joystick
 ---
 
-# ROS2 Control (`ros2_control`)
+# ROS2 Control
 
-`ros2_control` is ROS2's standard hardware-abstraction framework: a **controller** (like
-`ackermann_steering_controller`) does the kinematics math and knows nothing about the actual
-hardware — it just reads/writes "joint state/command interfaces". A swappable **hardware plugin**
-underneath is what actually talks to Gazebo or the real STM32. That's what lets the exact same
-controller drive both sim and real hardware unmodified.
+`ros2_control` splits driving into a **controller**, which does the car's kinematics, and a
+**hardware plugin** below it, which moves the wheels. We use the same controller in sim and real;
+only the plugin changes, chosen by the URDF's `sim` argument.
 
-## Sim vs. Real Hardware
-
-Both simulation and real hardware use the exact same `ackermann_steering_controller` implementation:
-
-- **Simulation Mode**: `ackermann_steering_controller` connects directly to Gazebo via `gz_ros2_control` plugin.
-- **Real Hardware Mode**: `ackermann_steering_controller` connects to `topic_based_ros2_control` which bridges topics to `mdp_bridge` (`serial_bridge_node`), using a custom binary protocol.
-
-## Ackermann Controller Parameters (`ackermann_controller.yaml` & `real_controller.yaml`)
-
-Both simulation (`ackermann_controller.yaml`) and real hardware (`real_controller.yaml`) share identical kinematic parameters matching the URDF CAD geometry:
-
-| Parameter Key | Value | Explanation |
-| --- | --- | --- |
-| `steering_joints_names` | `['left_joint', 'right_joint']` | Front steering knuckle revolute joint names. |
-| `traction_joints_names` | `['lb_joint', 'rb_joint']` | Rear driven wheel continuous joint names. |
-| `wheelbase` | `0.1433` | Measured front-to-rear axle center distance (m). |
-| `steering_track_width` | `0.1040` | Left-to-right steering kingpin pivot distance (m). |
-| `traction_track_width` | `0.1600` | Left-to-right rear wheel center distance (m). |
-| `traction_wheels_radius` | `0.0325` | Drive wheel radius (65 mm diameter). |
-| `reference_timeout` | `10.0` | Command heartbeat timeout (seconds). |
-| `base_frame_id` | `base_footprint` (Sim) / `base_link` (Real) | Robot base frame anchor. |
-
-## Gazebo Plugin & Remapping Setup
-
-Inside [`src/mdp_description/urdf/mini_akm_robot.urdf`](file:///home/wm_u26/dev/school/mdp/mdp_ros/src/mdp_description/urdf/mini_akm_robot.urdf), the `gz_ros2_control` plugin is configured to map standard `/cmd_vel` directly into the controller's reference interface:
-
-```xml
-<gazebo>
-  <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-    <parameters>package://mdp_bringup/config/ackermann_controller.yaml</parameters>
-    <ros>
-      <remapping>/ackermann_steering_controller/reference:=/cmd_vel</remapping>
-    </ros>
-  </plugin>
-</gazebo>
+```mermaid
+graph LR
+  CMD["/cmd_vel<br/>(speed, turn rate)"] --> ASC["ackermann_steering_controller<br/>speed → rear wheels<br/>turn rate → steering angle"]
+  ASC -->|"sim"| GZ["gz_ros2_control<br/>(Gazebo)"]
+  ASC -->|"real"| TBS["topic_based_ros2_control"] -->|"/joint_commands"| SER["serial_bridge_node → STM32"]
+  SER -->|"/joint_states_raw"| TBS
 ```
 
-## URDF Physics & Joint Limits
+| | Sim | Real |
+| --- | --- | --- |
+| Plugin | `gz_ros2_control/GazeboSimSystem` | `topic_based_ros2_control/TopicBasedSystem` |
+| Controller manager | runs inside Gazebo | `ros2_control_node` |
+| `/cmd_vel` remap | in the URDF's Gazebo plugin tag | on `ros2_control_node` in the launch |
+| Joint feedback | Gazebo | `/joint_states_raw` from `serial_bridge_node` (kept off `/joint_states`, which `joint_state_broadcaster` owns) |
 
-To ensure physical realism matching the **HWZ020** steering servo and **MG513P3012V** drive motors:
+## Settings: `mdp_bringup/config/controller.yaml`
 
-1. **REP-103 Joint Axis Orientation:**
-   - Rear Wheels (`lb_joint`, `rb_joint`): `<axis xyz="0 1 0"/>` (positive rotation = forward motion).
-   - Steering Knuckles (`left_joint`, `right_joint`): `<axis xyz="0 0 1"/>` (positive angle = left turn).
+One file for sim and real. The car's dimensions are **not** in it: `mdp.launch.py` copies
+`wheelbase`, `traction_track_width` (rear track) and the wheel radii from the URDF when it starts,
+so they exist once.
 
-2. **Steering Joint Limits:**
-   - Angle limits: `lower="-0.39" upper="0.39"` ($\pm 22.35^\circ$) — the servo's bare datasheet spec; intentionally different from the real robot's measured, **asymmetric** `lower="-0.5149" upper="0.6109"` (−29.5°/+35.0°), see [STM32: Servo Range & Steering Calibration](../stm32/tuning.md#servo-range-steering-calibration).
-   - Torque limit: `effort="10.0"` (prevents Gazebo solver contact lockup).
-   - Speed limit: `velocity="5.0"` (matches HWZ020 servo max speed of 6.54 rad/s).
+| Setting | Value | Why |
+| --- | --- | --- |
+| `steering_joints_names` | `[right_joint, left_joint]` | Right first: the order the library expects |
+| `traction_joints_names` | `[rb_joint, lb_joint]` | Rear wheels |
+| `steering_track_width` | `0.0001` (~0) | **Both front wheels have the same angle** (one servo drives the right wheel, a tie rod the left). A real width would make the controller split the angle into inner/outer Ackermann angles the car can't do. `0.0` itself means "use the rear track", hence 0.0001. |
+| `enable_odom_tf` | `false` | The EKF publishes `odom → base_footprint`, not the controller |
+| `twist_covariance_diagonal` | turn rate `1.0`, rest `0.01` | Tells the EKF not to trust the wheels' turn rate: it takes that from the IMU ([EKF](ros2_ekf_localization.md)) |
+| `reference_timeout` | `10.0` s | |
+
+## Steering limits
+
+The URDF steering joints are limited to the measured **43.0° left / 32.5° right** (`steer_left` /
+`steer_right`), the same values as the STM32's clamp (`mdp_stm32/include/servo.h`) and the planner.
+Positive = left (REP-103). Measured values and how: [Quickstart → Measured car numbers](../quickstart.md#7-measured-car-numbers).
+
+Because both wheels turn to the same angle, the tyres scrub, and the car turns **wider** than
+wheelbase ÷ tan(angle). The planner therefore uses the *measured* turning circle
+(`pixi run calib turn left|right`), not the formula.

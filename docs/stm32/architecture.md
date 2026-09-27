@@ -93,8 +93,8 @@ before hardware is actually driven, one step per driver:
   (34.56 rad/s = the motor's rated max speed post-gearbox). That's the *feedforward* baseline — the
   PID's incremental correction is added on top, still in PWM% terms, before being written to the timer.
 - **Servo**: a **real** wheel angle in rad → microseconds, by linear interpolation between measured
-  endpoints with a **separate slope per side** (center `1490µs`; `+35.0°` → `840µs`, `−29.5°` →
-  `2400µs`). No PWM% intermediate step, since there's no PID on the servo at all (open-loop, see
+  endpoints with a **separate slope per side** (center `1490µs`; `+43.0°` → `850µs`, `−32.5°` →
+  `2400µs`, re-measured 2026-09-18). No PWM% intermediate step, since there's no PID on the servo at all (open-loop, see
   [Steering Servo Driver](#steering-servo-driver-servoc)). Replaces the single shared
   `SERVO_ANGLE_SCALE_RAD` gain, and before that WHEELTEC's cubic — see
   [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration).
@@ -183,7 +183,7 @@ schematics (`references/`).
 
 | Peripheral | Pins | Function | Default Baud |
 | --- | --- | --- | --- |
-| `USART3` | `PD8` (TX3), `PD9` (RX3) | Custom Binary Protocol Host Serial Link (Type-C USB Port 3 via CH9102F) - see [Serial Protocol](serial_protocol.md#serial-protocol) | 115200 |
+| `USART3` | `PD8` (TX3), `PD9` (RX3) | Custom Binary Protocol Host Serial Link (Type-C USB Port 3 via CH9102F) - see [Serial Protocol](serial_protocol.md) | 115200 |
 | `USART1` | `PA9` (TX1), `PA10` (RX1) | Alternate Serial Link (Type-C USB Port 1 via CH9102F) | 115200 |
 | `USART2` | `PD5` (TX2), `PD6` (RX2) | Bluetooth / Wireless Module Interface | 9600 / 115200 |
 | `CAN1` | `PD0` (RX), `PD1` (TX) | Onboard CAN Bus Transceiver (VP230) | — |
