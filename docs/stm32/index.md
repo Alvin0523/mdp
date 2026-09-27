@@ -150,8 +150,8 @@ flowchart LR
 
 - [x] Bringup (LED/printf) — verified on hardware
 - [x] AT8236 motor PWM — verified on hardware; locked-antiphase drive required, see [AT8236 Motor Driver](architecture.md#at8236-motor-driver-motorc)
-- [x] HWZ020 steering servo — calibrated on hardware in **real wheel angle**: center `1490µs`, left `+35.0°` @ `840µs`, right `−29.5°` @ `2400µs`. WHEELTEC's cubic retired in favour of per-side linear interpolation between measured endpoints. See [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)
-- [x] URDF steering limits — now asymmetric `lower="-0.5149" upper="0.6109"` (−29.5°/+35.0°), from protractor readings; not yet re-validated on hardware. Replaces a symmetric `±0.5672 rad` (32.5°) whose stated measurement was never performed, see [What the earlier record got wrong](tuning.md#what-the-earlier-record-got-wrong)
+- [x] HWZ020 steering servo — calibrated on hardware in **real wheel angle**: center `1490µs`, left `+43.0°` @ `850µs`, right `−32.5°` @ `2400µs` (re-measured 2026-09-18; **flash the board** if it predates this). WHEELTEC's cubic retired in favour of per-side linear interpolation between measured endpoints. See [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)
+- [x] URDF steering limits — `lower="-0.5672" upper="0.7505"` (−32.5°/+43.0°), the same as the firmware clamp and the planner. Measured values: [Quickstart → Measured car numbers](../quickstart.md#7-measured-car-numbers)
 - [ ] Steering — **which wheel** each protractor reading came from was not recorded, so `left_joint`/`right_joint` still share one limit pair when Ackermann geometry says they should differ. Right limit (`2400µs`) also unconfirmed — the wheel was still tracking there. See [Still open](tuning.md#still-open)
 - [ ] Closed-loop wheel-speed PID — implemented, **not bench-tuned or hardware-tested**. `MOTOR_PID_KP=4.0f`/`KI=0.5f` are untuned placeholders. **Next priority** — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)
 - [x] `PD3` motor switch gating — implemented, functionally confirmed; polarity not yet cross-checked with a multimeter
@@ -159,7 +159,7 @@ flowchart LR
 - [ ] Main loop rate tiers (100Hz/5Hz) — implemented, not yet hardware-tested, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation)
 - [x] Hall encoder driver + ticks/rev — verified on hardware; 1560 ticks/rev confirmed both wheels, see [Ticks-per-revolution](architecture.md#ticks-per-revolution-physically-confirmed-on-hardware). Wheel diameter/rolling radius for ticks→distance still unconfirmed
 - [x] ICM-20948 IMU driver — implemented
-- [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run real` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md#serial-protocol)
+- [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run real` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md)
 - [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
 - [x] Automated self-test (`selftest.c`) — verified on hardware
 - [ ] Ultrasonic (HC-SR04) — driver implemented; hardware validation pending

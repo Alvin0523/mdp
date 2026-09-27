@@ -57,7 +57,12 @@ lagging side, repeat.
 
 ## Servo Range & Steering Calibration
 
-Everything in this section was measured on this chassis on 2026-09-11. It replaces an earlier
+**Current values (re-measured 2026-09-18, in `servo.h` / `servo.c`): center 1490 µs, full left
+43.0° at 850 µs (chassis contact), full right 32.5° at 2400 µs (confirmed mechanical stop).** One
+servo drives the right wheel and a tie rod the left, so both wheels have the same angle. The rest of
+this section is the 2026-09-11 measurement (35.0° / 29.5°), kept as the record of how it was done.
+
+Everything below was measured on this chassis on 2026-09-11. It replaced an earlier
 record that was substantially wrong — see [What the earlier record got wrong](#what-the-earlier-record-got-wrong)
 at the end, kept deliberately as a correction trail.
 
@@ -86,9 +91,11 @@ cannot distinguish a steering-center offset from a wheel-speed mismatch, since b
 point, with a **separate slope per side**:
 
 ```c
-left  (angle >= 0):  pulse = 1490 + angle_rad × (−1064.1)   /* 1490 → 840 µs over  35.0° */
-right (angle <  0):  pulse = 1490 + angle_rad × (−1767.4)   /* 1490 → 2400 µs over 29.5° */
+left  (angle >= 0):  pulse = 1490 + angle_rad × (−852.8)    /* 1490 → 850 µs over  43.0° */
+right (angle <  0):  pulse = 1490 + angle_rad × (−1604.4)   /* 1490 → 2400 µs over 32.5° */
 ```
+
+(Current values. With the 2026-09-11 endpoints the slopes were −1064.1 and −1767.4.)
 
 Spans are 650 µs left and 910 µs right, so the two sides differ by roughly 1.4× — a single shared
 slope cannot serve both. Real-angle resolution works out at ~0.054°/µs left and ~0.032°/µs right,
@@ -193,7 +200,7 @@ numbers had propagated into code that drives the robot.
   pulse range and real-world angular precision" documented a linear mapping via
   `SERVO_ANGLE_SCALE_RAD` and a 600–2400 µs range, constants long since gone from the code, and
   quoted a 2320 µs pulse that exceeded the then-active 2200 µs ceiling. Both are removed; the
-  accurate resolution figures are under [Real-angle → pulse mapping](#real-angle--pulse-mapping).
+  accurate resolution figures are under [Real-angle → pulse mapping](#real-angle-pulse-mapping).
 
 ---
 
@@ -248,7 +255,7 @@ for yaw at all in that configuration.
   of actual steering. `ekf.yaml`'s `odom0_config` now also fuses `vyaw` from
   `ackermann_steering_controller`'s own wheel-derived estimate, so both sources feed the same state
   variable weighted by their respective covariances — see [ROS2 EKF Localization: This robot's
-  specific fusion](../rpi/ros2_ekf_localization.md#this-robots-specific-fusion) for the full
+  specific fusion](../rpi/ros2_ekf_localization.md) for the full
   current picture. **Not yet re-validated on physical hardware** — re-run the `robot_localization`
   on-hardware check next time the robot's up.
 

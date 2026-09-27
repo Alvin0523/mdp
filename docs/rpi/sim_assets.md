@@ -19,15 +19,14 @@ models/symbols/
 └── textures/   <stem>.png                # images   (31 files, ~9.7MB)
 ```
 
-The world SDF names **only the `.obj`**. The image is reached indirectly:
+The generated world names **only the `.obj`**. The image is reached indirectly:
 
 ```
-task1_arena.sdf  →  panels/11_One.obj  →  panels/11_One.mtl  →  ../textures/11_One.png
+tasks.yaml symbol  →  panels/11_One.obj  →  panels/11_One.mtl  →  ../textures/11_One.png
    <uri>              mtllib                  map_Kd
 ```
 
-So a PNG can be swapped with no SDF change at all, as long as the filename stays
-the same.
+So a PNG can be swapped with no other change, as long as the filename stays the same.
 
 !!! warning "Why a mesh, and not just a texture on a box"
     Gazebo Harmonic (ogre2) will not reliably render an `<albedo_map>` on a
@@ -37,7 +36,7 @@ the same.
 
     Related constraint: obstacles must exist **at world load**. Spawned
     afterwards, the decal renders black because the texture never binds. That is
-    why they are baked into `task1_arena.sdf` rather than spawned at runtime.
+    why they are baked into the world at launch rather than spawned at runtime.
 
 ### Panel quad geometry
 
@@ -63,8 +62,8 @@ normal outward leaves a free spin about that normal — which is what previously
 left symbols upright on the South face only (E 90° clockwise, W 90°
 anticlockwise, N 180°).
 
-See the block comment above the obstacle models in `task1_arena.sdf` for the
-placement numbers (face offset, flush-to-top height).
+See the comment above `model_sdf()` in `mdp_bringup/utils/obstacle_layout.py` for the placement
+numbers (face offset, flush-to-top height).
 
 ---
 
@@ -113,9 +112,9 @@ models/symbols/textures/*.png       # 512² RGB
         │  pixi run panels
         ▼
 models/symbols/panels/*.obj + .mtl
-        │  referenced by <uri>
+        │  named by `symbol:` in mdp_bringup/config/tasks.yaml
         ▼
-worlds/task1_arena.sdf              # hand-maintained, single source of truth
+the world mdp.launch.py builds      # blocks + symbols inserted at launch
 ```
 
 !!! note "The repo keeps only the 512² textures"
@@ -127,19 +126,14 @@ worlds/task1_arena.sdf              # hand-maintained, single source of truth
 
 ## Changing which symbol is on which obstacle
 
-Edit the `<uri>` in `mdp_description/worlds/task1_arena.sdf`. That file is
-hand-maintained and is the single source of truth for the sim.
+Edit `mdp_bringup/config/tasks.yaml`: each obstacle's `symbol:` (task 1 and task 2). The same file
+places the blocks in Gazebo and gives them to the planner, so the two can't disagree. The arena
+files (`task1_arena.sdf`, `task2_arena.sdf`) hold only the floor and zones; `mdp.launch.py` inserts
+the blocks at their `<!-- OBSTACLES -->` marker (`mdp_bringup/utils/obstacle_layout.py`).
 
-`mdp_bringup/config/test_obstacles.yaml` does **not** drive the sim — it feeds
-only the planner, via `publish_test_obstacles.py` → `/obstacle_setup`, and only
-its `id`/`x`/`y`/`facing` fields. It carries a comment listing which symbol is on
-which obstacle purely as a cross-reference; keep it in step by hand.
-
-!!! warning "Two places, one layout"
-    The obstacle positions in `task1_arena.sdf` and in `test_obstacles.yaml` are
-    no longer generated from a common source. If they drift, the planner and the
-    simulator disagree about where the obstacles are — which presents as a
-    planning or localisation bug rather than a stale config. Edit both together.
+Blocks that exist when the world loads get their images. A block spawned later renders its image
+black (the texture never binds in ogre2). That's why the layout is baked in at launch; blocks
+sent later from the tablet (`sim_obstacles`) are plain.
 
 ---
 
@@ -176,6 +170,6 @@ sit under `meshes/` alongside the robot's STLs.
 It works as-is because `model://mdp_description/...` is being used as a package
 resource root rather than a named-model lookup, and `GZ_SIM_RESOURCE_PATH` points
 at the package's parent share directory. Renaming would mean updating the `<uri>`
-paths in `task1_arena.sdf`, the `install(DIRECTORY ...)` list in
+in `mdp_bringup/utils/obstacle_layout.py`, the `install(DIRECTORY ...)` list in
 `mdp_description/CMakeLists.txt`, and the two generator scripts — worth doing for
 tidiness, not for correctness.

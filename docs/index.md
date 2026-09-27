@@ -12,7 +12,7 @@ icon: lucide/rocket
 ```mermaid
 graph LR
   ANDROID["<b><u>📱 Android</u></b><br/>Tablet Remote App"]
-  RPI["<b><u>🖥️ Raspberry Pi</u></b><br/>ROS2 Jazzy · ros2_control · Gazebo Sim · robot_localization<br/><br/><b>Vision</b><br/>YOLO26<br/><br/><b>Algorithm</b><br/>Dubins/Reeds-Shepp curves · brute-force TSP · Pure Pursuit"]
+  RPI["<b><u>🖥️ Raspberry Pi</u></b><br/>ROS2 Jazzy · ros2_control · Gazebo Sim · robot_localization<br/><br/><b>Vision</b><br/>YOLO (NCNN)<br/><br/><b>Algorithm</b><br/>Costmap · Hybrid A* · Reeds-Shepp · Pure Pursuit"]
   STM32["<b><u>⚡ STM32</u></b><br/>PlatformIO<br/>STM32Cube HAL"]
 
   ANDROID <-->|"RFCOMM"| RPI
