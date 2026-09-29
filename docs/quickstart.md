@@ -224,7 +224,7 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 
 | What | How |
 | --- | --- |
-| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/mdp_layout.json` once. Tab **Run**: 3D arena, camera, state timeline, link lights, battery, GO/STOP/RESET buttons, logs. Tab **Health & tuning**: diagnostics, speed / steering / yaw-rate plots. |
+| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/MDP_Grp14.json` once. Tab **Run**: 3D arena, camera, state timeline, link lights, battery, GO/STOP/RESET buttons, logs. Tab **Health & tuning**: diagnostics, speed / steering / yaw-rate plots. |
 | The run, step by step | The launch terminal (lines like `LEG`, `ARRIVED`, `TARGET` above) |
 | Tablet traffic | `pixi run btlog`: `LINK UP/DOWN`, `TABLET -> RPI …`, `RPI -> TABLET …` |
 | Live numbers | `pixi run status`: state, target, distance left, gear, speed, scan |
