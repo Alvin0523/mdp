@@ -124,17 +124,32 @@ FINISHED  all obstacles visited
   tablet (`UNKNOWN` if it saw nothing).
 - **Run again:** put the car back in the start box → RESET → BEGIN. The obstacles and plan are kept.
   A reset during a run stops the run first.
-- **In sim, reset does not move the car in Gazebo** (nobody can pick it up). For a clean re-run,
-  restart `pixi run sim …`.
+- **In sim, reset also puts the Gazebo car back at the start** (it teleports it), so you can run
+  again without restarting the sim: `pixi run reset`, then `pixi run go`.
 
-## 4. Task 2 (slalom)
+## 4. Task 2 (fastest car)
 
 ```bash
 pixi run go
 ```
 
-No obstacles or reset needed. The car reads the first arrow with YOLO, passes block 1 on that
-side and block 2 on the other, then comes back to the carpark.
+No obstacles to send and no reset needed. The distances to the two obstacles are unknown, so the car
+measures them with the front ultrasonic on the way:
+
+| Step | The car | Ends when |
+| --- | --- | --- |
+| 1 | Straight out of the carpark, fast; YOLO reads arrow 1 | Ultrasonic reads obstacle 1 at `swerve_trigger_dist` (0.45 m) |
+| 2 | Swerves to arrow 1's side and straightens up, beside obstacle 1 | Heading straight again |
+| 3 | Straight on toward obstacle 2 (the 60 cm bar): measures it, reads arrow 2 | Both known |
+| 4 | Planned path (the task 1 planner) past the bar's end on arrow 2's side, round its back, past the other end, home | In the carpark |
+
+The terminal shows each step (`SWERVE LEFT …`, `OBSTACLE 2 at (28,12), arrow 2 RIGHT -> A … B … HOME …`,
+`FINISHED  in the carpark …, 23.6 s`). Foxglove shows it like task 1: costmap, blocks, walls,
+waypoints A / B / HOME and the path.
+
+**In sim**, the layout comes from `config/tasks.yaml` → `task2` → `sim` (d1, d2, arrows, side
+walls). The runner never reads that part; it measures, like on the real run. After a run:
+`pixi run reset`, then `go` again. In sim the reset also moves the car back into the carpark.
 
 ## 5. Bare car: manual driving
 
@@ -147,19 +162,25 @@ Start with `pixi run sim` or `pixi run real` (no `task:=`). Then:
 
 ## 6. Calibration: `pixi run calib`
 
-All on the **bare car** (`pixi run sim` / `pixi run real`, no `task:=`). `calib` refuses to start
-while task 1 or 2 is running. `pixi run calib <what> -h` lists each one's options.
+The driving ones run on the **bare car** (`pixi run sim` / `pixi run real`, no `task:=`); `calib`
+refuses to drive while task 1 or 2 is running. `pixi run calib <what> -h` lists each one's options.
 
-| Command | Checks | How you measure | Where the result goes |
+**The log:** at the end of every run the terminal asks for the tape value (blank = skip; in sim
+Gazebo's true pose is used, nothing to type) and adds one row to **`mdp_ros/calibration_log.csv`**:
+`time, where (sim/real), test, setting, speed_mps, car, true, error, unit, notes`. It is history
+only. **Nothing is changed for you:** put the number you settle on into the file in the last
+column by hand.
+
+| Command | Checks (one run gives all of these) | You type in | Where the result goes (by hand) |
 | --- | --- | --- | --- |
-| `pixi run calib straight 1.0` | **Wheel size**: does 1.0 m on the odometry = 1.0 m on the floor? | Tape the real distance; correction = measured ÷ 1.0 | URDF `wheel_radius` × correction |
-| `pixi run calib rotate 90` | **Heading (IMU / EKF)**: does a 90° turn end at 90°? (assessment A.4) | Floor lines / protractor | EKF / IMU settings |
-| `pixi run calib turn left` (and `right`) | **Turning circle** at full lock, per side | Mark the floor under the middle of the rear axle before and after: the car drives half a circle, so the two marks are **one diameter** apart. Radius = tape ÷ 2 | `navigation.yaml` `minimum_turning_radius_left` / `_right` (m) |
-| `pixi run calib goto 5 8 E` | **Planner + follower end to end**: stops in cell (5,8) facing E, around the `tasks.yaml` blocks (`--no-obstacles` for an empty arena) | Which cell it stopped in | `navigation.yaml` follower settings |
-| `pixi run around-obstacle` | Checklist demo: approach a block on the ultrasonic, drive a square round it | Watch it | — |
+| `calib straight 2.0` · `--speed 0.9 --accel 0.5` for task 2's speed | **Wheel size** (correction = tape ÷ car) · **roll-past** after the stop command · **sideways drift** (servo centre) · the peak speed it reached | Tape distance; sideways drift (+ = left) | URDF `wheel_radius` × correction; STM32 `servo.h` centre if it drifts |
+| `calib rotate 90` (… `360`, `--direction right`) | **Heading (IMU / EKF)** vs a protractor (assessment A.4) · **gyro drift** in 3 s standing still | Degrees it really turned | EKF / IMU settings |
+| `calib turn left` / `right` · `--speed 0.35` for task 2 | **Turning circle** at full lock · **steering delay** (command → full turn rate) | Mark the floor under the middle of the rear axle before and after: half a circle, so the marks are **one diameter** apart | `navigation.yaml` `minimum_turning_radius_left` / `_right` (m, tape ÷ 2) |
+| `calib ultrasonic 60` (car stays put) | **Ultrasonic** median, spread and dropouts at 60 cm. Do 30 / 60 / 100 / 150, and a block turned ~20° | Nothing: the distance is the argument (tape from the sensor face) | Tell the task 2 settings (`US_VALID`, trigger distances) if it's off |
+| `calib goto 5 8 E` | **Planner + follower end to end** around the `tasks.yaml` blocks (`--no-obstacles` for none) | Rear-axle middle → cell centre (cm) | `navigation.yaml` follower settings |
+| `pixi run around-obstacle` | Checklist demo: approach a block on the ultrasonic, drive a square round it | — | — |
 
-`calib turn` also prints its own estimate of the radius (and Gazebo's true value in sim), to
-compare with the tape. In sim all three agree to within 3 mm.
+In sim, `calib turn` agrees with Gazebo's true circle to within 3 mm (2026-09-30: 18.0 / 18.0 cm left).
 
 ---
 
@@ -199,7 +220,8 @@ Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.
 | Setting | Now | What |
 | --- | --- | --- |
 | `task1_runner` `follower.desired_linear_vel` | 0.2 m/s | Task 1 speed |
-| `task2_runner` `fast_speed` / `slow_speed` | 0.45 / 0.22 m/s | Task 2, straights / tight curves |
+| `task2_runner` `straight_speed` / `path_speed` | 0.90 / 0.35 m/s | Task 2: straights / curves (speed in a curve also capped by `max_lateral_accel`) |
+| `task2_runner` `swerve_trigger_dist` | 0.45 m | Task 2: ultrasonic distance to obstacle 1 that starts the swerve |
 | `manual_speed_mps` | 0.15 m/s | Tablet arrow buttons |
 | `planner.checkpoint_standoff` | 0.20 m | Rear axle this far from the block centre at each stop |
 | `costmap.footprint_padding` | 0.03 m | Safety margin round the car |
@@ -249,7 +271,7 @@ Added after `pixi run sim` or `pixi run real` (both start `mdp_bringup/launch/md
 
 | Argument | Values | Default | What |
 | --- | --- | --- | --- |
-| `task:=` | `0` `1` `2` | `0` | `0` bare car (manual drive, calibration) · `1` explore + recognise · `2` slalom |
+| `task:=` | `0` `1` `2` | `0` | `0` bare car (manual drive, calibration) · `1` explore + recognise · `2` fastest car |
 | `vision:=` | `true` `false` | `true` | Camera + YOLO |
 | `model:=` | model folder | `mdp_v2_ncnn_model` | YOLO model under `mdp_vision/models/` (`mdp_v1_ncnn_model` = older) |
 | `obstacles:=` | `tablet` `yaml` | sim `yaml`, real `tablet` | `yaml` also sends `layout` once at start. The tablet link is on either way. |
@@ -270,7 +292,7 @@ Added after `pixi run sim` or `pixi run real` (both start `mdp_bringup/launch/md
 | `pixi run vision` | Camera + YOLO only, no car |
 | `pixi run setup` | Send the task 1 obstacles in `tasks.yaml`, like the tablet's DONE |
 | `pixi run reset` / `go` / `stop` | Reset to the start pose / start the run / stop |
-| `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib): `straight` · `rotate` · `turn` · `goto` |
+| `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib): `straight` · `rotate` · `turn` · `goto` · `ultrasonic` (rows to `calibration_log.csv`) |
 | `pixi run around-obstacle` | Checklist: drive round a block |
 | `pixi run teleop` | Keyboard driving |
 | `pixi run foxglove` | Foxglove bridge, port 8765 |

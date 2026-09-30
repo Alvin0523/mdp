@@ -34,12 +34,12 @@ graph TD
 
 | Package | Type | What's in it |
 | --- | --- | --- |
-| `mdp_bringup` | Python | **Launch + config + the task nodes.** `launch/mdp.launch.py` (everything), `launch/vision.launch.py`; `config/` (all settings); nodes `task1_runner`, `task2_runner`, `robot_pose_feedback`, `manual_drive`, `bt_monitor`, `health_monitor`, `sim_obstacles`; tools `trigger`, `publish_obstacles`, `calib`, `around_obstacle` |
-| `mdp_algorithm` | Python library | Costmap, Hybrid A*, visit order, pure pursuit, task 2 spline: [Algorithm](algorithm.md) |
+| `mdp_bringup` | Python | **Launch + config + the task nodes.** `launch/mdp.launch.py` (everything), `launch/vision.launch.py`; `config/` (all settings); nodes in folders: `tasks/` (`task1_runner`, `task2_runner` on a shared `runner_base`), `robot/` (`robot_pose_feedback`, `manual_drive`, `health_monitor`, `bag_recorder`, `bt_monitor`), `sim/` (`sim_helpers`); `tools/` (`trigger`, `publish_obstacles`, `calib`, `around_obstacle`) |
+| `mdp_algorithm` | Python library | Costmap, Hybrid A*, visit order, pure pursuit: [Algorithm](algorithm.md) |
 | `mdp_vision` | Python | `rpi_cam_publisher` (Pi camera), `yolo_detector`, the YOLO models: [Vision](vision.md) |
 | `mdp_bridge` | C++ | `serial_bridge_node` (STM32), `bluetooth_bridge_node` (tablet) |
 | `mdp_description` | CMake | The car: `urdf/mdp_robot.urdf.xacro` (one file, sim and real), meshes, arenas `worlds/task1_arena.sdf` / `task2_arena.sdf`, symbol images |
-| `mdp_interfaces` | CMake | One message: `RunStatus` (`/run_status`, task 1's live state) |
+| `mdp_interfaces` | CMake | One message: `RunStatus` (`/run_status`, the runners' live state) |
 
 From pixi, not in `src/`: `ros2_control` + `ackermann_steering_controller`,
 `topic_based_ros2_control`, `gz_ros2_control` + `ros_gz`, `robot_localization`, `foxglove_bridge`.

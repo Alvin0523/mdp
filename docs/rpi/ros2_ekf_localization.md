@@ -37,7 +37,9 @@ tablet's `ROBOT` line and `calib goto` all look the pose up in `map`.
 
 `/reset_pose` (`pixi run reset`, tablet RESET) sends the start pose to the EKF's `/set_pose`. The
 runner then waits until `/odometry/filtered` reports the start pose (RESET: DONE). Reset with the
-car physically back in the start box. In sim nobody moves the car, so restart the sim instead.
+car physically back in the start box. In sim, `robot_pose_feedback` first moves the Gazebo car
+back to the start pose itself (Gazebo's `set_pose` service), so a run can be repeated without
+restarting the sim.
 
 ## How good is it
 

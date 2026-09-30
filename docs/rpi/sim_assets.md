@@ -133,7 +133,7 @@ the blocks at their `<!-- OBSTACLES -->` marker (`mdp_bringup/utils/obstacle_lay
 
 Blocks that exist when the world loads get their images. A block spawned later renders its image
 black (the texture never binds in ogre2). That's why the layout is baked in at launch; blocks
-sent later from the tablet (`sim_obstacles`) are plain.
+sent later from the tablet (`sim_helpers`) are plain.
 
 ---
 

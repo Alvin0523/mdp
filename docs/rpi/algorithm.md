@@ -22,7 +22,7 @@ mdp_algorithm/
 │   ├── hybrid_astar.py       Hybrid A* on the costmap
 │   ├── visiting_order.py     one checkpoint per obstacle + the visit order
 │   ├── reeds_shepp.py        Reeds-Shepp curves (heuristic, final "shot", order distances)
-│   └── spline_planner.py     Task 2
+│   └── spline_planner.py     (unused since task 2 moved to Hybrid A*)
 └── control/
     └── pure_pursuit_follower.py   PurePursuitController
 ```
@@ -110,6 +110,11 @@ and stamps everything it draws in `map`.
 
 ## Task 2
 
-`task2_runner` fits a spline (`planning/spline_planner.py`) through waypoints placed around the two
-blocks in `config/tasks.yaml` (`task2`), and follows it with pure pursuit. Speeds and lookahead:
-`navigation.yaml` (`task2_runner`). Run with `pixi run sim task:=2` or `pixi run real task:=2`.
+`task2_runner` doesn't know the distances in advance. It measures them with the front ultrasonic:
+straight until obstacle 1 is `swerve_trigger_dist` ahead, a full-lock swerve to arrow 1's side, then
+a measurement of obstacle 2 (the 60 cm bar) from beside obstacle 1. With both positions known it plans
+three legs with the same Hybrid A* and costmap as task 1: **A** past the bar's end on arrow 2's side,
+**B** round its back to the other end, **HOME** into the carpark. The costmap is the task 2 course
+(5 × 2.4 m: carpark walls, both blocks, and the side walls that may stand 50 cm out from the bar).
+Settings: `navigation.yaml` (`task2_runner`); course rules: `tasks.yaml` (`task2`). In sim, all four
+arrow combinations at d1 / d2 = 0.6–1.5 m finish in 21–36 s with ≥ 9.8 cm clearance.
