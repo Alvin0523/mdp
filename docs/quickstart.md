@@ -219,7 +219,7 @@ Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.
 
 | Setting | Now | What |
 | --- | --- | --- |
-| `task1_runner` `follower.desired_linear_vel` | 0.2 m/s | Task 1 speed |
+| `task1_runner` `follower.desired_linear_vel` | 0.4 m/s | Task 1 speed, with `follower.path_tracking: lqr` (0.5 touched blocks in sim) |
 | `task2_runner` `straight_speed` / `path_speed` | 0.90 / 0.35 m/s | Task 2: straights / curves (speed in a curve also capped by `max_lateral_accel`) |
 | `task2_runner` `swerve_trigger_dist` | 0.45 m | Task 2: ultrasonic distance to obstacle 1 that starts the swerve |
 | `manual_speed_mps` | 0.15 m/s | Tablet arrow buttons |
