@@ -27,7 +27,10 @@ Pick one with `model:=mdp_v1_ncnn_model`. The `_ncnn_model` folder suffix is req
 
 - **Task 1:** at each stop the car waits 3 s. Every ID YOLO reports is counted, and the most frequent
   one is sent to the tablet as `TARGET,<obstacle>,<id>` (`UNKNOWN` if none).
-- **Task 2:** the first arrow seen decides which side of block 1 to pass.
+- **Task 2:** arrow 1 is read on the way to obstacle 1, arrow 2 on the way to obstacle 2 (the car
+  keeps closing in until it's read). **Known problem:** both models often read a LEFT arrow as
+  RIGHT (tested on a sim camera frame). The likely cause is training with left-right flip
+  augmentation (Ultralytics' default `fliplr=0.5`), so retrain with `fliplr=0.0`.
 
 ## Where the camera sits
 

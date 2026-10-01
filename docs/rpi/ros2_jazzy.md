@@ -30,7 +30,7 @@ One launch file, `mdp_bringup/launch/mdp.launch.py`, starts everything for sim a
 | `task1_runner` | `task:=1` | `task:=1` | Task 1 |
 | `task2_runner` | `task:=2` | `task:=2` | Task 2 |
 | `publish_obstacles` | `task:=1` (default `obstacles:=yaml`) | `task:=1 obstacles:=yaml` | Sends the `tasks.yaml` layout once |
-| `sim_obstacles` | `task:=1` | | Replaces Gazebo's blocks when the tablet sends a different layout |
+| `sim_helpers` | ✓ | | Stand-ins for what Gazebo lacks: `/ultrasonic` from a narrow lidar fan (always); task 1: replaces Gazebo's blocks when the tablet sends a different layout; task 2 `fake_arrows`: the sim layout's arrows on `/yolo_result` |
 
 Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: `pixi run vision`).
 
@@ -45,19 +45,19 @@ Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: 
 | `/imu/data` | `Imu` | serial_bridge / Gazebo → EKF (turn rate) |
 | `/odometry/filtered` | `Odometry` | EKF → runners, pose feedback |
 | `/set_pose` | `PoseWithCovarianceStamped` | robot_pose_feedback → EKF (reset) |
-| `/obstacle_setup` | `String` `id:x,y,F\|…` (metres) | bluetooth bridge / publish_obstacles → task1_runner, sim_obstacles |
+| `/obstacle_setup` | `String` `id:x,y,F\|…` (metres) | bluetooth bridge / publish_obstacles → task1_runner, sim_helpers |
 | `/manual_drive` | `String` `f b fl fr bl br` | bluetooth bridge → manual_drive / task1_runner |
 | `/bluetooth_rx` · `/bluetooth_tx` | `String` | tablet lines in / out |
 | `/bluetooth_bridge/link_ok` · `/hardware_bridge/link_ok` | `Bool` | tablet link · STM32 link |
 | `/estop` | `Bool` | motor switch (`false` = motors on) |
 | `/battery_state` | `BatteryState` | STM32 |
-| `/ultrasonic` · `/ir` · `/ir2` | `Range` | STM32 |
+| `/ultrasonic` · `/ir` · `/ir2` | `Range` | STM32 (in sim: `/ultrasonic` from `sim_helpers`) → task2_runner |
 | `/image_raw` (real) · `/camera/image_raw` (sim) | `Image` | camera → YOLO |
 | `/yolo_result` | `String` (symbol id) | YOLO → runners |
 | `/yolo_result/image_annotated` | `Image` | YOLO → Foxglove |
-| `/run_status` | `mdp_interfaces/RunStatus` | task1_runner, 2 Hz: state, target, distance, gear, scan |
+| `/run_status` | `mdp_interfaces/RunStatus` | task1_runner / task2_runner, 2 Hz: state, target, distance, gear, arrows |
 | `/diagnostics` | `DiagnosticArray` | health_monitor, EKF |
-| `/occupancy_grid` · `/grid_markers` · `/obstacle_markers` · `/checkpoint_markers` · `/path_markers` · `/search_progress` · `/planned_path` | drawings | task1_runner → Foxglove (frame `map`) |
+| `/occupancy_grid` · `/grid_markers` · `/obstacle_markers` · `/checkpoint_markers` · `/path_markers` · `/search_progress` · `/planned_path` | drawings | task1_runner / task2_runner → Foxglove (frame `map`) |
 | `/sim/ground_truth` | `TFMessage` | Gazebo's true pose (sim only), for checking the estimate |
 | `/rosout` | `Log` | every node's log (runner events, `bt_monitor`'s tablet traffic) |
 
