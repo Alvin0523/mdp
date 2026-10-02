@@ -159,7 +159,7 @@ flowchart LR
 - [ ] Main loop rate tiers (100Hz/5Hz) — implemented, not yet hardware-tested, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation)
 - [x] Hall encoder driver + ticks/rev — verified on hardware; 1560 ticks/rev confirmed both wheels, see [Ticks-per-revolution](architecture.md#ticks-per-revolution-physically-confirmed-on-hardware). Wheel diameter/rolling radius for ticks→distance still unconfirmed
 - [x] ICM-20948 IMU driver — implemented
-- [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run real` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md)
+- [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run pi-solo` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md)
 - [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
 - [x] Automated self-test (`selftest.c`) — verified on hardware
 - [ ] Ultrasonic (HC-SR04) — driver implemented; hardware validation pending
@@ -235,8 +235,8 @@ The OLED displays test status. Steering calibration routines are disabled by def
 **With the ROS2 bridge running** (wheels off the ground first):
 
 ```bash
-# find which /dev/ttyUSBx is USART3 - unplug/replug and check dmesg, or just try one
-ros2 run mdp_bridge serial_bridge_node --ros-args -p serial_port:=/dev/ttyUSB0
+# /dev/stm32: the udev rule from mdp_stm32 (pixi run udev); without it /dev/ttyACM0
+ros2 run mdp_bridge serial_bridge_node --ros-args -p serial_port:=/dev/stm32
 
 # in other terminals:
 ros2 topic echo /joint_states   # live encoder-derived position/velocity
