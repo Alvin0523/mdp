@@ -103,8 +103,9 @@ time-critical crosses the WiFi.
 - **No laptop?** If it doesn't answer within 2 s (`remote_plan_timeout`), the Pi plans the
   paths itself (log: `no answer from the laptop planner - planning here`). Without YOLO the
   scans report `UNKNOWN`. `pixi run real` runs everything on the Pi alone, as before.
-- Both use the same `ROS_DOMAIN_ID` (14, set in `pixi.toml`). Still to do: the network
-  (Pi access point on 5 GHz, `ROS_STATIC_PEERS`, chrony clock sync).
+- Network: Ethernet cable on the bench, the Pi's 5 GHz hotspot on the arena; `ROS_STATIC_PEERS`
+  and `ROS_DOMAIN_ID` (14) in `pixi.toml`, the Pi's clock follows the laptop (chrony). Setup:
+  [Network](rpi/network.md).
 
 ### Connecting the tablet
 

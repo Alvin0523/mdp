@@ -55,6 +55,7 @@ nav = [
   ] },
   { "Raspberry Pi" = [
     { "Overview" = "rpi/index.md" },
+    { "Network (Pi ↔ laptop)" = "rpi/network.md" },
     { "ROS2" = [
       { "Launch Files & Topics" = "rpi/ros2_jazzy.md" },
       { "ROS2 Control" = "rpi/ros2_control.md" },
