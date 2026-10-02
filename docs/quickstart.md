@@ -284,11 +284,12 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 
 | What | How |
 | --- | --- |
-| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/MDP_Grp14.json` once. Tab **Run**: 3D arena, camera, state timeline, link lights, battery, GO/STOP/RESET buttons, logs. Tab **Health & tuning**: diagnostics, speed / steering / yaw-rate plots. |
+| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/MDP_Grp14.json` (again after it changes). Tabs **Task 1** / **Task 2**: 3D arena, camera, state timeline, lights (STM32, motors, tablet, **Pi** temperature, **● REC**), battery, buttons **RESET · SETUP · GO · STOP · REC**, logs (tablet traffic, runner). **Health & tuning**: diagnostics (incl. the Pi's CPU/memory/temperature), speed / steering / yaw-rate / Pi plots. **Sim**: estimate vs Gazebo truth. |
 | The run, step by step | The launch terminal (lines like `LEG`, `ARRIVED`, `TARGET` above) |
 | Tablet traffic | `pixi run btlog`: `LINK UP/DOWN`, `TABLET -> RPI …`, `RPI -> TABLET …` |
 | Live numbers | `pixi run status`: state, target, distance left, gear, speed, scan |
-| Record for later | `pixi run bag` (Ctrl+C to stop, saved in `mdp_ros/bags/`) |
+| Record for later | Foxglove **REC**, or `pixi run bag`: starts, and the next press stops (saved in `mdp_ros/bags/`, camera images left out) |
+| The Pi's load | Foxglove's **Pi** light and plot, or `pixi run -- ros2 topic echo /pi/status`: CPU per core, memory, temperature, throttling. Above ~78 C it warns; the Pi 4 slows itself down at 80 C. |
 
 ---
 
@@ -338,7 +339,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | `pixi run teleop` | Keyboard driving |
 | `pixi run foxglove` | Foxglove bridge, port 8765 |
 | `pixi run status` / `btlog` | Live numbers / tablet traffic |
-| `pixi run bag` / `bag-all` | Record everything except / including camera images |
+| `pixi run bag` / `bag-all` | Start/stop recording everything except camera images / record everything from this terminal |
 | `pixi run panels` / `import-symbols` | Regenerate the sim's symbol images |
 
 ## Tablet ↔ Pi messages

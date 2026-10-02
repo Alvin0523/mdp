@@ -22,14 +22,15 @@ One launch file, `mdp_bringup/launch/mdp.launch.py`, starts everything for sim a
 | `map_to_odom_static_tf` | ✓ | ✓ | `map → odom` = the start pose |
 | `bluetooth_bridge_node` | ✓ | ✓ | The tablet link (always on) |
 | `robot_pose_feedback` | ✓ | ✓ | `ROBOT,x,y,d` to the tablet; `/reset_pose` |
-| `bt_monitor` | ✓ | ✓ | Tablet traffic as log lines (`pixi run btlog`) |
-| `health_monitor` | ✓ | ✓ | `/diagnostics`: links, rates, runner |
+| `bt_monitor` | ✓ | ✓ | Tablet traffic as log lines (`pixi run btlog`, Foxglove's tablet log panel) |
+| `health_monitor` | ✓ | ✓ | `/diagnostics`: links, sensors, Pi load, camera/YOLO, runner (on the laptop with `pixi run pi` + `laptop`) |
+| `pi_status` | | ✓ | The Pi's CPU / memory / temperature / throttling on `/pi/status`, 1 Hz |
 | `rpi_cam_publisher` | | `vision:=true` | The Pi camera |
 | `yolo_detector` | `vision:=true` | `vision:=true` | YOLO on the camera image |
 | `manual_drive` | `task:=0` | `task:=0` | Tablet arrow buttons |
 | `task1_runner` | `task:=1` | `task:=1` | Task 1 |
 | `task2_runner` | `task:=2` | `task:=2` | Task 2 |
-| `publish_obstacles` | `task:=1` (default `obstacles:=yaml`) | `task:=1 obstacles:=yaml` | Sends the `tasks.yaml` layout once |
+| `publish_obstacles` | `task:=1` (default `obstacles:=yaml`) | `task:=1 obstacles:=yaml` | Sends the `tasks.yaml` layout once at startup (by hand: `/setup_obstacles`) |
 | `sim_helpers` | ✓ | | Stand-ins for what Gazebo lacks: `/ultrasonic` from a narrow lidar fan (always); task 1: replaces Gazebo's blocks when the tablet sends a different layout; task 2 `fake_arrows`: the sim layout's arrows on `/yolo_result` |
 
 Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: `pixi run vision`).
@@ -45,7 +46,7 @@ Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: 
 | `/imu/data` | `Imu` | serial_bridge / Gazebo → EKF (turn rate) |
 | `/odometry/filtered` | `Odometry` | EKF → runners, pose feedback |
 | `/set_pose` | `PoseWithCovarianceStamped` | robot_pose_feedback → EKF (reset) |
-| `/obstacle_setup` | `String` `id:x,y,F\|…` (metres) | bluetooth bridge / publish_obstacles → task1_runner, sim_helpers |
+| `/obstacle_setup` | `String` `id:x,y,F\|…` (metres) | bluetooth bridge / publish_obstacles / task1_runner's `/setup_obstacles` → task1_runner, sim_helpers |
 | `/manual_drive` | `String` `f b fl fr bl br` | bluetooth bridge → manual_drive / task1_runner |
 | `/bluetooth_rx` · `/bluetooth_tx` | `String` | tablet lines in / out |
 | `/bluetooth_bridge/link_ok` · `/hardware_bridge/link_ok` | `Bool` | tablet link · STM32 link |
@@ -57,6 +58,8 @@ Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: 
 | `/yolo_result/image_annotated` | `Image` | YOLO → Foxglove |
 | `/run_status` | `mdp_interfaces/RunStatus` | task1_runner / task2_runner, 2 Hz: state, target, distance, gear, arrows |
 | `/diagnostics` | `DiagnosticArray` | health_monitor, EKF |
+| `/pi/status` | `mdp_interfaces/PiStatus` | pi_status (Pi), 1 Hz: CPU total + per core, memory, temperature, throttled, under-voltage |
+| `/bag/recording` | `Bool` (latched) | bag_recorder: true while recording (Foxglove's REC light) |
 | `/occupancy_grid` · `/grid_markers` · `/obstacle_markers` · `/checkpoint_markers` · `/path_markers` · `/search_progress` · `/planned_path` | drawings | task1_runner / task2_runner → Foxglove (frame `map`) |
 | `/sim/ground_truth` | `TFMessage` | Gazebo's true pose (sim only), for checking the estimate |
 | `/rosout` | `Log` | every node's log (runner events, `bt_monitor`'s tablet traffic) |
@@ -67,7 +70,9 @@ Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: 
 | --- | --- | --- |
 | `/start_run` | tablet BEGIN, `pixi run go` | Start the run |
 | `/stop_run` | tablet STOP, `pixi run stop` | Stop, hold zero speed |
-| `/reset_pose` | tablet RESET, `pixi run reset` | Pose back to the start pose (stops a run first) |
+| `/reset_pose` | tablet RESET, `pixi run reset`, Foxglove RESET | Real car: re-measures the gyro bias (`gyro_zero_s`, 5 s, keep the car still), then the pose back to the start pose, once (stops a run first) |
+| `/setup_obstacles` | Foxglove SETUP, `pixi run setup` | Task 1: the `layout:=` file's obstacles (default `config/tasks.yaml`), as the tablet's DONE |
+| `/bag/toggle` | Foxglove REC, `pixi run bag` | Start a bag, or stop and save the one recording |
 
 ## Log output
 
