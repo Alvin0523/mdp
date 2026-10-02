@@ -284,7 +284,7 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 
 | What | How |
 | --- | --- |
-| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/MDP_Grp14.json` (again after it changes). Tabs **Task 1** / **Task 2**: 3D arena, camera, state timeline, lights (STM32, motors, tablet, **Pi** temperature, **● REC**), battery, buttons **RESET · SETUP · GO · STOP · REC**, logs (runner only, tablet traffic only). **Health & tuning**: diagnostics (incl. the Pi's CPU/memory/temperature), all logs, speed / steering / yaw-rate / range / Pi plots. |
+| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/MDP_Grp14.json` (again after it changes). Tabs **Task 1** / **Task 2**: 3D arena, camera, state timeline, lights (STM32, motors, tablet, **● REC**), battery, buttons **RESET · SETUP · GO · STOP · REC**, logs (runner only, tablet traffic only). **Health & tuning**: diagnostics (incl. the Pi's CPU/memory/temperature), all logs, speed / steering / yaw-rate / range / Pi plots. |
 | The run, step by step | The launch terminal (lines like `LEG`, `ARRIVED`, `TARGET` above) |
 | Tablet traffic | `pixi run btlog`: `LINK UP/DOWN`, `TABLET -> RPI …`, `RPI -> TABLET …` |
 | Live numbers | `pixi run status`: state, target, distance left, gear, speed, scan |
