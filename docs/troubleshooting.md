@@ -41,14 +41,18 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ## :robot: ROS2 (`mdp_ros`)
 
-??? question "`pixi run real`: `serial_bridge_node` dies with `Failed to open serial port /dev/ttyUSB0`"
+??? question "`pixi run real`: `serial_bridge_node` dies with `Failed to open serial port /dev/stm32`"
 
-    `real.launch.py`'s `serial_port` parameter defaults to `/dev/ttyUSB0`, but the STM32's USB-serial chip enumerates under a different device name depending on host/driver — e.g. `/dev/ttyACM0` on some machines (`lsusb`/`ls /dev/serial/by-id/` to check which one you actually have).
+    `/dev/stm32` comes from the udev rule in `mdp_stm32/udev/` (the board's USB-serial chip,
+    WCH `1a86:55d4`). Without it the board only shows up as `/dev/ttyACM0` (or another number).
 
-    **Fix**: override it at launch time instead of hardcoding:
+    **Fix**: install the rule once on that machine, with the STM32 plugged in:
     ```bash
-    pixi run real serial_port:=/dev/ttyACM0
+    cd mdp_stm32 && pixi run udev     # prints OK: /dev/stm32 -> /dev/ttyACM0
     ```
+    Still nothing: `lsusb | grep 1a86` (is the board connected?). A different adapter chip needs
+    its IDs in `udev/99-mdp-stm32.rules`. One-off without the rule:
+    `pixi run real serial_port:=/dev/ttyACM0`.
 
 ??? question "Teleop moves the rear wheels but front-wheel steering points the wrong direction"
 
