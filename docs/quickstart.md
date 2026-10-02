@@ -67,17 +67,27 @@ cells**: column, row `0`–`19`, 10 cm each, `(0,0)` bottom-left, plus a directi
 
 ## 2. Pick your run
 
-Two commands start everything: **`pixi run sim`** (Gazebo, laptop) and **`pixi run real`**
-(the car, on the Pi). The rest are [launch arguments](#launch-arguments) added after them.
+Named after the machine you type them on:
+
+| Command | Where | What |
+| --- | --- | --- |
+| **`pixi run pi`** | Pi | The car, with a laptop running `pixi run laptop` ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
+| **`pixi run laptop`** | Laptop | YOLO, task 1 path planning and the monitors, for the Pi |
+| **`pixi run pi-solo`** | Pi | The car alone, no laptop: everything on the Pi, YOLO too (slower) |
+| **`pixi run sim`** | Laptop | Gazebo |
+
+The rest are [launch arguments](#launch-arguments) added after them (`pi`, `pi-solo` and `sim`
+take the same ones).
 
 | You want | Command | Obstacles come from |
 | --- | --- | --- |
 | **Sim, no tablet** | `pixi run sim task:=1` | `config/tasks.yaml`, sent automatically, plan starts by itself |
 | **Sim + tablet** | `pixi run sim task:=1 obstacles:=tablet` | The tablet (DONE). Gazebo's blocks change to match. |
-| **Real + tablet** (the real run) | `pixi run real task:=1` | The tablet (DONE) |
-| **Real, no tablet** | `pixi run real task:=1 obstacles:=yaml` | `config/tasks.yaml` |
-| Task 2 | `pixi run sim task:=2` / `pixi run real task:=2` | `config/tasks.yaml` (`task2`) |
-| **Bare car** (manual drive, calibration) | `pixi run sim` / `pixi run real` | none (`task:=0`) |
+| **Real + tablet** (the real run) | Pi `pixi run pi task:=1` + laptop `pixi run laptop` | The tablet (DONE) |
+| **Real, no tablet** | `pixi run pi task:=1 obstacles:=yaml` (+ laptop) | `config/tasks.yaml` |
+| **Real, no laptop** | `pixi run pi-solo task:=1` | The tablet (DONE) |
+| Task 2 | `pixi run sim task:=2` / `pixi run pi task:=2` (+ laptop) | `config/tasks.yaml` (`task2`) |
+| **Bare car** (manual drive, calibration) | `pixi run sim` / `pixi run pi` / `pixi run pi-solo` | none (`task:=0`) |
 
 - **The tablet link is always on.** Even in "no tablet" runs a tablet can connect and send
   obstacles, BEGIN, STOP, RESET or the arrow buttons. Without one, the bridge just keeps retrying
@@ -94,16 +104,16 @@ time-critical crosses the WiFi.
 
 | Machine | Command | Runs |
 | --- | --- | --- |
-| Pi | `pixi run car task:=1` (same arguments as `real`) | Everything except YOLO; the camera sends JPEG frames |
-| Laptop | `pixi run base` | YOLO on those frames → `/yolo_result` back to the Pi; task 1's paths between checkpoints → back to the Pi once, each as soon as it is found |
-| Sim, the same split on one laptop | `pixi run sim task:=1 role:=car` + `pixi run base sim:=true` | YOLO reads Gazebo's camera directly |
+| Pi | `pixi run pi task:=1` | Everything that touches the car: STM32, tablet, camera (sends JPEG frames), EKF, the task runner |
+| Laptop | `pixi run laptop` | YOLO on those frames → `/yolo_result` back to the Pi; task 1's paths between checkpoints → back to the Pi once, each as soon as it is found; `health_monitor` + `bt_monitor` (they only read topics) |
+| Sim, the same split on one laptop | `pixi run sim task:=1 role:=pi` + `pixi run laptop sim:=true` | YOLO reads Gazebo's camera directly |
 
 - The Pi still works out the visiting order and checkpoints itself (milliseconds); only
   the paths come from the laptop. While driving nothing crosses the WiFi; small re-plans
   (a leg that went wrong) are done on the Pi.
 - **No laptop?** If it doesn't answer within 2 s (`remote_plan_timeout`), the Pi plans the
   paths itself (log: `no answer from the laptop planner - planning here`). Without YOLO the
-  scans report `UNKNOWN`. `pixi run real` runs everything on the Pi alone, as before.
+  scans report `UNKNOWN`. `pixi run pi-solo` runs everything on the Pi alone, YOLO too.
 - Network: Ethernet cable on the bench, the Pi's 5 GHz hotspot on the arena; `ROS_STATIC_PEERS`
   and `ROS_DOMAIN_ID` (14) in `pixi.toml`, the Pi's clock follows the laptop (chrony). Setup:
   [Network](rpi/network.md).
@@ -176,7 +186,7 @@ walls). The runner never reads that part; it measures, like on the real run. Aft
 
 ## 5. Bare car: manual driving
 
-Start with `pixi run sim` or `pixi run real` (no `task:=`). Then:
+Start with `pixi run sim`, `pixi run pi` or `pixi run pi-solo` (no `task:=`). Then:
 
 - **Tablet arrow buttons** (f, b, fl, fr, bl, br): one short burst per tap.
 - **Keyboard:** `pixi run teleop` (the key legend prints in the terminal).
@@ -185,7 +195,7 @@ Start with `pixi run sim` or `pixi run real` (no `task:=`). Then:
 
 ## 6. Calibration: `pixi run calib`
 
-The driving ones run on the **bare car** (`pixi run sim` / `pixi run real`, no `task:=`); `calib`
+The driving ones run on the **bare car** (`pixi run sim` / `pi` / `pi-solo`, no `task:=`); `calib`
 refuses to drive while task 1 or 2 is running. `pixi run calib <what> -h` lists each one's options.
 
 **The log:** at the end of every run the terminal asks for the tape value (blank = skip; in sim
@@ -290,7 +300,7 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 
 ## Launch arguments
 
-Added after `pixi run sim` or `pixi run real` (both start `mdp_bringup/launch/mdp.launch.py`).
+Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp.launch.py`).
 
 | Argument | Values | Default | What |
 | --- | --- | --- | --- |
@@ -305,14 +315,16 @@ Added after `pixi run sim` or `pixi run real` (both start `mdp_bringup/launch/md
 | `log:=` | `quiet` `full` | `quiet` | `full` shows every node's output |
 | `serial_port:=` | device | `/dev/stm32` (`bridges.yaml`, udev rule from `mdp_stm32`: `pixi run udev`) | Real only: the STM32 |
 | `bluetooth_device:=` | device | `/dev/rfcomm0` | The tablet link |
+| `role:=` | `solo` `pi` `laptop` | `solo` | Set by `pi-solo` / `pi` / `laptop`; by hand only for the split in sim (`pixi run sim role:=pi`) |
 
 ## All pixi tasks (`mdp_ros/`)
 
 | Task | What |
 | --- | --- |
 | `pixi run build` / `test` / `clean` | Build / run the tests / delete `build install log` |
-| `pixi run sim` / `real` | Start everything (+ [launch arguments](#launch-arguments)) |
-| `pixi run car` / `base` | The car part on the Pi / YOLO + planning on the laptop ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
+| `pixi run pi` / `laptop` | The car on the Pi / YOLO, planning and monitors on the laptop ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
+| `pixi run pi-solo` | The car on the Pi alone, no laptop |
+| `pixi run sim` | Gazebo (+ [launch arguments](#launch-arguments)) |
 | `pixi run vision` | Camera + YOLO only, no car |
 | `pixi run setup` | Send the task 1 obstacles in `tasks.yaml`, like the tablet's DONE |
 | `pixi run reset` / `go` / `stop` | Reset to the start pose / start the run / stop |

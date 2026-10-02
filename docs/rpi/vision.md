@@ -20,7 +20,8 @@ Pick one with `model:=mdp_v1_ncnn_model`. The `_ncnn_model` folder suffix is req
 
 | Command | What runs |
 | --- | --- |
-| `pixi run sim …` / `pixi run real …` | Camera + YOLO are on by default (`vision:=false` for off). In sim only YOLO runs, on Gazebo's camera. |
+| `pixi run sim …` / `pixi run pi-solo …` | Camera + YOLO are on by default (`vision:=false` for off). In sim only YOLO runs, on Gazebo's camera. |
+| `pixi run pi …` + `pixi run laptop` | Camera on the Pi (JPEG on `/image_raw/compressed`), YOLO on the laptop |
 | `pixi run vision` | Pi camera + YOLO alone, no car (`mdp_bringup/launch/vision.launch.py`) |
 
 ## How the runners use it

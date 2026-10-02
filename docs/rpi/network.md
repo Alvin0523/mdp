@@ -114,7 +114,7 @@ ROS_STATIC_PEERS = "10.42.0.1;10.42.0.10"     # Ethernet cable
 Moving to the hotspot: swap which `ROS_STATIC_PEERS` line is commented, on both machines. After
 any change: `pixi run ros2 daemon stop`.
 
-Check on the laptop: `pixi run ros2 topic list` shows the Pi's topics (with `pixi run car` on the Pi).
+Check on the laptop: `pixi run ros2 topic list` shows the Pi's topics (with `pixi run pi` on the Pi).
 
 ## 4. Pi hotspot
 

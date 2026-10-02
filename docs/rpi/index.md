@@ -71,7 +71,7 @@ map ──(static: the start pose)──▶ odom ──(EKF)──▶ base_footp
 
 | Page | Covers |
 | --- | --- |
-| [Launch & Topics](ros2_jazzy.md) | What `pixi run sim` / `real` start, and every topic and service |
+| [Launch & Topics](ros2_jazzy.md) | What `pixi run sim` / `pi` / `pi-solo` / `laptop` start, and every topic and service |
 | [ROS2 Control](ros2_control.md) | The controller, sim vs real hardware plugins, same-angle steering |
 | [EKF Localization](ros2_ekf_localization.md) | How the pose is estimated, and reset |
 | [Algorithm](algorithm.md) | Planning and path following |

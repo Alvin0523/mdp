@@ -41,7 +41,7 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ## :robot: ROS2 (`mdp_ros`)
 
-??? question "`pixi run real`: `serial_bridge_node` dies with `Failed to open serial port /dev/stm32`"
+??? question "`pixi run pi`: `serial_bridge_node` dies with `Failed to open serial port /dev/stm32`"
 
     `/dev/stm32` comes from the udev rule in `mdp_stm32/udev/` (the board's USB-serial chip,
     WCH `1a86:55d4`). Without it the board only shows up as `/dev/ttyACM0` (or another number).
@@ -52,7 +52,7 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
     ```
     Still nothing: `lsusb | grep 1a86` (is the board connected?). A different adapter chip needs
     its IDs in `udev/99-mdp-stm32.rules`. One-off without the rule:
-    `pixi run real serial_port:=/dev/ttyACM0`.
+    `pixi run pi serial_port:=/dev/ttyACM0`.
 
 ??? question "Teleop moves the rear wheels but front-wheel steering points the wrong direction"
 

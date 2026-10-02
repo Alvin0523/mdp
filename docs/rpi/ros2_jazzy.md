@@ -5,7 +5,7 @@ icon: lucide/network
 # Launch & Topics
 
 One launch file, `mdp_bringup/launch/mdp.launch.py`, starts everything for sim and real.
-`pixi run sim` = `sim:=true`, `pixi run real` = `sim:=false`; the other arguments are in
+`pixi run sim` = `sim:=true`, `pixi run pi` / `pi-solo` = `sim:=false` with `role:=pi` / `solo` (`pixi run laptop` = `role:=laptop`); the other arguments are in
 [Quickstart → Launch arguments](../quickstart.md#launch-arguments).
 
 ## What gets started

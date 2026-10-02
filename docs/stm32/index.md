@@ -159,7 +159,7 @@ flowchart LR
 - [ ] Main loop rate tiers (100Hz/5Hz) — implemented, not yet hardware-tested, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation)
 - [x] Hall encoder driver + ticks/rev — verified on hardware; 1560 ticks/rev confirmed both wheels, see [Ticks-per-revolution](architecture.md#ticks-per-revolution-physically-confirmed-on-hardware). Wheel diameter/rolling radius for ticks→distance still unconfirmed
 - [x] ICM-20948 IMU driver — implemented
-- [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run real` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md)
+- [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run pi-solo` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md)
 - [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
 - [x] Automated self-test (`selftest.c`) — verified on hardware
 - [ ] Ultrasonic (HC-SR04) — driver implemented; hardware validation pending
