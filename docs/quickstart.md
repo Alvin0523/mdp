@@ -30,13 +30,18 @@ cells**: column, row `0`–`19`, 10 cm each, `(0,0)` bottom-left, plus a directi
 
 === "🤖 Raspberry Pi (real car)"
 
-    SSH in over [Tailscale](https://tailscale.com/) (no need to be on the same network).
+    SSH in from the laptop: `ssh grp14@10.42.0.1` over the Ethernet cable, `ssh grp14@10.43.0.1`
+    on the Pi's hotspot ([Network](rpi/network.md)). [Tailscale](https://tailscale.com/) is off
+    (the Pi has no internet on its hotspot, and SSH through it cost ~25% CPU). For remote access
+    while the Pi is on a WiFi with internet: `sudo systemctl enable --now tailscaled`
+    (off again: `sudo systemctl disable --now tailscaled`).
 
     ```bash
     git clone --recurse-submodules https://github.com/Alvin0523/mdp.git
     cd mdp/mdp_ros
     pixi install
     pixi run build
+    pixi run realtime   # once: real-time priority for the controller loop (sudo; log in again after)
     ```
 
     **Flash the STM32** (ST-Link on the board's SWD header, ST-Link USB into the Pi):

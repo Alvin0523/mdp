@@ -21,6 +21,22 @@ on the bench, the Pi's own 5 GHz hotspot on the arena. The laptop is the clock b
     a while: `sudo nmcli con up NTUSECURE` (the hotspot goes off until the next reboot or
     `sudo nmcli con up MDP-Hotspot`).
 
+## SSH
+
+| Link | Command |
+| --- | --- |
+| Ethernet cable | `ssh grp14@10.42.0.1` |
+| Hotspot | `ssh grp14@10.43.0.1` |
+
+Tailscale is off and does not start at boot: on the hotspot the Pi has no internet for it, and
+an SSH session through it cost ~25% of the Pi's CPU (2026-10-02). For remote access while the
+Pi is on a WiFi with internet:
+
+```bash
+sudo systemctl enable --now tailscaled     # on, and at every boot
+sudo systemctl disable --now tailscaled    # off again
+```
+
 ## 1. Ethernet cable
 
 Both sides have a fixed address and no gateway, so the laptop keeps its internet on its WiFi.
