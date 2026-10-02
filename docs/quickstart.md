@@ -85,6 +85,27 @@ Two commands start everything: **`pixi run sim`** (Gazebo, laptop) and **`pixi r
 - **The car starts** with the middle of its rear axle over cell **(1,1) facing N**
   (`start_cell:=` / `start_dir:=` to change). Task 2 starts in the carpark facing E.
 
+### Pi + laptop (YOLO and planning on the laptop)
+
+YOLO is slow on the Pi (~0.7 frames/s), and so is Hybrid A*. With a laptop on the same
+network both run there; everything that drives the car stays on the Pi, so nothing
+time-critical crosses the WiFi.
+
+| Machine | Command | Runs |
+| --- | --- | --- |
+| Pi | `pixi run car task:=1` (same arguments as `real`) | Everything except YOLO; the camera sends JPEG frames |
+| Laptop | `pixi run base` | YOLO on those frames → `/yolo_result` back to the Pi; task 1's paths between checkpoints → back to the Pi once, each as soon as it is found |
+| Sim, the same split on one laptop | `pixi run sim task:=1 role:=car` + `pixi run base sim:=true` | YOLO reads Gazebo's camera directly |
+
+- The Pi still works out the visiting order and checkpoints itself (milliseconds); only
+  the paths come from the laptop. While driving nothing crosses the WiFi; small re-plans
+  (a leg that went wrong) are done on the Pi.
+- **No laptop?** If it doesn't answer within 2 s (`remote_plan_timeout`), the Pi plans the
+  paths itself (log: `no answer from the laptop planner - planning here`). Without YOLO the
+  scans report `UNKNOWN`. `pixi run real` runs everything on the Pi alone, as before.
+- Both use the same `ROS_DOMAIN_ID` (14, set in `pixi.toml`). Still to do: the network
+  (Pi access point on 5 GHz, `ROS_STATIC_PEERS`, chrony clock sync).
+
 ### Connecting the tablet
 
 Pair the tablet with the machine (laptop for sim, Pi for real) once in Bluetooth settings, then
@@ -289,6 +310,7 @@ Added after `pixi run sim` or `pixi run real` (both start `mdp_bringup/launch/md
 | --- | --- |
 | `pixi run build` / `test` / `clean` | Build / run the tests / delete `build install log` |
 | `pixi run sim` / `real` | Start everything (+ [launch arguments](#launch-arguments)) |
+| `pixi run car` / `base` | The car part on the Pi / YOLO + planning on the laptop ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
 | `pixi run vision` | Camera + YOLO only, no car |
 | `pixi run setup` | Send the task 1 obstacles in `tasks.yaml`, like the tablet's DONE |
 | `pixi run reset` / `go` / `stop` | Reset to the start pose / start the run / stop |
