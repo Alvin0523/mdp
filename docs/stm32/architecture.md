@@ -164,13 +164,23 @@ Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). Op
   confirmed from the schematic PDF (visual layout, not extractable text).
 - Not yet cross-checked with a multimeter on this board.
 
-### IR Distance Sensor (`ir_sensor.c`)
+### IR Distance Sensors (`ir.c`, formerly `ir_sensor.c`)
 
-- Hardware: One analog Sharp GP2Y0A21YK distance sensor wired to `PC2` (`ADC1_CH12`).
-- Powered via the board's 5V rail; analog output (0.0 to 3.1V) is sampled by the 3.3V-tolerant 12-bit ADC (`HAL_ADC` single-conversion polling).
-- Sampled in the slow main-loop tier (~5 Hz) via `ir_sensor_read_raw()` to keep ADC polling latency out of the fast loop.
-- Distance calculation: `6.3028 / (raw / 4095)^1.226`, clamped to 10–80 cm. Raw zero returns 80 cm (ADC conversion failures also fail-safe to 80 cm).
-- Cached readings (`ir_raw`, `ir_voltage`, `ir_distance_cm`) are rendered on OLED page 2 and packed into the 100 Hz telemetry stream over `USART3` (see [Serial Protocol](serial_protocol.md)).
+- Hardware: **two** analog Sharp GP2Y0A21YK distance sensors — IR1 on `PC2` (`ADC1_CH12`), IR2 on
+  `PC1` (`ADC1_CH11`).
+- Powered via the board's 5V rail; analog output (0.0 to 3.1V) is sampled by the 3.3V-tolerant
+  12-bit ADC (`HAL_ADC` single-conversion polling).
+- Both channels share one ADC1 peripheral with `battery.c` — `ir_read_channel()` selects the
+  channel, starts, polls for conversion, and stops again on every single read rather than leaving
+  the ADC running continuously, so the three users (battery, IR1, IR2) never collide mid-conversion.
+- Sampled in the slow main-loop tier (~5 Hz) via `ir_read_raw()` (IR1) / `ir_sensor2_read_raw()`
+  (IR2) to keep ADC polling latency out of the fast loop.
+- Distance calculation (shared by both channels): `6.3028 / (raw / 4095)^1.226`, clamped to
+  10–80 cm. Raw zero returns 80 cm (ADC conversion failures also fail-safe to 80 cm, so 80 cm alone
+  doesn't distinguish an error from a genuinely far reading).
+- Cached readings (`ir_raw/ir_voltage/ir_distance_cm`, `ir2_raw/ir2_voltage/ir2_distance_cm`) are
+  rendered on OLED page 2 and packed into the 100 Hz telemetry stream over `USART3` (see
+  [Serial Protocol](serial_protocol.md)).
 
 ---
 
@@ -217,7 +227,9 @@ schematics (`references/`).
 | --- | --- | --- | --- |
 | **Steering Servo** | `PB15` | TIM12_CH2 | 50 Hz PWM (600–2500µs calibration bound, **840–2400µs** measured operating span, center **1490µs** — see [Command Units](#command-units) / [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) |
 | **IMU Sensor** | `PB10` (SCL), `PB11` (SDA) | Bit-banged software I2C (GPIO, `GPIO_MODE_OUTPUT_OD`) - **not** the hardware `I2C2` peripheral | ICM-20948 (9-DOF Gyro/Accel/Mag - only accel+gyro registers are read, magnetometer unused). Polled (`imu_update()`), not interrupt-driven - no `INT` pin connected in firmware |
-| **IR distance sensor** | `PC2` | ADC1_CH12 | One active channel; raw ADC, voltage, and estimated distance sampled at ~5 Hz |
+| **IR distance sensor 1** | `PC2` | ADC1_CH12 | Raw ADC, voltage, and estimated distance sampled at ~5 Hz |
+| **IR distance sensor 2** | `PC1` | ADC1_CH11 | Same as above, second channel; shares ADC1 with IR1 and battery |
+| **Ultrasonic sensor** | `PA2` (TRIG), `PA3` (ECHO) | TIM5_CH4/CH3 input capture | HC-SR04, see below |
 | **Battery AD** | `PB0` | ADC1_CH8 | Voltage measurement via resistor divider |
 | **Car Type Select** | `PB1` | ADC1_CH9 | Potentiometer voltage reading |
 | **OLED Display** | `PD11`, `PD12`, `PD13`, `PD14` | GPIO | 0.96" OLED SPI Bit-banged display |
@@ -225,22 +237,14 @@ schematics (`references/`).
 | **User Button** | `PE0` | GPIO | Onboard push button |
 | **Buzzer** | `PA8` | GPIO | Onboard buzzer |
 
-### IR Distance Sensor (`ir_sensor.c`)
+### Ultrasonic Sensor (`ultrasonic.c`)
 
-The current driver reads one Sharp GP2Y0A21YK channel on PC2/ADC1_CH12.
-The slow main-loop tier samples it at approximately 5 Hz; OLED page 2 displays raw ADC,
-voltage, and estimated distance. Distance is calculated as
-`6.3028 / (raw / 4095)^1.226` and clamped to 10-80 cm; raw zero returns 80 cm.
-ADC failures also return raw zero, so 80 cm does not distinguish an error from a far reading.
-The ultrasonic display uses the HC-SR04 driver (`ultrasonic.c`). The
-driver assigns PA2 (H1 pin 9) to TRIG and PA3 (H1 pin 11) to
-ECHO through a voltage divider, using TIM5 CH4/CH3 to capture both edges of TI4
-at 1 MHz. These H1 pins are shown on sheet 1 of the supplied C30D schematic.
-Verify the physical board wiring before use. The current header enables the
-driver in the normal build; `ULTRASONIC_ENABLED=0` disables it. Measurements
-are scheduled at 100 ms intervals, with a 30 ms timeout and 300 ms freshness
-limit. Invalid or disabled readings show `--` on OLED page 2. Results are also
-printed on USART1; the binary telemetry protocol is unchanged.
+HC-SR04, driven via `TIM5` input capture rather than ADC. The driver assigns `PA2` (H1 pin 9) to
+TRIG and `PA3` (H1 pin 11) to ECHO through a voltage divider, using `TIM5_CH4/CH3` to capture both
+edges of the echo pulse at 1 MHz resolution. These H1 pins are shown on sheet 1 of the supplied
+C30D schematic — verify the physical board wiring before use.
 
-IR readings are included in the STM32 telemetry packet; the checked-out ROS decoder still
-needs the matching fields (see [Serial Protocol](serial_protocol.md)).
+Measurements are scheduled at 100 ms intervals, with a 30 ms timeout and a 300 ms freshness limit.
+Invalid or disabled readings show `--` on OLED page 2 and send a negative `ultrasonic_cm` in
+telemetry (see [Serial Protocol](serial_protocol.md)). `ULTRASONIC_ENABLED=0` in the header disables
+the driver entirely. Results are also printed on `USART1`.

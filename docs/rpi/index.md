@@ -80,7 +80,8 @@ map ──(static: the start pose)──▶ odom ──(EKF)──▶ base_footp
 
 ## Still to check on the real car
 
-- [ ] Turning circles: `pixi run calib turn left` / `right`; they're only measured in sim so far.
+- [ ] Turning circles: real tape measurements taken (`calib turn left/right`, multiple speeds) —
+  still need to go into `config/navigation.yaml`.
 - [ ] Camera mounted at the middle of the chassis, then measured into the URDF.
 - [ ] Wheel size re-checked with `calib straight`, heading with `calib rotate 90`.
 - [ ] A full task 1 run with the tablet.
