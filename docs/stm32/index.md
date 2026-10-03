@@ -22,7 +22,8 @@ graph TD
   end
 
   subgraph SENSING["Sensing"]
-    IR["ir_sensor.c<br/>Analog IR distance"]
+    IR["ir.c<br/>Analog IR distance x2"]
+    US["ultrasonic.c<br/>HC-SR04 (TIM5 capture)"]
     ENC["encoder.c<br/>Hall encoders"]
     IMUD["imu.c<br/>ICM-20948"]
     BATT["battery.c<br/>Battery ADC"]
@@ -51,6 +52,8 @@ graph TD
   IMUD --> TX
   BATT --> TX
   IR --> TX
+  US --> TX
+  SERVO -.->|"servo_pwm_us<br/>(PWM readback)"| TX
   TX -.->|"Serial UART<br/>USART3, TelemetryPacket"| BRIDGE
 ```
 <p align="center"><strong>Fig. 1</strong> — STM32 System Overview</p>
@@ -73,12 +76,12 @@ graph TD
 mdp_stm32/
 ├── platformio.ini            # Board/toolchain config, build flags
 ├── include/                  # Headers - one per driver
-│   ├── motor.h, servo.h, encoder.h, imu.h, battery.h, ir_sensor.h, button.h, oled.h
+│   ├── motor.h, servo.h, encoder.h, imu.h, battery.h, ir.h, ultrasonic.h, button.h, oled.h
 │   ├── usart.h, protocol.h   # Serial link to mdp_ros
 │   └── selftest.h
 └── src/                      # Implementation - one .c per driver, matches include/
     ├── main.c                # Boot sequence + main loop (fast/slow rate tiers)
-    ├── motor.c, servo.c, encoder.c, imu.c, battery.c, ir_sensor.c, button.c, oled.c
+    ├── motor.c, servo.c, encoder.c, imu.c, battery.c, ir.c, ultrasonic.c, button.c, oled.c
     ├── usart.c                # Binary protocol framing/TX/RX
     └── selftest.c             # Scripted drive/steer self-test
 ```
@@ -127,7 +130,9 @@ flowchart LR
         direction LR
         IMUSENS["ICM-20948 IMU<br/>(imu_update)"] --> TPKT
         BATT["Battery ADC<br/>(battery_read_voltage)"] --> TPKT
-        IRSENS["Analog IR sensor<br/>(ir_sensor_read_raw)"] --> TPKT
+        IRSENS["Analog IR sensors x2<br/>(ir_read_raw / ir_sensor2_read_raw)"] --> TPKT
+        USSENS["HC-SR04 ultrasonic<br/>(TIM5 input capture)"] --> TPKT
+        SPWM2["Servo PWM readback<br/>(servo_get_pulse_us)"] --> TPKT
         SW["Motor ON/OFF switch<br/>(motor_estop_engaged)"] --> TPKT
         TPKT["TelemetryPacket<br/>(uart_send_telemetry)"]
     end
@@ -140,9 +145,12 @@ flowchart LR
 !!! note "Ackermann-only: 2 motors, 1 servo"
     This project only uses motors A/B + one steering servo — no C/D motors or omni/mecanum paths.
 
-!!! warning "PID not yet bench-tested — see [TODO](#todo)"
-    Untuned placeholder gains, never run on hardware. Test/tune this before building anything else
-    on top of it — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid) below.
+!!! success "PID bench-tested, reliable up to 30 rad/s"
+    Step-response test against a 4680-tick target (both wheels), speeds 2–30 rad/s: settled tick
+    count within ±6 of target at every speed tested, overshoot never exceeding ~0.13% of the
+    target. Gains (`MOTOR_PID_KP=4.0f`/`KI=0.5f`) left unchanged — they already meet this bar.
+    30 rad/s (≈0.98 m/s) is the top of what's been tested; untested above that. See
+    [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid) below for the procedure.
 
 ---
 
@@ -153,7 +161,9 @@ flowchart LR
 - [x] HWZ020 steering servo — calibrated on hardware in **real wheel angle**: center `1490µs`, left `+43.0°` @ `850µs`, right `−32.5°` @ `2400µs` (re-measured 2026-09-18; **flash the board** if it predates this). WHEELTEC's cubic retired in favour of per-side linear interpolation between measured endpoints. See [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)
 - [x] URDF steering limits — `lower="-0.5672" upper="0.7505"` (−32.5°/+43.0°), the same as the firmware clamp and the planner. Measured values: [Quickstart → Measured car numbers](../quickstart.md#7-measured-car-numbers)
 - [ ] Steering — **which wheel** each protractor reading came from was not recorded, so `left_joint`/`right_joint` still share one limit pair when Ackermann geometry says they should differ. Right limit (`2400µs`) also unconfirmed — the wheel was still tracking there. See [Still open](tuning.md#still-open)
-- [ ] Closed-loop wheel-speed PID — implemented, **not bench-tuned or hardware-tested**. `MOTOR_PID_KP=4.0f`/`KI=0.5f` are untuned placeholders. **Next priority** — see [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)
+- [x] Closed-loop wheel-speed PID — bench-tested 2–30 rad/s, settled within ±6 ticks of a 4680-tick
+  target at every speed, `MOTOR_PID_KP=4.0f`/`KI=0.5f` unchanged. Not tested above 30 rad/s. See
+  [Bench-Tuning the Motor PID](#bench-tuning-the-motor-pid)
 - [x] `PD3` motor switch gating — implemented, functionally confirmed; polarity not yet cross-checked with a multimeter
 - [x] NVIC interrupt priorities — verified on hardware; motor PID (`TIM7`) now highest-priority, see [Interrupt / Timing Architecture](architecture.md#interrupt-timing-architecture)
 - [ ] Main loop rate tiers (100Hz/5Hz) — implemented, not yet hardware-tested, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation)
@@ -162,8 +172,11 @@ flowchart LR
 - [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run pi-solo` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md)
 - [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
 - [x] Automated self-test (`selftest.c`) — verified on hardware
-- [ ] Ultrasonic (HC-SR04) — driver implemented; hardware validation pending
-- [x] IR distance sensor (Sharp GP2Y0A21YK) driver - completed for one channel on PC2/ADC1_CH12, with raw ADC, voltage, and estimated distance on OLED. Two-channel integration is not present in this checkout.
+- [x] Ultrasonic (HC-SR04) — driver implemented, wired through to `/ultrasonic`; accuracy against a
+  tape measure not yet logged (planned: `pixi run calib ultrasonic 30/60/100/150`)
+- [x] IR distance sensors (Sharp GP2Y0A21YK) — **both** channels implemented: IR1 on
+  `PC2`/`ADC1_CH12`, IR2 on `PC1`/`ADC1_CH11`, both shown on OLED page 2 and in telemetry
+  (`ir_*`/`ir2_*`)
 
 ---
 
@@ -205,10 +218,10 @@ If, after tuning, the car still curves during a straight `/cmd_vel` command, see
 **No host needed:**
 
 1. `pixi run flash` then `pixi run monitor` — confirm the boot banner prints, PE8 LED blinks, OLED cycles pages via the button.
-2. **Encoders:** spin a rear wheel by hand, watch OLED page 3 (`Enc L`/`Enc R`) — counts should change and sign should flip with direction.
-3. **Motor switch (`PD3`):** toggle it, watch OLED page 3's `ESTOP` field flip READY/ENGAGED. Polarity is an *assumption*, not yet physically verified — if it reads backwards, flip the comparison in `motor_estop_engaged()` (`motor.c`).
+2. **Encoders:** spin a rear wheel by hand, watch OLED page 1 (`ENC`) — counts should change and sign should flip with direction.
+3. **Motor switch (`PD3`):** toggle it, watch OLED page 1's `ES:` field flip RDY/ENG. Polarity is an *assumption*, not yet physically verified — if it reads backwards, flip the comparison in `motor_estop_engaged()` (`motor.c`).
 4. **Servo:** should visibly center on boot. Real steering needs a host command (see below).
-5. **IR sensor:** switch to OLED page 2, move an obstacle/hand in front of `PC2` (10–50 cm) — confirm `IR raw` increases and `cm` distance decreases accordingly.
+5. **IR sensors:** switch to OLED page 2, move an obstacle/hand in front of `PC2` (IR1) and `PC1` (IR2), 10–50 cm — confirm each reading changes accordingly.
 6. **Motors (normal operation):** remain stopped without an active host link; the self-test below is an exception — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
 
 **Straight-line PI self-test (no host needed):** The self-test centers steering and runs a timed straight-line PI test. PE8 blinks once to start, twice when done, or five times if PD3 disables motors. Other tests are commented out.
@@ -227,10 +240,6 @@ operation, the state of the `PD3` motor ON/OFF switch:
 To trigger at boot, hold PE0 through reset with the PD3 motor switch enabled until the self-test starts.
 The OLED displays test status. Steering calibration routines are disabled by default; see
 [Calibration tooling](tuning.md#calibration-tooling) for details.
-
-!!! warning "Bridge telemetry layout needs updating"
-    The IR firmware sends 64-byte telemetry; the checked-out bridge expects 54 bytes.
-    Resolve the [packet mismatch](serial_protocol.md) before running the bridge verification below.
 
 **With the ROS2 bridge running** (wheels off the ground first):
 

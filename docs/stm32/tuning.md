@@ -156,12 +156,40 @@ strains. The limit is the last step that moved cleanly, not the one that stalled
 
 ### Still open
 
-- :warning: **Which wheel each reading came from was not recorded.** One servo drives both front
-  wheels through a shared tie-rod, so a given wheel is the inner wheel in one turn direction and the
-  outer in the other, and Ackermann geometry steers the inner harder by design. The 35.0° vs 29.5°
-  gap may therefore be inner-vs-outer rather than left-vs-right. Four readings settle it: both wheels
-  at both locks. Until then the URDF's `left_joint`/`right_joint` both carry the same pair of limits,
-  which is known to be not strictly correct.
+- :white_check_mark: **Which wheel each reading came from — mostly resolved.** A later per-wheel
+  sweep (857–2260 µs, both wheels read at every step) shows the two physical wheels tracking within
+  a degree or two of each other at the same pulse width across that whole range (e.g. ~39°/42° left
+  at 857 µs, ~30°/33° right near 2120–2260 µs) — the asymmetry (left side traveling further than
+  right) shows up on *both* wheels together, not as a left-wheel-vs-right-wheel split. That resolves
+  the inner-vs-outer-vs-left-vs-right question for the range this sweep actually covered. It does
+  **not** reach either documented lock point (850 µs or 2400 µs — the sweep's own extremes are
+  857/2260 µs), so the 43.0°/32.5° endpoint figures themselves are each still only a single-wheel
+  reading, not yet confirmed for both wheels individually. The URDF's `left_joint`/`right_joint`
+  still carry one shared limit pair; this makes that a smaller, more defensible simplification than
+  it was, not a fully confirmed one.
+
+    <details><summary>Per-wheel sweep data (pulse width vs. protractor angle, both wheels)</summary>
+
+    | Pulse (µs) | Right wheel | Left wheel |
+    | --- | --- | --- |
+    | 2260 | 33°R | — |
+    | 2120 | 30°R | 29.5°R |
+    | 1980 | 25°R | 26°R |
+    | 1840 | 20°R | 20°R |
+    | 1700 | 10°R | 13.5°R |
+    | 1560 | 5°R | 5.5°R |
+    | 1452 | 2°L | ~2°L |
+    | 1378 | 8°L | 6°L |
+    | 1303 | 11°L | 9.5°L |
+    | 1229 | 15.5°L | 16°L |
+    | 1155 | 20.5°L | 21°L |
+    | 1080 | 26°L | 25.5°L |
+    | 1006 | 31°L | 31°L |
+    | 931 | 35°L | 37°L |
+    | 857 | 39°L | 42°L |
+
+    </details>
+
 - :warning: **The right limit is not confirmed.** 2400 µs was the calibration ceiling at the time and
   the wheel was still tracking when it was reached — the same mistake the old 2200 µs bound made.
   `SERVO_CAL_PULSE_MAX_US` is now 2500 µs and `servo_cal_right_limit()` sweeps 2380–2500 µs to settle
@@ -172,7 +200,7 @@ strains. The limit is the last step that moved cleanly, not the one that stalled
   the cubic was modelling would show up. Fix: measure intermediate points with `servo_cal_measure()`
   and fit per side. A circle test (command a fixed mid-range angle, drive a full circle, compare the
   measured radius against `wheelbase / tan(angle)`) validates it end-to-end, though it depends on the
-  wheelbase value in `ackermann_controller.yaml` (`0.1433`), itself unverified.
+  wheelbase value in the URDF xacro (`0.1433`), itself unverified.
 - The `HWZ020`'s datasheet-rated ±22.35° describes the servo's own internal travel, not the angle
   this linkage achieves at the wheel. The chassis-measured values above are what govern operation.
 
