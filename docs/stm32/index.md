@@ -98,49 +98,12 @@ mdp_stm32/
 
 ## Overview: motor, servo & telemetry flow
 
-Two driven wheels use 100 Hz wheel-speed PI control with feedforward. The steering servo uses
-[calibrated per-side linear interpolation](tuning.md#servo-range-steering-calibration).
-Telemetry includes encoder counts, IMU readings, cached battery voltage and IR readings, and motor-switch state.
-
-```mermaid
-flowchart LR
-    CMD["/cmd_vel<br/>(linear.x, angular.z)"] --> KIN["ackermann_steering_controller<br/>kinematics (Pi)"]
-
-    KIN -->|"left/right wheel<br/>target rad/s"| MPID
-    KIN -->|"steer_rad<br/>(target road wheel angle)"| SMAP
-
-    subgraph MOTOR["Motor control - per wheel (mdp_stm32)"]
-        direction LR
-        MPID["Velocity PID<br/>(motor_pid_*, TIM7 100Hz ISR)"] --> MPWM["PWM<br/>(motor_set_speed)"]
-        MPWM --> MDRV["AT8236<br/>H-bridge driver"]
-        MDRV --> MVOLT["Voltage"]
-        MVOLT --> MMOTOR["DC motor<br/>+ Hall encoder"]
-        MMOTOR -.->|"encoder ticks<br/>(speed feedback)"| MPID
-    end
-
-    subgraph SERVO["Steering control (mdp_stm32)"]
-        direction LR
-        SMAP["Per-side linear interpolation<br/>(angle to pulse width)"] --> SPWM["PWM<br/>(servo_set_angle)"]
-        SPWM --> SHW["HWZ020 servo"]
-        SHW --> SLINK["Tie-rod linkage<br/>(mechanical, asymmetric)"]
-        SLINK --> SANGLE["Front wheel<br/>steering angle"]
-    end
-
-    subgraph TELEM["Telemetry - packed every 100Hz (mdp_stm32)"]
-        direction LR
-        IMUSENS["ICM-20948 IMU<br/>(imu_update)"] --> TPKT
-        BATT["Battery ADC<br/>(battery_read_voltage)"] --> TPKT
-        IRSENS["Analog IR sensors x2<br/>(ir_read_raw / ir_sensor2_read_raw)"] --> TPKT
-        USSENS["HC-SR04 ultrasonic<br/>(TIM5 input capture)"] --> TPKT
-        SPWM2["Servo PWM readback<br/>(servo_get_pulse_us)"] --> TPKT
-        SW["Motor ON/OFF switch<br/>(motor_estop_engaged)"] --> TPKT
-        TPKT["TelemetryPacket<br/>(uart_send_telemetry)"]
-    end
-
-    MMOTOR -.->|"encoder ticks"| TPKT
-    TPKT -->|"Serial UART<br/>USART3, 115200 baud"| HOST(("mdp_bridge<br/>(Pi)"))
-```
-<p align="center"><strong>Fig. 2</strong> — Motor, Servo & Telemetry Flow</p>
+Two driven wheels use 100 Hz wheel-speed PI control with feedforward (loop diagram:
+[tuning.md Fig. 3](tuning.md#closed-loop-wheel-speed-control)). The steering servo uses
+[calibrated per-side linear interpolation](tuning.md#servo-range-steering-calibration). Telemetry
+(encoder counts, IMU, battery, both IR channels, ultrasonic, servo PWM readback, motor-switch
+state) is packed into one `TelemetryPacket` every 100Hz and sent over `USART3` — full field layout:
+[Serial Protocol](serial_protocol.md).
 
 !!! note "Ackermann-only: 2 motors, 1 servo"
     This project only uses motors A/B + one steering servo — no C/D motors or omni/mecanum paths.

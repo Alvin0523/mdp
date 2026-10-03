@@ -56,7 +56,14 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ??? question "Teleop moves the rear wheels but front-wheel steering points the wrong direction"
 
-    Sign convention mismatch between two independently-authored subsystems: ROS's `left_joint`/`right_joint` (REP-103) treat positive angle as **left**, while `mdp_stm32`'s `servo_set_angle()` treats positive as **right**. `mdp_bridge`'s `serial_bridge_node.cpp` negates the angle at the boundary (both command and telemetry directions) to reconcile them — see [STM32: Serial Protocol](stm32/serial_protocol.md) (Command Packet section). If this ever breaks again, check that negation is still present and applied symmetrically both ways, not just one.
+    Was caused by negating `steer_rad` at the Pi/MCU boundary on the theory that
+    `ackermann_steering_controller`'s joint convention (REP-103, positive = left) needed flipping to
+    match `mdp_stm32`'s `servo_set_angle()`. Confirmed wrong on real hardware (2026-09-03): a
+    commanded left turn measurably steered right with that negation in place. The two conventions
+    actually already agree — `serial_bridge_node.cpp` now passes `steer_rad` straight through, **no
+    negation anywhere in the stack** (see [STM32: Serial Protocol](stm32/serial_protocol.md),
+    Command Packet section). If this symptom comes back, suspect a negation being reintroduced
+    somewhere in that path, not a missing one.
 
 ??? question "Teleop moves front steering but the rear wheels never spin, even though `/joint_commands` shows nonzero `velocity`"
 
@@ -64,7 +71,7 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ??? question "A `remappings=` on a controller `spawner` node doesn't seem to do anything"
 
-    `spawner` is a short-lived CLI tool that calls a service to load/activate a controller inside `ros2_control_node` — it doesn't own that controller's actual topics, so remapping *it* has no effect. The controller's real subscriber/publisher topics live inside `ros2_control_node` (`controller_manager`) itself; put `remappings=` on that `Node(...)` instead. (In `sim.launch.py`, the equivalent remap correctly lives in the URDF's `gz_ros2_control` plugin `<ros><remapping>` block, since Gazebo owns that controller manager internally — that path was never affected by this.)
+    `spawner` is a short-lived CLI tool that calls a service to load/activate a controller inside `ros2_control_node` — it doesn't own that controller's actual topics, so remapping *it* has no effect. The controller's real subscriber/publisher topics live inside `ros2_control_node` (`controller_manager`) itself; put `remappings=` on that `Node(...)` instead. (In sim, the equivalent remap correctly lives in the URDF's `gz_ros2_control` plugin `<ros><remapping>` block, since Gazebo owns that controller manager internally — that path was never affected by this.)
 
 ??? question "`pixi run build` on the Pi: `libcamera` fails on a full/clean rebuild with missing headers (`linux/dma-heap.h`, `clone_args`/`SYS_clone3`, `GLES2/gl2.h`, ...)"
 
