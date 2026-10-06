@@ -53,7 +53,7 @@ cells**: column, row `0`–`19`, 10 cm each, `(0,0)` bottom-left, plus a directi
     pixi run build
     pixi run flash
     pixi run monitor    # optional: boot banner, LED blink, OLED pages
-    pixi run udev       # once: the STM32's USB serial shows up as /dev/stm32 (asks for sudo)
+    pixi run udev       # once, board plugged in: /dev/stm32_serial (car link) + /dev/stm32_flash (asks for sudo)
     ```
 
     ARM64 hosts (the Pi) may need a `platform_packages` override if `build` fails, see
@@ -319,7 +319,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | `start_dir:=` | `N` `E` `S` `W` | `N` | Facing at start (task 2 without `start_cell`: carpark, facing E) |
 | `gui:=` | `true` `false` | `true` | Sim only: Gazebo window |
 | `log:=` | `quiet` `full` | `quiet` | `full` shows every node's output |
-| `serial_port:=` | device | `/dev/stm32` (`bridges.yaml`, udev rule from `mdp_stm32`: `pixi run udev`) | Real only: the STM32 |
+| `serial_port:=` | device | `/dev/stm32_serial` (`bridges.yaml`, udev rule from `mdp_stm32`: `pixi run udev`) | Real only: the STM32 |
 | `bluetooth_device:=` | device | `/dev/rfcomm0` | The tablet link |
 | `role:=` | `solo` `pi` `laptop` | `solo` | Set by `pi-solo` / `pi` / `laptop`; by hand only for the split in sim (`pixi run sim role:=pi`) |
 
