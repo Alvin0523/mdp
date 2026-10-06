@@ -207,8 +207,8 @@ The OLED displays test status. Steering calibration routines are disabled by def
 **With the ROS2 bridge running** (wheels off the ground first):
 
 ```bash
-# /dev/stm32: the udev rule from mdp_stm32 (pixi run udev); without it /dev/ttyACM0
-ros2 run mdp_bridge serial_bridge_node --ros-args -p serial_port:=/dev/stm32
+# /dev/stm32_serial (UART3, the car link): the udev rule from mdp_stm32 (pixi run udev); without it /dev/ttyACM0
+ros2 run mdp_bridge serial_bridge_node --ros-args -p serial_port:=/dev/stm32_serial
 
 # in other terminals:
 ros2 topic echo /joint_states   # live encoder-derived position/velocity

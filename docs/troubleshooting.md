@@ -41,14 +41,14 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ## :robot: ROS2 (`mdp_ros`)
 
-??? question "`pixi run pi`: `serial_bridge_node` dies with `Failed to open serial port /dev/stm32`"
+??? question "`pixi run pi`: `serial_bridge_node` dies with `Failed to open serial port /dev/stm32_serial` (or `cannot open`)"
 
-    `/dev/stm32` comes from the udev rule in `mdp_stm32/udev/` (the board's USB-serial chip,
+    `/dev/stm32_serial` comes from the udev rule in `mdp_stm32/udev/` (the board's USB-serial chip,
     WCH `1a86:55d4`). Without it the board only shows up as `/dev/ttyACM0` (or another number).
 
     **Fix**: install the rule once on that machine, with the STM32 plugged in:
     ```bash
-    cd mdp_stm32 && pixi run udev     # prints OK: /dev/stm32 -> /dev/ttyACM0
+    cd mdp_stm32 && pixi run udev     # prints OK: /dev/stm32_serial -> /dev/ttyACM0, /dev/stm32_flash -> /dev/ttyACM1
     ```
     Still nothing: `lsusb | grep 1a86` (is the board connected?). A different adapter chip needs
     its IDs in `udev/99-mdp-stm32.rules`. One-off without the rule:
