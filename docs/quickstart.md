@@ -312,7 +312,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | --- | --- | --- | --- |
 | `task:=` | `0` `1` `2` | `0` | `0` bare car (manual drive, calibration) · `1` explore + recognise · `2` fastest car |
 | `vision:=` | `true` `false` | `true` | Camera + YOLO |
-| `model:=` | model file | `best_v4.pt` | YOLO model under `mdp_vision/models/` (`best.pt` = previous), or a full path to a `.pt` |
+| `model:=` | model file | `best_v5.pt` | YOLO model under `mdp_vision/models/` (`best_v4.pt` = previous), or a full path to a `.pt` |
 | `obstacles:=` | `tablet` `yaml` | sim `yaml`, real `tablet` | `yaml` also sends `layout` once at start. The tablet link is on either way. |
 | `layout:=` | path | `config/tasks.yaml` | Obstacle layouts (task 1 in cells, task 2 in metres); in sim also Gazebo's blocks |
 | `start_cell:=` | `COL,ROW` | `1,1` | Cell under the middle of the rear axle at start |

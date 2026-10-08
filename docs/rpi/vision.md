@@ -11,8 +11,8 @@ Reads the symbols on the blocks: image IDs in task 1, left/right arrows in task 
 | `rpi_cam_publisher` | Pi Camera V2 (IMX219) via `rpicam-vid`, 640 × 480 @ 10 fps on `/image_raw` (plus a JPEG copy on `/image_raw/compressed` while something watches it, e.g. Foxglove). Real car only; in sim Gazebo's camera publishes `/camera/image_raw`. |
 | `yolo_detector` | YOLO (PyTorch, on the laptop's GPU: `pixi run laptop`) on the camera's JPEG stream → the symbol ID on `/yolo_result` (e.g. `20`; arrows `38` right / `39` left), and boxes drawn on `/yolo_result/image_annotated` |
 
-**Models** (`mdp_vision/models/`): `best_v4.pt` (YOLO26m, default) and `best.pt` (the previous one).
-Pick one with `model:=best.pt`, or a full path to any `.pt`. YOLO runs on the laptop only: PyTorch
+**Models** (`mdp_vision/models/`): `best_v5.pt` (YOLO26m trained at 640, default), `best_v4.pt` and `best.pt` (older).
+Pick one with `model:=best_v4.pt`, or a full path to any `.pt`. YOLO runs on the laptop only: PyTorch
 crashed on the Pi, and the Pi's NCNN exports were removed (2026-10-08).
 
 **Settings:** `mdp_bringup/config/vision.yaml` (image size, frame rate, JPEG quality, topics).
