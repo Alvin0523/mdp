@@ -237,10 +237,10 @@ file only; the launch copies the URDF's numbers into the controller and planner.
 | Steering limit left | **43.0°** at 850 µs (chassis contact) | Protractor at the wheel, 2026-09-18 | URDF `steer_left` + STM32 `servo.h` | Protractor |
 | Steering limit right | **32.5°** at 2400 µs (mechanical stop) | Protractor at the wheel, 2026-09-18 | URDF `steer_right` + STM32 `servo.h` | Protractor |
 | Servo centre (straight) | **1490 µs** | Pushing the car by hand at candidate pulses | STM32 `servo.c` | Same |
-| Turning radius left (full lock, 0.2 m/s) | **17.7 cm** (sim) · real: **TODO** | Gazebo circle fit, 2026-09-27 | `navigation.yaml` `minimum_turning_radius_left` | `calib turn left` |
-| Turning radius right | **25.7 cm** (sim) · real: **TODO** | Gazebo circle fit, 2026-09-27 | `navigation.yaml` `minimum_turning_radius_right` | `calib turn right` |
+| Turning radius left (full lock, rear-axle middle) | config **17.7 cm** (sim) · real tape **17.5 cm** at 0.15 m/s | Gazebo circle fit 2026-09-27 · tape 2026-10-01 (not yet in the config) | `navigation.yaml` `minimum_turning_radius_left` | `calib turn left` |
+| Turning radius right | config **25.7 cm** (sim) · real tape **24.35 cm** at 0.15 m/s | Gazebo circle fit 2026-09-27 · tape 2026-10-01 (not yet in the config) | `navigation.yaml` `minimum_turning_radius_right` | `calib turn right` |
 | IMU position | 12 mm ahead of the rear axle, 26 mm right of centre, 95.5 mm above the table | Tape, 2026-09-28 | URDF `imu_joint` | Tape |
-| Camera position | Middle of the chassis: 84 mm ahead of the rear axle, on the centre line, 93 mm above the table, looking **left** in task 1, forward in task 2 · **TODO: mount + measure** | Placed 2026-09-28 (not yet measured on the car) | URDF `camera_joint` | Tape |
+| Camera position | In line with the rear axle, **55 mm right** of the centre line, lens **175 mm** above the table, looking **left** in task 1, forward in task 2 | Tape, 2026-10-08 | URDF `camera_joint` | Tape |
 | Battery | 3S Li-ion, 12.6 V full, 3400 mAh | Spec | — | OLED `B:xx.xV` |
 
 Both front wheels always have the **same** angle: one servo drives the right wheel and a tie rod
@@ -312,7 +312,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | --- | --- | --- | --- |
 | `task:=` | `0` `1` `2` | `0` | `0` bare car (manual drive, calibration) · `1` explore + recognise · `2` fastest car |
 | `vision:=` | `true` `false` | `true` | Camera + YOLO |
-| `model:=` | model folder | `mdp_v2_ncnn_model` | YOLO model under `mdp_vision/models/` (`mdp_v1_ncnn_model` = older) |
+| `model:=` | model file | `best_v4.pt` | YOLO model under `mdp_vision/models/` (`best.pt` = previous), or a full path to a `.pt` |
 | `obstacles:=` | `tablet` `yaml` | sim `yaml`, real `tablet` | `yaml` also sends `layout` once at start. The tablet link is on either way. |
 | `layout:=` | path | `config/tasks.yaml` | Obstacle layouts (task 1 in cells, task 2 in metres); in sim also Gazebo's blocks |
 | `start_cell:=` | `COL,ROW` | `1,1` | Cell under the middle of the rear axle at start |

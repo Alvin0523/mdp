@@ -24,7 +24,7 @@ mdp_algorithm/
 │   ├── reeds_shepp.py        Reeds-Shepp curves (heuristic, final "shot", order distances)
 │   └── spline_planner.py     (unused since task 2 moved to Hybrid A*)
 └── control/
-    └── pure_pursuit_follower.py   PurePursuitController
+    └── path_follower.py      PathFollower (pure pursuit / feedback / LQR steering)
 ```
 
 ## How a run is planned
@@ -65,7 +65,10 @@ have the same angle, the tyres scrub, and the car turns wider than that formula 
 gave paths the car could not follow. Step cost = length × (reverse penalty) × (1 + cost_penalty × cost / 252)
 + direction/steering change penalties. Near the goal a Reeds-Shepp "shot" lands the exact checkpoint.
 
-## Following (`pure_pursuit_follower.py`)
+## Following (`path_follower.py`)
+
+Task 1 steers with **LQR** (`follower.path_tracking: lqr` in `navigation.yaml`); task 2 with pure
+pursuit. The rest of this section describes the pure pursuit mode.
 
 Pure pursuit with a 0.10 m lookahead (it must stay well below the turning radius or it cuts corners).
 The path is driven in same-gear segments; at a direction change the car drives **to** the change point
