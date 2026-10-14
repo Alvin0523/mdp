@@ -31,7 +31,7 @@ One launch file, `mdp_bringup/launch/mdp.launch.py`, starts everything for sim a
 | `task1_runner` | `task:=1` | `task:=1` | Task 1 |
 | `task2_runner` | `task:=2` | `task:=2` | Task 2 |
 | `publish_obstacles` | `task:=1` (default `obstacles:=yaml`) | `task:=1 obstacles:=yaml` | Sends the `tasks.yaml` layout once at startup (by hand: `/setup_obstacles`) |
-| `sim_helpers` | ✓ | | Stand-ins for what Gazebo lacks: `/ultrasonic` from a narrow lidar fan (always); task 1: replaces Gazebo's blocks when the tablet sends a different layout; task 2 `fake_arrows`: the sim layout's arrows on `/yolo_result` |
+| `sim_helpers` | ✓ | | Stand-ins for what Gazebo lacks: `/ultrasonic` from a narrow lidar fan (always); task 1: replaces Gazebo's blocks when the tablet sends a different layout |
 
 Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: `pixi run vision`).
 

@@ -332,7 +332,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | `pixi run pi-solo` | The car on the Pi alone, no laptop |
 | `pixi run sim` | Gazebo (+ [launch arguments](#launch-arguments)) |
 | `pixi run vision` | Camera + YOLO only, no car |
-| `pixi run setup` | Send the obstacles in `tasks.yaml`: task 1 like the tablet's DONE; task 2 the `task2.sim` layout as known (no ultrasonic / YOLO measuring) |
+| `pixi run setup` | Send the obstacles in `tasks.yaml`: task 1 like the tablet's DONE; task 2 the `task2.setup` layout as known (no ultrasonic / YOLO measuring) |
 | `pixi run reset` / `start` / `stop` | Reset to the start pose / start the run / **emergency stop** (reset before the next run) |
 | `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib): `straight` · `rotate` · `turn` · `goto` · `ultrasonic` (rows to `calibration_log.csv`) |
 | `pixi run around-obstacle` | Checklist: drive round a block |
@@ -348,7 +348,7 @@ One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 
 | Direction | Line | Meaning |
 | --- | --- | --- |
-| tablet → Pi | `OBSTACLE,<n>,<x>,<y>,<N/E/S/W>` | Obstacle *n*; `x`,`y` = cell × 10 |
+| tablet → Pi | `OBSTACLE,<n>,<col>,<row>,<N/E/S/W>` | Obstacle *n* in cell `col`,`row` (0–19); facing = the side with the image |
 | tablet → Pi | `DONE` | All obstacles sent: plan now |
 | tablet → Pi | `START` | Start the run (same as `pixi run start` / Foxglove **START**) |
 | tablet → Pi | `STOP` | **Emergency stop**: the run stops at once (same as `pixi run stop` / Foxglove **E-STOP**); RESET before the next run |
