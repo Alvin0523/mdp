@@ -45,6 +45,7 @@ Movement commands
 
 - `TARGET, <Obstacle_ID>, <Target_ID>` — sent when a target symbol is identified (Task 1).
 - `ROBOT, <x>, <y>, <direction>` — robot position/heading updates for the app's live 2D map.
+- `FINISHED` — the run is complete and its timer stopped (task 1 and 2; not sent after an emergency STOP).
 - Status text updates (e.g. `"ready to start"`, `"looking for target 2"`) — must be selective/formatted, not raw log streaming (rubric C.4).
 - Acknowledge command: `ACK, <original_command>`
 

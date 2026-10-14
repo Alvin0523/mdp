@@ -143,9 +143,9 @@ Steps are the same in sim and real; the **tablet** and **no-tablet** columns do 
 | Step | With the tablet | Without (second terminal, `mdp_ros/`) | You'll see |
 | --- | --- | --- | --- |
 | 1. Obstacles | Place them, press **DONE** | nothing (`tasks.yaml` is sent at start), or `pixi run setup` to send it again | `OBSTACLES #1 (5,10)S …` |
-| 2. Wait for the plan | tablet **PLAN: DONE** | | `PLAN      done, 4 legs - waiting for GO` |
+| 2. Wait for the plan | tablet **PLAN: DONE** | | `PLAN      done, 4 legs - waiting for START` |
 | 3. Car in the start box, reset | **RESET** | `pixi run reset` | `RESET     done - at the start`, tablet **RESET: DONE** |
-| 4. Go | **START** (needs STATUS *Ready*) | `pixi run go` | `GO        1 -> 2 -> 4 -> 3` |
+| 4. Start | **START** (needs STATUS *Ready*) | `pixi run start` (Foxglove **START**) | `START     1 -> 2 -> 4 -> 3` |
 | 5. Stop any time | **STOP** | `pixi run stop` | `STOP      at (9,5)E - reset before the next run` |
 
 What the launch terminal prints during a run (one line per event, cells not metres):
@@ -163,12 +163,12 @@ FINISHED  all obstacles visited
 - **Run again:** put the car back in the start box → RESET → START. The obstacles and plan are kept.
   A reset during a run stops the run first.
 - **In sim, reset also puts the Gazebo car back at the start** (it teleports it), so you can run
-  again without restarting the sim: `pixi run reset`, then `pixi run go`.
+  again without restarting the sim: `pixi run reset`, then `pixi run start`.
 
 ## 4. Task 2 (fastest car)
 
 ```bash
-pixi run go
+pixi run start
 ```
 
 No obstacles to send and no reset needed. The distances to the two obstacles are unknown, so the car
@@ -187,7 +187,7 @@ waypoints A / B / HOME and the path.
 
 **In sim**, the layout comes from `config/tasks.yaml` → `task2` → `sim` (d1, d2, arrows, side
 walls). The runner never reads that part; it measures, like on the real run. After a run:
-`pixi run reset`, then `go` again. In sim the reset also moves the car back into the carpark.
+`pixi run reset`, then `start` again. In sim the reset also moves the car back into the carpark.
 
 ## 5. Bare car: manual driving
 
@@ -284,7 +284,7 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 
 | What | How |
 | --- | --- |
-| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/MDP_Grp14.json` (again after it changes). Tabs **Task 1** / **Task 2**: 3D arena, camera, state timeline, lights (STM32, motors, tablet, **● REC**), battery, buttons **RESET · SETUP · GO · STOP · REC**, logs (runner only, tablet traffic only). **Health & tuning**: diagnostics (incl. the Pi's CPU/memory/temperature), all logs, speed / steering / yaw-rate / range / Pi plots. |
+| **Everything, visually** | `pixi run foxglove`, then in Foxglove open `ws://localhost:8765` (sim) or `ws://<pi>:8765` (real) and import `mdp_ros/foxglove/MDP_Grp14.json` (again after it changes). Tabs **Task 1** / **Task 2**: 3D arena, camera, state timeline, lights (STM32, motors, tablet, **● REC**), battery, buttons **RESET · SETUP · START · E-STOP · REC**, logs (runner only, tablet traffic only). **Health & tuning**: diagnostics (incl. the Pi's CPU/memory/temperature), all logs, speed / steering / yaw-rate / range / Pi plots. |
 | The run, step by step | The launch terminal (lines like `LEG`, `ARRIVED`, `TARGET` above) |
 | Tablet traffic | `pixi run btlog`: `LINK UP/DOWN`, `TABLET -> RPI …`, `RPI -> TABLET …` |
 | Live numbers | `pixi run status`: state, target, distance left, gear, speed, scan |
@@ -333,7 +333,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | `pixi run sim` | Gazebo (+ [launch arguments](#launch-arguments)) |
 | `pixi run vision` | Camera + YOLO only, no car |
 | `pixi run setup` | Send the obstacles in `tasks.yaml`: task 1 like the tablet's DONE; task 2 the `task2.sim` layout as known (no ultrasonic / YOLO measuring) |
-| `pixi run reset` / `go` / `stop` | Reset to the start pose / start the run / stop |
+| `pixi run reset` / `start` / `stop` | Reset to the start pose / start the run (`go` = old name) / **emergency stop** (reset before the next run) |
 | `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib): `straight` · `rotate` · `turn` · `goto` · `ultrasonic` (rows to `calibration_log.csv`) |
 | `pixi run around-obstacle` | Checklist: drive round a block |
 | `pixi run teleop` | Keyboard driving |
@@ -350,8 +350,8 @@ One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 | --- | --- | --- |
 | tablet → Pi | `OBSTACLE,<n>,<x>,<y>,<N/E/S/W>` | Obstacle *n*; `x`,`y` = cell × 10 |
 | tablet → Pi | `DONE` | All obstacles sent: plan now |
-| tablet → Pi | `START` | Start the run (same as `pixi run go` / Foxglove GO; the old `BEGIN` still works) |
-| tablet → Pi | `STOP` | Stop |
+| tablet → Pi | `START` | Start the run (same as `pixi run start` / Foxglove **START**; the old `BEGIN` still works) |
+| tablet → Pi | `STOP` | **Emergency stop**: the run stops at once (same as `pixi run stop` / Foxglove **E-STOP**); RESET before the next run |
 | tablet → Pi | `RESET` | Car is back at the start: reset the pose (like `pixi run reset`) |
 | tablet → Pi | `f` `b` `fl` `fr` `bl` `br` | Manual drive, one short burst per tap |
 | tablet → Pi | `CLEAR` | Tablet cleared its map (Pi resends the car's position) |
@@ -359,8 +359,8 @@ One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 | Pi → tablet | `TARGET,<n>,<id>` | Image ID read on obstacle *n* (`UNKNOWN` if none) |
 | Pi → tablet | `PLAN:<WAITING\|PLANNING\|DONE>` | Plan state |
 | Pi → tablet | `RESET:<WAITING\|DONE>` | Car confirmed at the start pose |
-| Pi → tablet | `DONE` | The run is complete and its timer stopped (task 1 and 2; not after STOP) |
-| Pi → tablet | `STATUS:<text>` | `Waiting`, `Ready`, `Going to obstacle n`, `Scanning obstacle n`, `Finished`, `Stopped` |
+| Pi → tablet | `FINISHED` | The run is complete and its timer stopped (task 1 and 2; not after STOP) |
+| Pi → tablet | `STATUS:<text>` | `Waiting`, `Ready`, `Going to obstacle n`, `Scanning obstacle n` (task 1) / `Going to checkpoint n` (task 2), `Finished`, `Stopped` |
 
 *Ready* = PLAN `DONE` and RESET `DONE`.
 
