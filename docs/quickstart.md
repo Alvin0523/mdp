@@ -333,7 +333,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | `pixi run sim` | Gazebo (+ [launch arguments](#launch-arguments)) |
 | `pixi run vision` | Camera + YOLO only, no car |
 | `pixi run setup` | Send the obstacles in `tasks.yaml`: task 1 like the tablet's DONE; task 2 the `task2.sim` layout as known (no ultrasonic / YOLO measuring) |
-| `pixi run reset` / `start` / `stop` | Reset to the start pose / start the run (`go` = old name) / **emergency stop** (reset before the next run) |
+| `pixi run reset` / `start` / `stop` | Reset to the start pose / start the run / **emergency stop** (reset before the next run) |
 | `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib): `straight` · `rotate` · `turn` · `goto` · `ultrasonic` (rows to `calibration_log.csv`) |
 | `pixi run around-obstacle` | Checklist: drive round a block |
 | `pixi run teleop` | Keyboard driving |
@@ -350,7 +350,7 @@ One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 | --- | --- | --- |
 | tablet → Pi | `OBSTACLE,<n>,<x>,<y>,<N/E/S/W>` | Obstacle *n*; `x`,`y` = cell × 10 |
 | tablet → Pi | `DONE` | All obstacles sent: plan now |
-| tablet → Pi | `START` | Start the run (same as `pixi run start` / Foxglove **START**; the old `BEGIN` still works) |
+| tablet → Pi | `START` | Start the run (same as `pixi run start` / Foxglove **START**) |
 | tablet → Pi | `STOP` | **Emergency stop**: the run stops at once (same as `pixi run stop` / Foxglove **E-STOP**); RESET before the next run |
 | tablet → Pi | `RESET` | Car is back at the start: reset the pose (like `pixi run reset`) |
 | tablet → Pi | `f` `b` `fl` `fr` `bl` `br` | Manual drive, one short burst per tap |
