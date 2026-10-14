@@ -171,23 +171,31 @@ FINISHED  all obstacles visited
 pixi run start
 ```
 
-No obstacles to send and no reset needed. The distances to the two obstacles are unknown, so the car
-measures them with the front ultrasonic on the way:
+No obstacles to send and no reset needed. The distances, the arrows and the bar's width are
+unknown, so the car measures them on the way:
 
 | Step | The car | Ends when |
 | --- | --- | --- |
-| 1 | Straight out of the carpark, fast; YOLO reads arrow 1 | Ultrasonic reads obstacle 1 at `swerve_trigger_dist` (0.45 m) |
-| 2 | Swerves to arrow 1's side and straightens up, beside obstacle 1 | Heading straight again |
-| 3 | Straight on toward obstacle 2 (the 60 cm bar): measures it, reads arrow 2 | Both known |
-| 4 | Planned path (the task 1 planner) past the bar's end on arrow 2's side, round its back, past the other end, home | In the carpark |
+| 0 | In the carpark: ultrasonic measures obstacle 1, YOLO reads arrow 1 → path to checkpoint 1 planned | START |
+| 1 | Straight, a **smooth S** to arrow 1's side, straight into checkpoint 1 (beside obstacle 1, arriving straight). YOLO reads arrow 2 on the way; on the straight bit the ultrasonic measures the bar and the camera sees the **bullseye** on its near end | Checkpoint 1 |
+| 2 | Bar width = bullseye + ultrasonic + pose (60 cm if none seen), to the nearest 5 cm. Leg to checkpoint 2 from the **route table** (`config/task2_routes.json.gz`, instant); the rest clean geometry | Planned (ms) |
+| 3 | S past the bar's end on arrow 2's side, a U-turn round its back (curvature ramped in and out), S home | In the carpark |
 
-The terminal shows each step (`SWERVE LEFT …`, `OBSTACLE 2 at (28,12), arrow 2 RIGHT -> A … B … HOME …`,
-`FINISHED  in the carpark …, 23.6 s`). Foxglove shows it like task 1: costmap, blocks, walls,
-waypoints A / B / HOME and the path.
+Forward only: the car never reverses on its own (only a planned reverse in the tightest layouts,
+or after `stuck_time` without moving). Bullseyes: YOLO class 99 when the model has it; until then the
+laptop's `bullseye_matcher` (template matching, `bullseye_matcher:=false` to turn it off).
 
-**In sim**, the layout comes from `config/tasks.yaml` → `task2` → `sim` (d1, d2, arrows, side
-walls). The runner never reads that part; it measures, like on the real run. After a run:
-`pixi run reset`, then `start` again. In sim the reset also moves the car back into the carpark.
+The route table depends on the car's settings (turning circles, footprint, `lane_offset`,
+`side_clearance`, `line_up_dist`, `obstacle_padding`, speeds). After changing one:
+`pixi run task2-table` (~1 min on a laptop) and commit the new file; until then the runner warns
+(`ROUTES    ... other settings`) and plans that leg live.
+
+The terminal shows each step (`BAR       59.8 cm wide ...`, `OBSTACLE 2 at (19,12), arrow 2 LEFT, 60 cm
+wide -> checkpoint 2 ...`, `PLAN ... (leg 1 from the route table)`, `FINISHED  in the carpark ... in 7.0 s`).
+
+**In sim**, the layout comes from `config/tasks.yaml` → `task2` → `setup` (d1, d2, arrows, `bar_width`,
+side walls). Without `pixi run setup` the runner measures everything, like on the real run. After a
+run: `pixi run reset`, then `start` again. In sim the reset also moves the car back into the carpark.
 
 ## 5. Bare car: manual driving
 
@@ -259,7 +267,7 @@ Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.
 | --- | --- | --- |
 | `task1_runner` `follower.desired_linear_vel` | 0.4 m/s | Task 1 speed, with `follower.path_tracking: lqr` (0.5 touched blocks in sim) |
 | `task2_runner` `straight_speed` / `path_speed` | 0.90 / 0.35 m/s | Task 2: straights / curves (speed in a curve also capped by `max_lateral_accel`) |
-| `task2_runner` `swerve_trigger_dist` | 0.45 m | Task 2: ultrasonic distance to obstacle 1 that starts the swerve |
+| `task2_runner` `swerve_trigger_dist` | 0.45 m | Task 2 fallback (arrow 1 not read at home): ultrasonic distance to obstacle 1 that starts the swerve |
 | `manual_speed_mps` | 0.15 m/s | Tablet arrow buttons |
 | `planner.checkpoint_standoff` | 0.20 m | Rear axle this far from the block centre at each stop |
 | `costmap.footprint_padding` | 0.03 m | Safety margin round the car |
