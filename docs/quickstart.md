@@ -332,7 +332,7 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | `pixi run pi-solo` | The car on the Pi alone, no laptop |
 | `pixi run sim` | Gazebo (+ [launch arguments](#launch-arguments)) |
 | `pixi run vision` | Camera + YOLO only, no car |
-| `pixi run setup` | Send the task 1 obstacles in `tasks.yaml`, like the tablet's DONE |
+| `pixi run setup` | Send the obstacles in `tasks.yaml`: task 1 like the tablet's DONE; task 2 the `task2.sim` layout as known (no ultrasonic / YOLO measuring) |
 | `pixi run reset` / `go` / `stop` | Reset to the start pose / start the run / stop |
 | `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib): `straight` · `rotate` · `turn` · `goto` · `ultrasonic` (rows to `calibration_log.csv`) |
 | `pixi run around-obstacle` | Checklist: drive round a block |
