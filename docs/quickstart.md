@@ -348,7 +348,7 @@ One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 
 | Direction | Line | Meaning |
 | --- | --- | --- |
-| tablet → Pi | `OBSTACLE,<n>,<x>,<y>,<N/E/S/W>` | Obstacle *n*; `x`,`y` = cell × 10 |
+| tablet → Pi | `OBSTACLE,<n>,<col>,<row>,<N/E/S/W>` | Obstacle *n* in cell `col`,`row` (0–19); facing = the side with the image |
 | tablet → Pi | `DONE` | All obstacles sent: plan now |
 | tablet → Pi | `START` | Start the run (same as `pixi run start` / Foxglove **START**) |
 | tablet → Pi | `STOP` | **Emergency stop**: the run stops at once (same as `pixi run stop` / Foxglove **E-STOP**); RESET before the next run |
