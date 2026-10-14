@@ -35,7 +35,7 @@ Movement commands
 - turn back left `b1`
 - invalid move forward: `obstacle`
 
-- start `BEGIN`
+- start `START`
 - clear map `CLEAR`
 
 - robot coordinate update `ROBOT, ,x>, <y>, <DIR>`

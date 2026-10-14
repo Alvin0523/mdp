@@ -12,7 +12,7 @@ laptop); only the layer that moves the wheels differs. Commands: [Quickstart](..
 ```mermaid
 graph TD
   TAB(("📱 Tablet")) <-->|"Bluetooth RFCOMM"| BT["bluetooth_bridge_node"]
-  BT -->|"/obstacle_setup · /manual_drive<br/>BEGIN / STOP / RESET"| RUN
+  BT -->|"/obstacle_setup · /manual_drive<br/>START / STOP / RESET"| RUN
   RUN -->|"/bluetooth_tx<br/>PLAN · RESET · STATUS · TARGET"| BT
   RPF["robot_pose_feedback"] -->|"ROBOT,x,y,d"| BT
 

@@ -95,7 +95,7 @@ take the same ones).
 | **Bare car** (manual drive, calibration) | `pixi run sim` / `pixi run pi` / `pixi run pi-solo` | none (`task:=0`) |
 
 - **The tablet link is always on.** Even in "no tablet" runs a tablet can connect and send
-  obstacles, BEGIN, STOP, RESET or the arrow buttons. Without one, the bridge just keeps retrying
+  obstacles, START, STOP, RESET or the arrow buttons. Without one, the bridge just keeps retrying
   quietly.
 - **Camera + YOLO are on by default.** `vision:=false` turns them off.
 - **The car starts** with the middle of its rear axle over cell **(1,1) facing N**
@@ -145,7 +145,7 @@ Steps are the same in sim and real; the **tablet** and **no-tablet** columns do 
 | 1. Obstacles | Place them, press **DONE** | nothing (`tasks.yaml` is sent at start), or `pixi run setup` to send it again | `OBSTACLES #1 (5,10)S …` |
 | 2. Wait for the plan | tablet **PLAN: DONE** | | `PLAN      done, 4 legs - waiting for GO` |
 | 3. Car in the start box, reset | **RESET** | `pixi run reset` | `RESET     done - at the start`, tablet **RESET: DONE** |
-| 4. Go | **BEGIN** (needs STATUS *Ready*) | `pixi run go` | `GO        1 -> 2 -> 4 -> 3` |
+| 4. Go | **START** (needs STATUS *Ready*) | `pixi run go` | `GO        1 -> 2 -> 4 -> 3` |
 | 5. Stop any time | **STOP** | `pixi run stop` | `STOP      at (9,5)E - reset before the next run` |
 
 What the launch terminal prints during a run (one line per event, cells not metres):
@@ -160,7 +160,7 @@ FINISHED  all obstacles visited
 
 - At each stop the car waits 3 s while YOLO looks, then sends `TARGET,<obstacle>,<id>` to the
   tablet (`UNKNOWN` if it saw nothing).
-- **Run again:** put the car back in the start box → RESET → BEGIN. The obstacles and plan are kept.
+- **Run again:** put the car back in the start box → RESET → START. The obstacles and plan are kept.
   A reset during a run stops the run first.
 - **In sim, reset also puts the Gazebo car back at the start** (it teleports it), so you can run
   again without restarting the sim: `pixi run reset`, then `pixi run go`.
@@ -300,7 +300,7 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 3. **STM32 plugged in**: the Foxglove light *STM32 OK* once running.
 4. **Tablet connected**: *Tablet OK* light, `LINK UP` in `pixi run btlog`.
 5. **Car in the start box**, cell (1,1) facing N → RESET → tablet **RESET: DONE**.
-6. **Obstacles sent** → **PLAN: DONE** → tablet status **Ready** → BEGIN.
+6. **Obstacles sent** → **PLAN: DONE** → tablet status **Ready** → START.
 
 ---
 
@@ -350,7 +350,7 @@ One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 | --- | --- | --- |
 | tablet → Pi | `OBSTACLE,<n>,<x>,<y>,<N/E/S/W>` | Obstacle *n*; `x`,`y` = cell × 10 |
 | tablet → Pi | `DONE` | All obstacles sent: plan now |
-| tablet → Pi | `BEGIN` | Start the run |
+| tablet → Pi | `START` | Start the run (same as `pixi run go` / Foxglove GO; the old `BEGIN` still works) |
 | tablet → Pi | `STOP` | Stop |
 | tablet → Pi | `RESET` | Car is back at the start: reset the pose (like `pixi run reset`) |
 | tablet → Pi | `f` `b` `fl` `fr` `bl` `br` | Manual drive, one short burst per tap |
@@ -359,6 +359,7 @@ One line per message, ending in `\n`. Cells `0`–`19`, origin bottom-left.
 | Pi → tablet | `TARGET,<n>,<id>` | Image ID read on obstacle *n* (`UNKNOWN` if none) |
 | Pi → tablet | `PLAN:<WAITING\|PLANNING\|DONE>` | Plan state |
 | Pi → tablet | `RESET:<WAITING\|DONE>` | Car confirmed at the start pose |
+| Pi → tablet | `DONE` | The run is complete and its timer stopped (task 1 and 2; not after STOP) |
 | Pi → tablet | `STATUS:<text>` | `Waiting`, `Ready`, `Going to obstacle n`, `Scanning obstacle n`, `Finished`, `Stopped` |
 
 *Ready* = PLAN `DONE` and RESET `DONE`.
