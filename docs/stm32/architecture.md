@@ -23,12 +23,13 @@ picture and build/flash/tuning steps, see [Overview](index.md).
 **Ownership table** (NVIC priority number — lower runs first / can preempt higher numbers):
 
 | Priority | Interrupt | Rate | Owns | File |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | 1 (highest) | `TIM7` | 100 Hz, fixed period | Motor PID, encoder reads (`encoder_get_delta_a/b`), PWM output | `motor.c` |
 | 2 | `USART3` (RX) | per-byte, ~115200 baud | Command packet framing (`g_last_command`) | `usart.c` |
+| 3 | `TIM5` | on echo edge | Ultrasonic input capture (`PA3` echo pulse measurement) | `ultrasonic.c` |
 | 3 (lowest) | `EXTI0` | on press | Button debounce flag | `button.c` |
-| — (not an IRQ) | Main loop, fast tier | 100 Hz, tick-interval | Command/safety gating, IMU read, telemetry TX (interrupt-driven) | `main.c` |
-| — (not an IRQ) | Main loop, slow tier | ~5 Hz, tick-interval | OLED render, debug `printf`, battery/IR ADC, heartbeat LED | `main.c` |
+| — (not an IRQ) | Main loop, fast tier | 100 Hz, tick-interval | Command/safety gating, IMU read, 2x IR (8x oversampled), ultrasonic distance read, telemetry TX (interrupt-driven) | `main.c` |
+| — (not an IRQ) | Main loop, slow tier | ~5 Hz, tick-interval | OLED render, debug `printf`, battery ADC, heartbeat LED | `main.c` |
 
 **Adding something new:**
 
@@ -46,13 +47,13 @@ IMU/encoder data to the Pi, even though the PID ISR already samples at 100Hz int
 
 | Tier | Rate | What's in it | Why this rate |
 | --- | --- | --- | --- |
-| Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, telemetry build+send (including cached battery & IR) | Matches the PID's own 100Hz sampling 1:1 |
-| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery & IR ADC polling, heartbeat LED | Human-facing / slow-changing; also the 2 slowest ops (bit-banged OLED, blocking printf) |
-| Always | every raw loop pass | Button/self-test-request check, OLED page-advance check | Cheap enough not to need tiering |
+| Fast | **100 Hz** (`FAST_PERIOD_MS = 10`) | `imu_update()`, PID target/enable + safety gate, `servo_set_angle()`, 2x IR read (8x oversample), ultrasonic fetch, telemetry build+send | Matches the PID's own 100Hz sampling 1:1 |
+| Slow | ~5 Hz (`SLOW_PERIOD_MS = 200`) | OLED render, debug `printf`, battery ADC polling, heartbeat LED | Human-facing / slow-changing; also the 2 slowest ops (bit-banged OLED, blocking printf) |
+| Always | every raw loop pass | Button/self-test-request check, OLED page-advance check, `ultrasonic_update()` ping trigger | Cheap enough not to need tiering |
 
 !!! note "Fast tier only works because telemetry TX is interrupt-driven"
     `uart_send_telemetry()` uses `HAL_UART_Transmit_IT`, not blocking. A blocking send of the
-    64-byte packet would take ~5.6ms at 115200 baud — ~56% of the 10ms period on its own. Also
+    80-byte packet would take ~6.9ms at 115200 baud — ~69% of the 10ms period on its own. Also
     drops worst-case motor-switch-off reaction time from ~100ms (pre-tiering) to ~20ms.
 
 !!! tip "Why the PID stays at 100Hz, not higher"
@@ -63,9 +64,9 @@ IMU/encoder data to the Pi, even though the PID ISR already samples at 100Hz int
 
 **Bandwidth** (`USART3` @ 115200 baud ≈ 11520 B/s):
 
-- Telemetry: 64 B/packet @ 100Hz
+- Telemetry: 80 B/packet @ 100Hz
 - Commands: 16 B/packet @ ~50Hz
-- TX telemetry: 6400 B/s (~56% of TX capacity); RX commands: 800 B/s (~7% of RX capacity). UART is full-duplex.
+- TX telemetry: 8000 B/s (~69% of TX capacity); RX commands: 800 B/s (~7% of RX capacity). UART is full-duplex.
 - `USART1` (debug printf) is separate hardware, doesn't compete
 
 Battery voltage / measured rad/s are cached in persistent locals — the slow tier displays whatever
@@ -164,23 +165,21 @@ Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). Op
   confirmed from the schematic PDF (visual layout, not extractable text).
 - Not yet cross-checked with a multimeter on this board.
 
-### IR Distance Sensors (`ir.c`, formerly `ir_sensor.c`)
+### IR Distance Sensors (`ir.c`)
 
-- Hardware: **two** analog Sharp GP2Y0A21YK distance sensors — IR1 on `PC2` (`ADC1_CH12`), IR2 on
-  `PC1` (`ADC1_CH11`).
-- Powered via the board's 5V rail; analog output (0.0 to 3.1V) is sampled by the 3.3V-tolerant
-  12-bit ADC (`HAL_ADC` single-conversion polling).
-- Both channels share one ADC1 peripheral with `battery.c` — `ir_read_channel()` selects the
-  channel, starts, polls for conversion, and stops again on every single read rather than leaving
-  the ADC running continuously, so the three users (battery, IR1, IR2) never collide mid-conversion.
-- Sampled in the slow main-loop tier (~5 Hz) via `ir_read_raw()` (IR1) / `ir_sensor2_read_raw()`
-  (IR2) to keep ADC polling latency out of the fast loop.
-- Distance calculation (shared by both channels): `6.3028 / (raw / 4095)^1.226`, clamped to
-  10–80 cm. Raw zero returns 80 cm (ADC conversion failures also fail-safe to 80 cm, so 80 cm alone
-  doesn't distinguish an error from a genuinely far reading).
-- Cached readings (`ir_raw/ir_voltage/ir_distance_cm`, `ir2_raw/ir2_voltage/ir2_distance_cm`) are
-  rendered on OLED page 2 and packed into the 100 Hz telemetry stream over `USART3` (see
-  [Serial Protocol](serial_protocol.md)).
+- Hardware: Two analog Sharp GP2Y0A21YK distance sensors wired to `PC2` (`ADC1_CH12`) and `PC1` (`ADC1_CH11`).
+- Powered via the board's 5V rail; analog output (0.0 to 3.1V) is sampled by the 3.3V-tolerant 12-bit ADC (`HAL_ADC` polling with channel switching).
+- Both channels share one ADC1 peripheral with `battery.c` — `ir_read_channel()` selects the channel, starts, polls for conversion, and stops again on every single read rather than leaving the ADC running continuously.
+- Sampled in the 100 Hz fast main-loop tier with **8× hardware oversampling** per read (`IR_OVERSAMPLE = 8U`, taking ~0.3 ms per sensor). Immediate hardware averaging filters out electrical noise without the phase lag of an inter-frame moving average.
+- **Decoupled distance curves**: The definitive raw $\to$ cm curves live on the Raspberry Pi (`mdp_ros config/bridges.yaml`), allowing sensor recalibration (`pixi run calib ir`) without reflashing the STM32. Telemetry streams raw ADC values (`ir_raw`, `ir2_raw`), while `ir_distance_cm` and `ir2_distance_cm` are set to `-1.0f`.
+- **OLED readout**: OLED page 2 renders `cm` using local display copies of the calibrated curves (2026-10-14 parameters: $6.69 / (\text{raw}/4095)^{1.111}$ for IR1, $6.95 / (\text{raw}/4095)^{1.077}$ for IR2, clamped to 4–80 cm).
+
+### Ultrasonic Distance Sensor (`ultrasonic.c`)
+
+- Hardware: HC-SR04 ultrasonic rangefinder with `PA2` as TRIG (GPIO output) and `PA3` as ECHO (through a 5V-to-3V resistor divider into `TIM5_CH4`, AF2).
+- Hardware input capture: `TIM5` captures both the rising edge (CH4) and falling edge (CH3) of the echo pulse at 1 MHz (1 µs resolution). Hardware timestamps remain microsecond-accurate even when higher-priority ISRs (`TIM7`) preempt the CPU.
+- Measurement schedule: Triggered every 100 ms with a 30 ms echo timeout and 300 ms freshness limit. Stale or invalid readings return a negative value.
+- Streamed in telemetry (`ultrasonic_cm`) and displayed on OLED page 2. Can be disabled at build time with `-D ULTRASONIC_ENABLED=0`.
 
 ---
 
@@ -192,7 +191,7 @@ schematics (`references/`).
 ### Serial Communication (Host↔MCU Transport)
 
 | Peripheral | Pins | Function | Default Baud |
-| --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- |
 | `USART3` | `PD8` (TX3), `PD9` (RX3) | Custom Binary Protocol Host Serial Link (Type-C USB Port 3 via CH9102F) - see [Serial Protocol](serial_protocol.md) | 115200 |
 | `USART1` | `PA9` (TX1), `PA10` (RX1) | Alternate Serial Link (Type-C USB Port 1 via CH9102F) | 115200 |
 | `USART2` | `PD5` (TX2), `PD6` (RX2) | Bluetooth / Wireless Module Interface | 9600 / 115200 |
@@ -204,7 +203,7 @@ schematics (`references/`).
 ### Motor PWM Outputs (AT8236 Driver)
 
 | Motor Channel | Physical Drivetrain Location | PWM Pins | Hardware Timer | Status / Notes |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | **Motor A** | Rear Left (BL) | `PB8`, `PB9` | TIM10_CH1 (`PB8`), TIM11_CH1 (`PB9`) | **Active** (Rear-Left Drive Motor) |
 | **Motor B** | Rear Right (BR) | `PE5`, `PE6` | TIM9_CH1 (`PE5`), TIM9_CH2 (`PE6`) | **Active** (Rear-Right Drive Motor) |
 | **Motor C** | — | `PE9`, `PE11` | TIM1_CH1 (`PE9`), TIM1_CH2 (`PE11`) | *Unused* (Unpowered Front Wheels) |
@@ -215,7 +214,7 @@ schematics (`references/`).
 ### Wheel Encoders (Hall Encoders)
 
 | Encoder Channel | Location | Pins | Hardware Timer (Quadrature Mode) | Status / Notes |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | **Encoder A** | Rear Left (BL) | `PA15` (A), `PB3` (B) | TIM2_CH1 / CH2 | **Active** (Rear-Left Encoder) |
 | **Encoder B** | Rear Right (BR) | `PB4` (A), `PB5` (B) | TIM3_CH1 / CH2 | **Active** (Rear-Right Encoder) |
 | **Encoder C** | — | `PB6` (A), `PB7` (B) | TIM4_CH1 / CH2 | *Unused* |
@@ -224,27 +223,14 @@ schematics (`references/`).
 ### Steering Servo & Sensors
 
 | Function | Pins | Peripheral | Signal / Details |
-| --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- |
 | **Steering Servo** | `PB15` | TIM12_CH2 | 50 Hz PWM (600–2500µs calibration bound, **840–2400µs** measured operating span, center **1490µs** — see [Command Units](#command-units) / [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration)) |
 | **IMU Sensor** | `PB10` (SCL), `PB11` (SDA) | Bit-banged software I2C (GPIO, `GPIO_MODE_OUTPUT_OD`) - **not** the hardware `I2C2` peripheral | ICM-20948 (9-DOF Gyro/Accel/Mag - only accel+gyro registers are read, magnetometer unused). Polled (`imu_update()`), not interrupt-driven - no `INT` pin connected in firmware |
-| **IR distance sensor 1** | `PC2` | ADC1_CH12 | Raw ADC, voltage, and estimated distance sampled at ~5 Hz |
-| **IR distance sensor 2** | `PC1` | ADC1_CH11 | Same as above, second channel; shares ADC1 with IR1 and battery |
-| **Ultrasonic sensor** | `PA2` (TRIG), `PA3` (ECHO) | TIM5_CH4/CH3 input capture | HC-SR04, see below |
+| **IR distance sensors** | `PC2` (IR1), `PC1` (IR2) | ADC1_CH12, ADC1_CH11 | Two channels with 8× hardware oversampling; sampled at 100 Hz in fast tier, raw streamed in telemetry |
+| **Ultrasonic Sensor** | `PA2` (TRIG), `PA3` (ECHO) | TIM5_CH4 / CH3 | HC-SR04 input capture (1 µs hardware resolution, 100 ms ping interval) |
 | **Battery AD** | `PB0` | ADC1_CH8 | Voltage measurement via resistor divider |
 | **Car Type Select** | `PB1` | ADC1_CH9 | Potentiometer voltage reading |
 | **OLED Display** | `PD11`, `PD12`, `PD13`, `PD14` | GPIO | 0.96" OLED SPI Bit-banged display |
 | **Status LED** | `PE8` | GPIO | Board status LED |
 | **User Button** | `PE0` | GPIO | Onboard push button |
 | **Buzzer** | `PA8` | GPIO | Onboard buzzer |
-
-### Ultrasonic Sensor (`ultrasonic.c`)
-
-HC-SR04, driven via `TIM5` input capture rather than ADC. The driver assigns `PA2` (H1 pin 9) to
-TRIG and `PA3` (H1 pin 11) to ECHO through a voltage divider, using `TIM5_CH4/CH3` to capture both
-edges of the echo pulse at 1 MHz resolution. These H1 pins are shown on sheet 1 of the supplied
-C30D schematic — verify the physical board wiring before use.
-
-Measurements are scheduled at 100 ms intervals, with a 30 ms timeout and a 300 ms freshness limit.
-Invalid or disabled readings show `--` on OLED page 2 and send a negative `ultrasonic_cm` in
-telemetry (see [Serial Protocol](serial_protocol.md)). `ULTRASONIC_ENABLED=0` in the header disables
-the driver entirely. Results are also printed on `USART1`.

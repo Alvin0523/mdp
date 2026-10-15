@@ -22,7 +22,7 @@ graph TD
   end
 
   subgraph SENSING["Sensing"]
-    IR["ir.c<br/>Analog IR distance x2"]
+    IR["ir.c<br/>2x Analog IR distance"]
     US["ultrasonic.c<br/>HC-SR04 (TIM5 capture)"]
     ENC["encoder.c<br/>Hall encoders"]
     IMUD["imu.c<br/>ICM-20948"]
@@ -135,11 +135,8 @@ state) is packed into one `TelemetryPacket` every 100Hz and sent over `USART3` �
 - [x] Serial protocol + `mdp_bridge` — full round-trip verified on hardware (`pixi run pi-solo` + `pixi run teleop`), see [Serial Protocol](serial_protocol.md)
 - [x] Battery voltage ADC — implemented; divider ratio (11x) from vendor firmware, not cross-checked with a multimeter
 - [x] Automated self-test (`selftest.c`) — verified on hardware
-- [x] Ultrasonic (HC-SR04) — driver implemented, wired through to `/ultrasonic`; accuracy against a
-  tape measure not yet logged (planned: `pixi run calib ultrasonic 30/60/100/150`)
-- [x] IR distance sensors (Sharp GP2Y0A21YK) — **both** channels implemented: IR1 on
-  `PC2`/`ADC1_CH12`, IR2 on `PC1`/`ADC1_CH11`, both shown on OLED page 2 and in telemetry
-  (`ir_*`/`ir2_*`)
+- [x] Ultrasonic (HC-SR04) — driver implemented (TIM5 input capture on PA2/PA3); streamed in telemetry and rendered on OLED page 2
+- [x] IR distance sensors (Sharp GP2Y0A21YK) — 2 channels on PC2/ADC1_CH12 & PC1/ADC1_CH11 with 8x oversampling; distance curves offloaded to Pi (`bridges.yaml`) and mirrored on OLED page 2
 
 ---
 
@@ -184,10 +181,10 @@ If, after tuning, the car still curves during a straight `/cmd_vel` command, see
 2. **Encoders:** spin a rear wheel by hand, watch OLED page 1 (`ENC`) — counts should change and sign should flip with direction.
 3. **Motor switch (`PD3`):** toggle it, watch OLED page 1's `ES:` field flip RDY/ENG. Polarity is an *assumption*, not yet physically verified — if it reads backwards, flip the comparison in `motor_estop_engaged()` (`motor.c`).
 4. **Servo:** should visibly center on boot. Real steering needs a host command (see below).
-5. **IR sensors:** switch to OLED page 2, move an obstacle/hand in front of `PC2` (IR1) and `PC1` (IR2), 10–50 cm — confirm each reading changes accordingly.
+5. **Distance sensors:** switch to OLED page 2, move an obstacle in front of `PC2` (IR1), `PC1` (IR2), or the ultrasonic sensor — confirm `IR1`, `IR2`, and `Ultra` distance readouts in `cm` respond accordingly.
 6. **Motors (normal operation):** remain stopped without an active host link; the self-test below is an exception — `uart_command_is_stale()` forces `motor_set_speed(0, 0)` within 500ms of boot if no command has ever arrived. This is the fail-safe working as intended, not a problem.
 
-**Straight-line PI self-test (no host needed):** The self-test centers steering and runs a timed straight-line PI test. PE8 blinks once to start, twice when done, or five times if PD3 disables motors. Other tests are commented out.
+**Routine self-test (no host needed):** The self-test runs rear wheels 1 revolution forward, 1 revolution back, then sweeps steering smoothly across its full range (center $\to$ left max $\to$ right max $\to$ center, 1° / 20 ms). PE8 blinks once for forward, twice for reverse, three times for servo sweep.
 Implemented in `mdp_stm32/src/selftest.c` (`selftest_run_if_requested()`).
 
 `PE0` (the user button) is dual-purpose, depending on *when* you press it and, during normal
