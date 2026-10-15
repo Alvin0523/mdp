@@ -37,6 +37,7 @@ graph LR
 | Section | Description |
 | --- | --- |
 | ▶️ [**Quickstart**](quickstart.md) | Commands-only runbook to get the robot driving — sim or real hardware. |
+| 👁️ [**Task 2 vision**](task2_vision.md) | How task 2 reads the arrows and the bar's bullseyes, and how to collect, label (Roboflow) and train YOLO for them. |
 | 📋 [**Assessment & Checklist**](assessment_checklist.md) | Official course deliverables (Module A, B, C), deadlines, and Task 1 & 2 requirements. |
 | 🔧 [**Hardware Components**](hardware.md) | Component list, physical specs, and drivetrain parameters. |
 | 🔄 [**Dev Workflow & Setup**](dev_workflow.md) | Branch/commit conventions, the dev loop, and the optional OpenSpec workflow. |
