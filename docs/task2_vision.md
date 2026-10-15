@@ -33,8 +33,9 @@ arrows while doing it.
 3. Send the bags (`bags/`). We run the matcher on them offline: if it finds the
    bullseyes reliably, training can wait.
 
-Also **measure the printed bullseye** (edge to edge of the black card, cm). The code
-assumes 6.1 cm (`SYMBOL_M` in `mdp_ros/src/mdp_bringup/mdp_bringup/utils/obstacle_layout.py`).
+Also **measure the printed bullseye's outer WHITE square** (edge to edge, cm). The code
+assumes 4.6 cm (`BULLSEYE_RIM_M` in `mdp_ros/src/mdp_bringup/mdp_bringup/utils/obstacle_layout.py`;
+the photo of the print has it at 0.75 of the 6.1 cm card).
 
 ## 3. Collecting the data
 
@@ -66,7 +67,13 @@ About 10-15 short videos is plenty.
 
 ## 4. Labelling on Roboflow
 
-1. Open the existing project (the one `best_v5` was trained on) - keep its classes.
+1. **A new, separate project for task 2** - not the task 1 one with its ~30 classes. Task 2
+   only needs three: a small model learns them faster and better, and task 1's model stays
+   as it is. Task 1 runs `best_v5.pt`, task 2 its own model (`model:=` at launch).
+   - Bring the old arrow images along: in the task 1 project, **Generate** a version with
+     **Modify Classes** (keep `Arrow Left`, `Arrow Right`, drop every other class), export
+     it, and upload it into the new project. Images with only other symbols are fine as
+     "nothing here" examples - keep a few hundred, not all.
 2. **Upload the videos**: Roboflow asks for a frame rate - take **2-3 frames per second**
    (neighbouring frames are near copies). Aim for ~**600 new images**: ~300 with bullseyes,
    ~200 task 2 arrow views, ~100 with nothing or hard cases.
@@ -74,8 +81,10 @@ About 10-15 short videos is plenty.
    - `Arrow Left`, `Arrow Right` (existing)
    - `Bullseye` (new - the detector maps it to id 99)
 4. **How to box**
-   - **Bullseye: the whole printed card**, outer edge of the black square - not the white
-     squares inside. Tight, every time: the car reads distance from the box size.
+   - **Bullseye: the outer WHITE square** (the biggest white square) - not the black card
+     round it: the obstacles are black, so the card's edge can't be seen. Tight on the
+     white square's outer edge, every time: the car reads distance from the box size
+     (`BULLSEYE_RIM_M`). The template matcher boxes the same square.
    - **Arrows: as your existing labels** (same style as before - the car measures the size
      of your arrow boxes at home, but mixing styles confuses the model).
    - Label **every** symbol in view, the far ones and obstacle 1's side bullseyes too.
@@ -99,15 +108,17 @@ pixi run -- yolo detect train model=src/mdp_vision/models/best_v5.pt \
     data=<export>/data.yaml imgsz=640 epochs=100 patience=20
 ```
 
-Starting from `best_v5.pt` keeps what it already knows. Check `runs/detect/train*/`:
+Starting from `best_v5.pt` gives it a head start on arrows (its other classes are
+dropped, as the new data has three). Check `runs/detect/train*/`:
 `mAP50` for `Bullseye` and the arrows on the valid set should be > 0.9; look at
 `val_batch*_pred.jpg` - the bullseye boxes must hug the card.
 
 ## 6. Using it
 
-1. Copy `runs/detect/train*/weights/best.pt` to `mdp_ros/src/mdp_vision/models/best_v6.pt`,
+1. Copy `runs/detect/train*/weights/best.pt` to `mdp_ros/src/mdp_vision/models/task2_v1.pt`,
    `pixi run build`.
-2. Run with `pixi run laptop model:=best_v6.pt bullseye_matcher:=false`.
+2. Task 2: `pixi run laptop model:=task2_v1.pt bullseye_matcher:=false` (task 1 keeps
+   `best_v5.pt`, the default).
 3. Check: `ros2 topic echo /yolo_detections` shows `"99"` boxes on the bar's ends; in a run
    the runner logs `BAR  xx.x cm wide (bullseyes: ...)` with numbers close to the real bar.
 4. If the arrow reading gets worse: send the run's bag and the log.
