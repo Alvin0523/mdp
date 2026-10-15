@@ -11,7 +11,7 @@ Implementations:
 - **STM32 side:** `mdp_stm32/include/protocol.h`, `mdp_stm32/src/usart.c`
 - **ROS2 side:** `mdp_ros/src/mdp_bridge/include/mdp_bridge/protocol.hpp`, `mdp_ros/src/mdp_bridge/src/serial_bridge_node.cpp`
 
-These two headers are **hand-mirrored, not shared at build time** — the two repos have separate build systems (PlatformIO vs colcon). If you change one, update the other.
+These two headers are **hand-mirrored, not shared at build time** — the two repos have separate build systems (PlatformIO vs colcon). If you change one, update the other. Both sides are currently synchronized to the 80-byte layout.
 
 ### Framing
 
@@ -26,10 +26,9 @@ Both packet types start with 2 sync bytes and a type byte, so a receiver can res
 
 ### Telemetry Packet (STM32 -> Pi) — 80 Bytes
 
-Sent from `main.c`'s "fast" tier, **100Hz** (`FAST_PERIOD_MS`), via interrupt-driven TX (`HAL_UART_Transmit_IT`, not blocking) — matches the motor PID's own 100Hz encoder sampling 1:1, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation) for the full rate-tier breakdown and why a blocking transmit wouldn't have been viable at this rate. Was 10Hz (tied to OLED/debug-print rate, blocking TX) before that split.
+Sent from `main.c`'s "fast" tier, **100Hz** (`FAST_PERIOD_MS`), via interrupt-driven TX (`HAL_UART_Transmit_IT`, not blocking) — matches the motor PID's own 100Hz encoder sampling 1:1, see [Main loop timing allocation](architecture.md#main-loop-timing-allocation) for the full rate-tier breakdown.
 
-**Fixed packet size:** `80 bytes` (grew from the original 54 bytes in stages: IR, then a second IR
-channel, ultrasonic, and the servo PWM readback).
+**Fixed packet size:** `80 bytes` (grew from the original 54 bytes in stages: IR, then a second IR channel, ultrasonic, and the servo PWM readback).
 
 | Field | Type | Meaning |
 | :--- | :--- | :--- |
@@ -42,17 +41,17 @@ channel, ultrasonic, and the servo PWM readback).
 | `accel_x/y/z` | `float[3]` | Accelerometer readings (m/s^2) |
 | `gyro_x/y/z` | `float[3]` | Gyroscope readings (deg/s) |
 | `yaw_deg` | `float` | Bias-corrected gyro-Z integration (deg) — no accel/mag fusion |
-| `servo_pwm_us` | `uint16` | Live pulse width actually on `TIM12_CH2` right now (`servo_get_pulse_us()`), not just the last commanded angle re-derived |
+| `servo_pwm_us` | `uint16` | Live pulse width read back from `TIM12_CH2` compare register (`servo_get_pulse_us()`, µs) |
 | `imu_ready` | `uint8` | 1 = IMU detected and operational |
 | `estop` | `uint8` | 1 = onboard `PD3` motor switch engaged |
 | `battery_v` | `float` | Battery pack voltage (V), `PB0`/ADC1_CH8 (11x divider) |
-| `ir_raw` | `uint16` | First analog IR, 12-bit ADC reading (0–4095), `PC2`/ADC1_CH12 |
-| `ir_voltage` | `float` | First IR sensor voltage (0.0 to 3.3V) |
-| `ir_distance_cm` | `float` | First IR estimated distance, clamped to 10–80 cm |
-| `ir2_raw` | `uint16` | Second analog IR, 12-bit ADC reading (0–4095), `PC1`/ADC1_CH11 |
-| `ir2_voltage` | `float` | Second IR sensor voltage (0.0 to 3.3V) |
-| `ir2_distance_cm` | `float` | Second IR estimated distance, clamped 10–80 cm |
-| `ultrasonic_cm` | `float` | HC-SR04 distance (cm), TIM5 input capture on `PA2`/`PA3` — negative means no valid echo (disabled, out of range, or the last valid reading is stale >300ms) |
+| `ir_raw` | `uint16` | Analog IR1 12-bit ADC reading (0–4095, mean of 8x oversampling), `PC2`/ADC1_CH12 |
+| `ir_voltage` | `float` | Analog IR1 sensor voltage (0.0 to 3.3V) |
+| `ir_distance_cm` | `float` | Unused, always `-1.0f`: raw $\to$ cm curve is applied on the Pi (`bridges.yaml`) |
+| `ir2_raw` | `uint16` | Second analog IR 12-bit ADC reading (0–4095, mean of 8x), `PC1`/ADC1_CH11 |
+| `ir2_voltage` | `float` | Second analog IR sensor voltage (0.0 to 3.3V) |
+| `ir2_distance_cm` | `float` | Unused, always `-1.0f`: raw $\to$ cm curve is applied on the Pi (`bridges.yaml`) |
+| `ultrasonic_cm` | `float` | HC-SR04 distance (cm), `TIM5` dual input capture on `PA2`/`PA3` (negative = no echo) |
 | `uptime_ms` | `uint32` | Firmware `HAL_GetTick()` timestamp at send time |
 | `checksum` | `uint8` | XOR of all bytes from `type` through `uptime_ms` |
 
@@ -61,6 +60,9 @@ channel, ultrasonic, and the servo PWM readback).
     `mdp_stm32/include/protocol.h` and `mdp_ros/src/mdp_bridge/include/mdp_bridge/protocol.hpp`
     when adding a new field. A mismatch anywhere upstream of `uptime_ms` misaligns every field
     after it and fails checksum validation on every frame.
+
+!!! tip "IR Distance Computation on Host"
+    Raw ADC readings for both IR sensors are sampled with 8× hardware oversampling at 100 Hz. The definitive raw $\to$ distance conversion is performed on the Raspberry Pi (`mdp_ros config/bridges.yaml`), allowing recalibration without reflashing the STM32. The `ir_distance_cm` and `ir2_distance_cm` fields in telemetry are permanently set to `-1.0f`. (The onboard OLED uses local copies of the curves for bench readout).
 
 The bridge node differentiates `enc_left`/`enc_right` against the previous packet's value and `uptime_ms` delta to compute wheel angular velocity — no separate delta field is sent.
 

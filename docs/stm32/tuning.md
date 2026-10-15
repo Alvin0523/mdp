@@ -241,8 +241,9 @@ STM32 (mdp_stm32)                    Pi (mdp_ros)
 ------------------                   ------------
 imu_update():                        serial_bridge_node:
   read raw accel_x/y/z,     ----->     publish sensor_msgs/Imu:
-  gyro_x/y/z over I2C2                   angular_velocity  (raw gyro, rad/s)
-  (ICM-20948 registers                   linear_acceleration (raw accel, m/s^2)
+  gyro_x/y/z over I2C                    angular_velocity  (raw gyro, rad/s)
+  (software I2C PB10/11,                 linear_acceleration (raw accel, m/s^2)
+  ICM-20948 registers                    [orientation: see below]
   0x2D-0x38 only — no mag)               [orientation: see below]
                                                 |
                                                 v
