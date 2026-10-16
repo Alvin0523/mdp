@@ -72,27 +72,28 @@ cells**: column, row `0`–`19`, 10 cm each, `(0,0)` bottom-left, plus a directi
 
 ## 2. Pick your run
 
-Named after the machine you type them on:
+Every run is **two halves**, sim and real alike (since 2026-10-16): the car's half and the
+laptop's. Nothing runs alone.
 
 | Command | Where | What |
 | --- | --- | --- |
-| **`pixi run pi`** | Pi | The car, with a laptop running `pixi run laptop` ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
-| **`pixi run laptop`** | Laptop | YOLO, task 1 path planning and the monitors, for the Pi |
-| **`pixi run pi-solo`** | Pi | The car alone, no laptop: everything on the Pi, YOLO too (slower) |
-| **`pixi run sim`** | Laptop | Gazebo |
+| **`pixi run pi`** | Pi | The car's half on the real car: STM32, tablet, camera, EKF, the task runner ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
+| **`pixi run sim`** | Laptop | The car's half in Gazebo |
+| **`pixi run laptop`** | Laptop | The laptop's half: YOLO, the leg planner, `/setup_obstacles`, the monitors, bags, snapshots. Next to `sim`: `pixi run laptop sim:=true` |
+| **`pixi run car`** / **`sim-car`** | Laptop | Task 2, both halves + Foxglove's bridge in one zellij window: real car (SSHes into the Pi) / Gazebo |
 
-The rest are [launch arguments](#launch-arguments) added after them (`pi`, `pi-solo` and `sim`
-take the same ones).
+The rest are [launch arguments](#launch-arguments) added after them (`pi` and `sim` take the same
+ones; `laptop` takes `sim:=`, `task:=` and `model:=`).
 
-| You want | Command | Obstacles come from |
-| --- | --- | --- |
-| **Sim, no tablet** | `pixi run sim task:=1` | `config/tasks.yaml`, sent automatically, plan starts by itself |
-| **Sim + tablet** | `pixi run sim task:=1 obstacles:=tablet` | The tablet (DONE). Gazebo's blocks change to match. |
-| **Real + tablet** (the real run) | Pi `pixi run pi task:=1` + laptop `pixi run laptop` | The tablet (DONE) |
-| **Real, no tablet** | `pixi run pi task:=1 obstacles:=yaml` (+ laptop) | `config/tasks.yaml` |
-| **Real, no laptop** | `pixi run pi-solo task:=1` | The tablet (DONE) |
-| Task 2 | `pixi run sim task:=2` / `pixi run pi task:=2` (+ laptop) | `config/tasks.yaml` (`task2`) |
-| **Bare car** (manual drive, calibration) | `pixi run sim` / `pixi run pi` / `pixi run pi-solo` | none (`task:=0`) |
+| You want | Car's half | + Laptop's half | Obstacles come from |
+| --- | --- | --- | --- |
+| **Sim, no tablet** | `pixi run sim task:=1` | `pixi run laptop sim:=true task:=1` | `config/tasks.yaml`, sent automatically, plan starts by itself |
+| **Sim + tablet** | `pixi run sim task:=1 obstacles:=tablet` | `pixi run laptop sim:=true task:=1` | The tablet (DONE). Gazebo's blocks change to match. |
+| **Real + tablet** (the real run) | Pi `pixi run pi task:=1` | `pixi run laptop task:=1` | The tablet (DONE) |
+| **Real, no tablet** | Pi `pixi run pi task:=1 obstacles:=yaml` | `pixi run laptop task:=1` | `config/tasks.yaml` |
+| **Task 2, real** | `pixi run car` (one window), or Pi `pixi run pi task:=2` | `pixi run laptop task:=2` | Measured on the way (`tasks.yaml` `task2`: course rules) |
+| **Task 2, sim** | `pixi run sim-car` (one window), or `pixi run sim task:=2` | `pixi run laptop sim:=true task:=2` | Gazebo's layout: `tasks.yaml` `task2` → `sim` |
+| **Bare car** (manual drive, calibration) | `pixi run sim` / `pixi run pi` | `pixi run laptop` (`sim:=true` in sim) | none (`task:=0`) |
 
 - **The tablet link is always on.** Even in "no tablet" runs a tablet can connect and send
   obstacles, START, STOP, RESET or the arrow buttons. Without one, the bridge just keeps retrying
@@ -109,16 +110,16 @@ time-critical crosses the WiFi.
 
 | Machine | Command | Runs |
 | --- | --- | --- |
-| Pi | `pixi run pi task:=1` | Everything that touches the car: STM32, tablet, camera (sends JPEG frames), EKF, the task runner |
-| Laptop | `pixi run laptop` | YOLO on those frames → `/yolo_result` back to the Pi; task 1's paths between checkpoints → back to the Pi once, each as soon as it is found; `health_monitor` + `bt_monitor` (they only read topics) |
-| Sim, the same split on one laptop | `pixi run sim task:=1 role:=pi` + `pixi run laptop sim:=true` | YOLO reads Gazebo's camera directly |
+| Pi (`role:=pi`, the default) | `pixi run pi task:=1` | Everything that touches the car: STM32, tablet, camera (sends JPEG frames), EKF, the task runner |
+| Laptop (`role:=laptop`) | `pixi run laptop task:=1` | YOLO on those frames → `/yolo_result` back to the Pi; the legs' Hybrid A* (`task1_planner`, both tasks) → back to the Pi once, each as soon as it is found; `/setup_obstacles` (`pixi run setup`, from the laptop's `tasks.yaml`); `health_monitor` + `bt_monitor` (they only read topics); Foxglove REC bags and task 1 scan snapshots (saved on the laptop) |
+| Sim, the same split on one laptop | `pixi run sim task:=1` + `pixi run laptop sim:=true task:=1` | YOLO reads Gazebo's camera directly |
 
 - The Pi still works out the visiting order and checkpoints itself (milliseconds); only
   the paths come from the laptop. While driving nothing crosses the WiFi; small re-plans
   (a leg that went wrong) are done on the Pi.
-- **No laptop?** If it doesn't answer within 2 s (`remote_plan_timeout`), the Pi plans the
-  paths itself (log: `no answer from the laptop planner - planning here`). Without YOLO the
-  scans report `UNKNOWN`. `pixi run pi-solo` runs everything on the Pi alone, YOLO too.
+- **Laptop not answering?** If it doesn't answer within 2 s (`remote_plan_timeout`), the Pi plans
+  the leg itself (log: `no answer from the laptop planner - planning here`). Without YOLO the
+  scans report `UNKNOWN`. YOLO never runs on the Pi (PyTorch crashed there).
 - Network: Ethernet cable on the bench, the Pi's 5 GHz hotspot on the arena; `ROS_STATIC_PEERS`
   and `ROS_DOMAIN_ID` (14) in `pixi.toml`, the Pi's clock follows the laptop (chrony). Setup:
   [Network](rpi/network.md).
@@ -168,30 +169,71 @@ FINISHED  all obstacles visited
 ## 4. Task 2 (fastest car)
 
 ```bash
-pixi run start
+pixi run car        # real: Pi + laptop + Foxglove in one zellij window
+pixi run sim-car    # sim:  the same split in Gazebo
+pixi run start      # or the tablet's START
 ```
 
-No obstacles to send and no reset needed. The distances to the two obstacles are unknown, so the car
-measures them with the front ultrasonic on the way:
+No obstacles to send and no reset needed. The distances are unknown (d1, d2 each 0.60–1.50 m), so
+the car measures them on the way. Four checkpoints: **1** beside obstacle 1 (arrow 1's side),
+**2** beside the bar's end on arrow 2's side, **3** beside its other end, **4** home.
 
 | Step | The car | Ends when |
 | --- | --- | --- |
-| 1 | Straight out of the carpark, fast; YOLO reads arrow 1 | Ultrasonic reads obstacle 1 at `swerve_trigger_dist` (0.45 m) |
-| 2 | Swerves to arrow 1's side and straightens up, beside obstacle 1 | Heading straight again |
-| 3 | Straight on toward obstacle 2 (the 60 cm bar): measures it, reads arrow 2 | Both known |
-| 4 | Planned path (the task 1 planner) past the bar's end on arrow 2's side, round its back, past the other end, home | In the carpark |
+| Before START | In the carpark: the ultrasonic measures obstacle 1, YOLO reads arrow 1 → checkpoint 1 and its path planned | START |
+| → CP1 | Straight (`straight_speed`), an S to arrow 1's side, straight into checkpoint 1 (`cp1_speed` over the last `line_up_dist`). On the way: YOLO reads arrow 2, the ultrasonic measures the bar, the camera sees arrow 2 + the bullseye on the bar's near end | At checkpoint 1 (`cp1_back` behind obstacle 1, `lane_offset` out) |
+| At CP1 | The bar's width ([below](#bar-width)); checkpoints 2–4 planned; CP1 → CP2 from the [route table](#route-table). A reading missing: it stops and looks | Planned |
+| → CP2 → CP3 | An S to checkpoint 2 (`side_clearance` out from the bar's end), half a circle round the back of the bar | At checkpoint 3 |
+| → Home | An S onto the centre line (`home_straight_dist` out), straight in | [Home](#home) |
 
-The terminal shows each step (`SWERVE LEFT …`, `OBSTACLE 2 at (28,12), arrow 2 RIGHT -> A … B … HOME …`,
-`FINISHED  in the carpark …, 23.6 s`). Foxglove shows it like task 1: costmap, blocks, walls,
-waypoints A / B / HOME and the path.
+The terminal: `READY`, `START`, `CP1 …`, `OBSTACLE 2  …`, `LEG 1/3` … `3/3`, `FINISHED  23.6 s
+(the back wall)`. Foxglove shows it like task 1: costmap, blocks, walls, checkpoints and the path.
+
+### Bar width
+
+| Reading | Width planned with |
+| --- | --- |
+| Arrow 2 → the near bullseye in **one frame** × the ultrasonic's distance (× `bar_gap_scale` 1.065 on the real car: lens distortion; 1.0 in sim) | That, to the **nearest** 5 cm (not up: the side walls stand off the bar's real ends) |
+| No such frame | The usual **60 cm** (`tasks.yaml` `task2` `obstacle_2` size) |
+
+The "pose" method (one bullseye + the car's own pose) was dropped on 2026-10-16: it read 42–52 cm
+for a 76 cm bar.
+
+### Home
+
+The home checkpoint is `HOME_DEEPER_M` (5 cm) past the carpark's middle, toward the back wall.
+The run finishes at the first of:
+
+| # | Rule | Log |
+| --- | --- | --- |
+| 1 | The ultrasonic reads the back wall at ≤ `home_stop_dist` (15 cm), once past the carpark's opening | `FINISHED  … (the back wall)` |
+| 2 | Only if no wall is seen within the carpark's depth (a taped carpark): the whole outline 10 cm inside the carpark (`IN_CARPARK_MARGIN_M`) | `FINISHED  …` |
+| 3 | The end of the path | `FINISHED  … (HOME)` |
+
+### Route table
+
+CP1 → CP2 must be ready the instant the car reaches checkpoint 1, so every route is planned
+offline into `config/task2_routes.json.gz`. Rebuild with `pixi run task2-table` after changing the
+car or a setting it depends on (`lane_offset`, `cp1_back`, the paddings, `side_clearance`,
+`line_up_dist`, `straight_speed`, `max_lateral_accel`); on a mismatch the runner plans the leg live.
+
+| Axis | Values |
+| --- | --- |
+| d2 (obstacle 1's far face → the bar) | 0.60–1.50 m, every 5 cm |
+| Bar width | 0.30–1.20 m, every 5 cm |
+| Arrows | all 4 pairs (left and right turning circles differ) |
+| Checkpoint 1 back | 0.4 / 0.3 / 0.2 / 0.1 / 0.0 m (short courses put it nearer) |
+| Total | 7220 routes, none missing |
 
 **In sim**, the layout comes from `config/tasks.yaml` → `task2` → `sim` (d1, d2, arrows, side
 walls). The runner never reads that part; it measures, like on the real run. After a run:
 `pixi run reset`, then `start` again. In sim the reset also moves the car back into the carpark.
+`pixi run setup` sends `task2` → `setup` as known (no measuring); `step:=true` + `pixi run step`
+drives one checkpoint per SPACE.
 
 ## 5. Bare car: manual driving
 
-Start with `pixi run sim`, `pixi run pi` or `pixi run pi-solo` (no `task:=`). Then:
+Start the bare car (`pixi run sim` / `pixi run pi`, no `task:=`, + `pixi run laptop`). Then:
 
 - **Tablet arrow buttons** (f, b, fl, fr, bl, br): one short burst per tap.
 - **Keyboard:** `pixi run teleop` (the key legend prints in the terminal).
@@ -200,7 +242,7 @@ Start with `pixi run sim`, `pixi run pi` or `pixi run pi-solo` (no `task:=`). Th
 
 ## 6. Calibration: `pixi run calib`
 
-The driving ones run on the **bare car** (`pixi run sim` / `pi` / `pi-solo`, no `task:=`); `calib`
+The driving ones run on the **bare car** (`pixi run sim` / `pi` + `laptop`, no `task:=`); `calib`
 refuses to drive while task 1 or 2 is running. `pixi run calib <what> -h` lists each one's options.
 
 **The log:** at the end of every run the terminal asks for the tape value (blank = skip; in sim
@@ -240,7 +282,7 @@ file only; the launch copies the URDF's numbers into the controller and planner.
 | Turning radius left (full lock, rear-axle middle) | config **17.7 cm** (sim) · real tape **17.5 cm** at 0.15 m/s | Gazebo circle fit 2026-09-27 · tape 2026-10-01 (not yet in the config) | `navigation.yaml` `minimum_turning_radius_left` | `calib turn left` |
 | Turning radius right | config **25.7 cm** (sim) · real tape **24.35 cm** at 0.15 m/s | Gazebo circle fit 2026-09-27 · tape 2026-10-01 (not yet in the config) | `navigation.yaml` `minimum_turning_radius_right` | `calib turn right` |
 | IMU position | 12 mm ahead of the rear axle, 26 mm right of centre, 95.5 mm above the table | Tape, 2026-09-28 | URDF `imu_joint` | Tape |
-| Camera position | In line with the rear axle, **55 mm right** of the centre line, lens **175 mm** above the table, looking **left** in task 1, forward in task 2 | Tape, 2026-10-08 | URDF `camera_joint` | Tape |
+| Camera position | Task 1: in line with the rear axle, **55 mm right** of the centre line, lens **175 mm** above the table, looking **left**. Task 2: **171 mm** ahead of the rear axle on the centre line, **150 mm** high, looking forward | Tape, 2026-10-08 / 2026-10-14 | URDF `camera_joint` | Tape |
 | Battery | 3S Li-ion, 12.6 V full, 3400 mAh | Spec | — | OLED `B:xx.xV` |
 
 Both front wheels always have the **same** angle: one servo drives the right wheel and a tie rod
@@ -257,19 +299,32 @@ Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.
 
 | Setting | Now | What |
 | --- | --- | --- |
-| `task1_runner` `follower.desired_linear_vel` | 0.4 m/s | Task 1 speed, with `follower.path_tracking: lqr` (0.5 touched blocks in sim) |
-| `task2_runner` `straight_speed` / `path_speed` | 0.90 / 0.35 m/s | Task 2: straights / curves (speed in a curve also capped by `max_lateral_accel`) |
-| `task2_runner` `swerve_trigger_dist` | 0.45 m | Task 2: ultrasonic distance to obstacle 1 that starts the swerve |
+| `task1_runner` `follower.desired_linear_vel` | 0.3 m/s | Task 1 speed, with `follower.path_tracking: lqr` (0.5 touched blocks in sim) |
+| `task1_runner` `planner.checkpoint_standoff` | 0.30 m | Rear axle this far from the block centre at each stop |
+| `task1_runner` `costmap.footprint_padding` | 0.06 m | Safety margin round the car (blocks) |
+| `task1_runner` `follower.xy_goal_tolerance` | 0.03 m | "Arrived" |
 | `manual_speed_mps` | 0.15 m/s | Tablet arrow buttons |
-| `planner.checkpoint_standoff` | 0.20 m | Rear axle this far from the block centre at each stop |
-| `costmap.footprint_padding` | 0.03 m | Safety margin round the car |
-| `follower.xy_goal_tolerance` | 0.05 m | "Arrived" |
+
+Task 2 (`task2_runner`):
+
+| Setting | Now | What |
+| --- | --- | --- |
+| `straight_speed` / `path_speed` / `cp1_speed` | 0.90 / 0.50 / 0.60 m/s | Straights / the slowest (gear changes, arriving) / the straight into checkpoint 1 |
+| `max_lateral_accel` · `brake_decel` | 1.00 · 1.20 m/s² | Curve speed = √(this × radius) · braking for curves and path ends (1.4 tried: CP2 12 cm off vs 7) |
+| `cp1_back` · `lane_offset` · `line_up_dist` | 0.40 · 0.30 · 0.30 m | Checkpoint 1 behind obstacle 1's centre · out from the centre line · the straight into checkpoints 1 and 2 |
+| `side_clearance` | 0.25 m | Checkpoints 2 and 3 out from the bar's ends |
+| `obstacle_padding` · `obstacle_1_padding` · `wall_padding` | 0.10 · 0.15 · 0.06 m | Kept from the obstacles · before/behind obstacle 1 · from the walls |
+| `home_straight_dist` · `home_margin` · `home_stop_dist` | 0.45 · 0.08 · 0.15 m | Straight on the centre line before home · extra room on the way home · ultrasonic stop at the back wall |
+| `bar_gap_scale` | 1.065 | Real car's lens correction for the bar width |
+| `swerve_trigger_dist` | 0.45 m | Fallback only (arrow 1 not read at home): the latest swerve past obstacle 1 |
 
 Speeds can be changed **while running**, e.g.:
 
 ```bash
 pixi run -- ros2 param set /task1_runner follower.desired_linear_vel 0.3
 ```
+
+A route-table setting changed → `pixi run task2-table`.
 
 The turning circles were measured at 0.2 m/s. Faster means wider turns than planned, so test in sim
 first.
@@ -306,13 +361,13 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 
 ## Launch arguments
 
-Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp.launch.py`).
+Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.launch.py`).
 
 | Argument | Values | Default | What |
 | --- | --- | --- | --- |
 | `task:=` | `0` `1` `2` | `0` | `0` bare car (manual drive, calibration) · `1` explore + recognise · `2` fastest car |
 | `vision:=` | `true` `false` | `true` | Camera + YOLO |
-| `model:=` | model file | `best_v5.pt` | YOLO model under `mdp_vision/models/` (`best_v4.pt` = previous), or a full path to a `.pt` |
+| `model:=` | model file | `best_v5.pt`; `task:=2`: `task2_yolo26s.pt` | YOLO model under `mdp_vision/models/` (`best_v4.pt` = previous), or a full path to a `.pt`. On a Mac its `.mlpackage` (CoreML) is used when there (`pixi run export-coreml`). Give the laptop the same `task:=` |
 | `obstacles:=` | `tablet` `yaml` | sim `yaml`, real `tablet` | `yaml` also sends `layout` once at start. The tablet link is on either way. |
 | `layout:=` | path | `config/tasks.yaml` | Obstacle layouts (task 1 in cells, task 2 in metres); in sim also Gazebo's blocks |
 | `start_cell:=` | `COL,ROW` | `1,1` | Cell under the middle of the rear axle at start |
@@ -321,16 +376,19 @@ Added after `pixi run sim`, `pi` or `pi-solo` (all start `mdp_bringup/launch/mdp
 | `log:=` | `quiet` `full` | `quiet` | `full` shows every node's output |
 | `serial_port:=` | device | `/dev/stm32_serial` (`bridges.yaml`, udev rule from `mdp_stm32`: `pixi run udev`) | Real only: the STM32 |
 | `bluetooth_device:=` | device | `/dev/rfcomm0` | The tablet link |
-| `role:=` | `solo` `pi` `laptop` | `solo` | Set by `pi-solo` / `pi` / `laptop`; by hand only for the split in sim (`pixi run sim role:=pi`) |
+| `role:=` | `pi` `laptop` | `pi` | The car's half (real or Gazebo) / the laptop's half. Set by `pi` / `sim` / `laptop`; always both |
+| `step:=` | `true` `false` | `false` | Task 2 testing: stop at every checkpoint, `pixi run step` (SPACE) drives on |
 
 ## All pixi tasks (`mdp_ros/`)
 
 | Task | What |
 | --- | --- |
 | `pixi run build` / `test` / `clean` | Build / run the tests / delete `build install log` |
-| `pixi run pi` / `laptop` | The car on the Pi / YOLO, planning and monitors on the laptop ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
-| `pixi run pi-solo` | The car on the Pi alone, no laptop |
-| `pixi run sim` | Gazebo (+ [launch arguments](#launch-arguments)) |
+| `pixi run pi` / `laptop` | The car's half on the Pi / YOLO, planning, setup, monitors, bags on the laptop ([Pi + laptop](#pi-laptop-yolo-and-planning-on-the-laptop)) |
+| `pixi run sim` | The car's half in Gazebo (+ [launch arguments](#launch-arguments)), with `pixi run laptop sim:=true` |
+| `pixi run car` / `sim-car` | Task 2 in one zellij window: Pi + laptop + Foxglove / the same in sim |
+| `pixi run task2-table` | Rebuild task 2's route table (`config/task2_routes.json.gz`) |
+| `pixi run step` | Task 2 with `step:=true`: SPACE = next checkpoint |
 | `pixi run vision` | Camera + YOLO only, no car |
 | `pixi run setup` | Send the obstacles in `tasks.yaml`: task 1 like the tablet's DONE; task 2 the `task2.setup` layout as known (no ultrasonic / YOLO measuring) |
 | `pixi run reset` / `start` / `stop` | Reset to the start pose / start the run / **emergency stop** (reset before the next run) |

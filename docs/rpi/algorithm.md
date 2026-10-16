@@ -67,8 +67,8 @@ gave paths the car could not follow. Step cost = length × (reverse penalty) × 
 
 ## Following (`path_follower.py`)
 
-Task 1 steers with **LQR** (`follower.path_tracking: lqr` in `navigation.yaml`); task 2 with pure
-pursuit. The rest of this section describes the pure pursuit mode.
+Both tasks steer with **LQR** (`follower.path_tracking: lqr` / `task2_runner` `path_tracking: lqr`
+in `navigation.yaml`). The rest of this section describes the pure pursuit mode (`pure_pursuit`).
 
 Pure pursuit with a 0.10 m lookahead (it must stay well below the turning radius or it cuts corners).
 The path is driven in same-gear segments; at a direction change the car drives **to** the change point
@@ -113,11 +113,18 @@ and stamps everything it draws in `map`.
 
 ## Task 2
 
-`task2_runner` doesn't know the distances in advance. It measures them with the front ultrasonic:
-straight until obstacle 1 is `swerve_trigger_dist` ahead, a full-lock swerve to arrow 1's side, then
-a measurement of obstacle 2 (the 60 cm bar) from beside obstacle 1. With both positions known it plans
-three legs with the same Hybrid A* and costmap as task 1: **A** past the bar's end on arrow 2's side,
-**B** round its back to the other end, **HOME** into the carpark. The costmap is the task 2 course
+`task2_runner` doesn't know the distances in advance (d1, d2 = 0.60–1.50 m): it measures them with
+the front ultrasonic and reads the arrows and the bar's width with YOLO. Four checkpoints:
+
+| Leg | How it is planned |
+| --- | --- |
+| Home → CP1 (beside obstacle 1, arrow 1's side) | Before START: a clean straight + smooth S + straight (`task2_paths.py`) |
+| CP1 → CP2 (the bar's end, arrow 2's side) | Looked up in the route table built offline (`task2_routes.py`, `pixi run task2-table`: 7220 routes) |
+| CP2 → CP3 (round the bar's back) | Half a circle, clean geometry |
+| CP3 → home | An S onto the centre line, straight in; finishes on the ultrasonic at the back wall (15 cm) |
+
+Hybrid A* (on the laptop's `task1_planner`, on the Pi if it does not answer in
+`remote_plan_timeout`) only plans what none of that covers. The costmap is the task 2 course
 (5 × 2.4 m: carpark walls, both blocks, and the side walls that may stand 50 cm out from the bar).
-Settings: `navigation.yaml` (`task2_runner`); course rules: `tasks.yaml` (`task2`). In sim, all four
-arrow combinations at d1 / d2 = 0.6–1.5 m finish in 21–36 s with ≥ 9.8 cm clearance.
+Settings: `navigation.yaml` (`task2_runner`); course rules: `tasks.yaml` (`task2`). Details:
+[Quickstart → Task 2](../quickstart.md#4-task-2-fastest-car).
