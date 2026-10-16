@@ -163,6 +163,10 @@ FINISHED  all obstacles visited
   tablet (`UNKNOWN` if it saw nothing).
 - **Run again:** put the car back in the start box → RESET → START. The obstacles and plan are kept.
   A reset during a run stops the run first.
+- **Step through** (testing): add `step:=true` to `pixi run pi` / `sim`, then `pixi run step`. SPACE
+  starts the run; at each stop the car does everything a real run does (IR approach, creep and
+  position fix, scan, `TARGET`), logs `STEP      SPACE for leg 2/4 -> #3`, and holds until the
+  next SPACE. The run timer keeps running.
 - **In sim, reset also puts the Gazebo car back at the start** (it teleports it), so you can run
   again without restarting the sim: `pixi run reset`, then `pixi run start`.
 
@@ -377,7 +381,7 @@ Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.
 | `serial_port:=` | device | `/dev/stm32_serial` (`bridges.yaml`, udev rule from `mdp_stm32`: `pixi run udev`) | Real only: the STM32 |
 | `bluetooth_device:=` | device | `/dev/rfcomm0` | The tablet link |
 | `role:=` | `pi` `laptop` | `pi` | The car's half (real or Gazebo) / the laptop's half. Set by `pi` / `sim` / `laptop`; always both |
-| `step:=` | `true` `false` | `false` | Task 2 testing: stop at every checkpoint, `pixi run step` (SPACE) drives on |
+| `step:=` | `true` `false` | `false` | Task 1 / 2 testing: stop at every checkpoint, `pixi run step` (SPACE) drives on |
 
 ## All pixi tasks (`mdp_ros/`)
 
@@ -388,7 +392,7 @@ Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.
 | `pixi run sim` | The car's half in Gazebo (+ [launch arguments](#launch-arguments)), with `pixi run laptop sim:=true` |
 | `pixi run car` / `sim-car` | Task 2 in one zellij window: Pi + laptop + Foxglove / the same in sim |
 | `pixi run task2-table` | Rebuild task 2's route table (`config/task2_routes.json.gz`) |
-| `pixi run step` | Task 2 with `step:=true`: SPACE = next checkpoint |
+| `pixi run step` | Task 1 / 2 with `step:=true`: SPACE = next checkpoint (the first = START), `s` = E-STOP |
 | `pixi run vision` | Camera + YOLO only, no car |
 | `pixi run setup` | Send the obstacles in `tasks.yaml`: task 1 like the tablet's DONE; task 2 the `task2.setup` layout as known (no ultrasonic / YOLO measuring) |
 | `pixi run reset` / `start` / `stop` | Reset to the start pose / start the run / **emergency stop** (reset before the next run) |
