@@ -41,14 +41,15 @@ mdp_algorithm/
 3. **Legs** (`hybrid_astar.py`, via `plan_leg()`): the runner plans every leg back to back in a
    background thread while the car already drives the first one.
 
-### `visit.mode: anchors` (`visit_plan.py`, 2026-10-17)
+### `visit.mode: anchors` (`visit_plan.py`, 2026-10-17, the default)
 
-Fewer stops. Steps 1 and 2 change; step 3 is the same.
+Fewer stops, and every image visited. Steps 1 and 2 change; step 3 is the same.
 
 | Kind | What | Position fix |
 | --- | --- | --- |
 | **Anchor** | Square-on stop, as above | IR pair |
 | **Drive-by** | The image is in view (`visit.view_*`: ≤ 50 cm, ≤ 25° off the camera's axis, face ≤ 45° turned) for ≥ `visit.drive_by_min_view` (15 cm) of a path between two stops - read while driving at `visit.drive_by_speed`. If the plain path does not see it, the leg is bent through a **via** point that does (passed through in one gear) | - |
+| **Angled** | An image no square stop fits (another block or the table's edge in the way): a stop further back and/or turned (up to 60°, 25-45 cm) where the camera still sees it | - |
 | **Last** | Angled stop (≤ 35° off square): nothing is driven after it | - |
 
 How it is chosen (Reeds-Shepp estimates only, ~0.2-0.5 s for 8 images):

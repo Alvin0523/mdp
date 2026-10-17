@@ -166,13 +166,13 @@ FINISHED  all obstacles visited
 
     | `visit.mode` | Stops | Position fix |
     | --- | --- | --- |
-    | `square` (default) | A square-on stop at every image | IR at every stop |
-    | `anchors` | **Anchors** (square-on stops) + **drive-bys** (images read while driving past, at `visit.drive_by_speed`) + an angled **last** stop | IR at every anchor |
+    | `anchors` (default) | **Anchors** (square-on stops) + **drive-bys** (images read while driving past, at `visit.drive_by_speed`) + **angled** stops where no square stop fits + an angled **last** stop | IR at every anchor |
+    | `square` (the old way) | A square-on stop at every image; an image no square stop fits is skipped | IR at every stop |
 
     In `anchors` mode the plan picks the anchors (log `PLAN      #13 anchor, drive-by #16 on the
     way`); a drive-by not read by the end is visited square after the last stop
     (`DRIVE-BY  #16 not read - a stop for it now`). Change it with `ros2 param set /task1_runner
-    visit.mode anchors`; it takes effect at the next obstacle set (DONE / `pixi run setup`).
+    visit.mode square`; it takes effect at the next obstacle set (DONE / `pixi run setup`).
 - **Run again:** put the car back in the start box → RESET → START. The obstacles and plan are kept.
   A reset during a run stops the run first.
 - **Step through** (testing): add `step:=true` to `pixi run pi` / `sim`, then `pixi run step`. SPACE
@@ -319,7 +319,7 @@ Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.
 | `task1_runner` `planner.checkpoint_standoff` | 0.30 m | Rear axle this far from the block centre at each stop |
 | `task1_runner` `costmap.footprint_padding` | 0.06 m | Safety margin round the car (blocks) |
 | `task1_runner` `follower.xy_goal_tolerance` | 0.03 m | "Arrived" |
-| `task1_runner` `visit.mode` · `visit.drive_by_speed` | `square` · 0.2 m/s | How images are visited (above) · speed while a drive-by image is in view |
+| `task1_runner` `visit.mode` · `visit.drive_by_speed` | `anchors` · 0.2 m/s | How images are visited (above) · speed while a drive-by image is in view |
 | `task1_runner` `visit.view_max_dist` · `view_max_bearing` · `view_max_incidence` | 0.50 m · 25° · 45° | "In view" for a drive-by (anchors mode) |
 | `manual_speed_mps` | 0.15 m/s | Tablet arrow buttons |
 
