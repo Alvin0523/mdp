@@ -5,10 +5,20 @@ icon: lucide/network
 # Launch & Topics
 
 One launch file, `mdp_bringup/launch/mdp.launch.py`, starts everything for sim and real.
-`pixi run sim` = `sim:=true`, `pixi run pi` / `pi-solo` = `sim:=false` with `role:=pi` / `solo` (`pixi run laptop` = `role:=laptop`); the other arguments are in
-[Quickstart → Launch arguments](../quickstart.md#launch-arguments).
+Always two halves, sim and real alike (since 2026-10-16), nothing runs alone:
+
+| Half | Command | `role:=` |
+| --- | --- | --- |
+| The car (real) | `pixi run pi` (`sim:=false`) | `pi` (default) |
+| The car (Gazebo) | `pixi run sim` (`sim:=true`) | `pi` (default) |
+| The laptop | `pixi run laptop` (+ `sim:=true` next to `pixi run sim`) | `laptop` |
+
+Task 2 in one zellij window: `pixi run car` (real) / `pixi run sim-car` (sim). The other arguments
+are in [Quickstart → Launch arguments](../quickstart.md#launch-arguments).
 
 ## What gets started
+
+**The car's half** (`role:=pi`):
 
 | Node | Sim | Real | What it does |
 | --- | --- | --- | --- |
@@ -22,16 +32,26 @@ One launch file, `mdp_bringup/launch/mdp.launch.py`, starts everything for sim a
 | `map_to_odom_static_tf` | ✓ | ✓ | `map → odom` = the start pose |
 | `bluetooth_bridge_node` | ✓ | ✓ | The tablet link (always on) |
 | `robot_pose_feedback` | ✓ | ✓ | `ROBOT,x,y,d` to the tablet; `/reset_pose` |
-| `bt_monitor` | ✓ | ✓ | Tablet traffic as log lines (`pixi run btlog`, Foxglove's tablet log panel) |
-| `health_monitor` | ✓ | ✓ | `/diagnostics`: links, sensors, Pi load, camera/YOLO, runner (on the laptop with `pixi run pi` + `laptop`) |
 | `pi_status` | | ✓ | The Pi's CPU / memory / temperature / throttling on `/pi/status`, 1 Hz |
-| `rpi_cam_publisher` | | `vision:=true` | The Pi camera |
-| `yolo_detector` | `vision:=true` | `vision:=true` | YOLO on the camera image |
+| `rpi_cam_publisher` | | `vision:=true` | The Pi camera (JPEG frames to the laptop) |
 | `manual_drive` | `task:=0` | `task:=0` | Tablet arrow buttons |
 | `task1_runner` | `task:=1` | `task:=1` | Task 1 |
 | `task2_runner` | `task:=2` | `task:=2` | Task 2 |
 | `publish_obstacles` | `task:=1` (default `obstacles:=yaml`) | `task:=1 obstacles:=yaml` | Sends the `tasks.yaml` layout once at startup (by hand: `/setup_obstacles`) |
 | `sim_helpers` | ✓ | | Stand-ins for what Gazebo lacks: `/ultrasonic` from a narrow lidar fan (always); task 1: replaces Gazebo's blocks when the tablet sends a different layout |
+
+**The laptop's half** (`role:=laptop`):
+
+| Node | What it does |
+| --- | --- |
+| `camera_relay` (real only) | Takes the Pi's JPEG frames over the link once, for YOLO and the bullseye matcher |
+| `yolo_detector` | YOLO on the car's camera (`model:=`; `task:=2`: `task2_yolo26s`) → `/yolo_result` |
+| `bullseye_matcher` | Task 2 bullseyes by template matching (`bullseye_matcher:=true`, default) |
+| `leg_planner` | The legs' Hybrid A* for both runners (the car plans a leg itself after `remote_plan_timeout`, 2 s); serves `/setup_obstacles` from the laptop's `tasks.yaml` |
+| `health_monitor` | `/diagnostics`: links, sensors, Pi load, camera/YOLO, runner |
+| `bt_monitor` | Tablet traffic as log lines (`pixi run btlog`, Foxglove's tablet log panel) |
+| `bag_recorder` | Foxglove REC / `pixi run bag`: bags land on the laptop |
+| `start_sound` · `scan_snapshots` | A sound at START · task 1: what YOLO saw at each obstacle (`snapshots/`) |
 
 Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: `pixi run vision`).
 
@@ -55,6 +75,7 @@ Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: 
 | `/ultrasonic` · `/ir` · `/ir2` | `Range` | STM32 (in sim: `/ultrasonic` from `sim_helpers`) → task2_runner |
 | `/image_raw` (real) · `/camera/image_raw` (sim) | `Image` | camera → YOLO |
 | `/yolo_result` | `String` (symbol id) | YOLO → runners |
+| `/yolo_detections` | `String` (JSON: every box of a frame) | YOLO → runners (task 1: drive-bys and reads on the approach; task 2: arrows, bar width) |
 | `/yolo_result/image_annotated` | `Image` | YOLO → Foxglove |
 | `/run_status` | `mdp_interfaces/RunStatus` | task1_runner / task2_runner, 2 Hz: state, target, distance, gear, arrows |
 | `/diagnostics` | `DiagnosticArray` | health_monitor, EKF |
