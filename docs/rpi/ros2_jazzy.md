@@ -75,6 +75,7 @@ Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: 
 | `/ultrasonic` · `/ir` · `/ir2` | `Range` | STM32 (in sim: `/ultrasonic` from `sim_helpers`) → task2_runner |
 | `/image_raw` (real) · `/camera/image_raw` (sim) | `Image` | camera → YOLO |
 | `/yolo_result` | `String` (symbol id) | YOLO → runners |
+| `/yolo_detections` | `String` (JSON: every box of a frame) | YOLO → runners (task 1: drive-bys and reads on the approach; task 2: arrows, bar width) |
 | `/yolo_result/image_annotated` | `Image` | YOLO → Foxglove |
 | `/run_status` | `mdp_interfaces/RunStatus` | task1_runner / task2_runner, 2 Hz: state, target, distance, gear, arrows |
 | `/diagnostics` | `DiagnosticArray` | health_monitor, EKF |

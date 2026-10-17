@@ -20,7 +20,8 @@ mdp_algorithm/
 │   ├── planner.py            ENTRY: plan_visiting_order(), plan_leg()  (metres)
 │   ├── costmap.py            arena, Obstacle, car footprint, Nav2-style costmap
 │   ├── hybrid_astar.py       Hybrid A* on the costmap
-│   ├── visiting_order.py     one checkpoint per obstacle + the visit order
+│   ├── visiting_order.py     one checkpoint per obstacle + the visit order (visit.mode square)
+│   ├── visit_plan.py         anchors, drive-bys and an angled last stop (visit.mode anchors)
 │   ├── reeds_shepp.py        Reeds-Shepp curves (heuristic, final "shot", order distances)
 │   └── task2_paths.py        task 2's clean shapes (straight, smooth S, half circle)
 └── control/
@@ -30,7 +31,7 @@ mdp_algorithm/
 ## How a run is planned
 
 1. **Checkpoints** (`visiting_order.py`): for each obstacle, the car's `base_link` (rear-axle centre)
-   stops `planner.checkpoint_standoff` (0.20 m) from the block centre, straight out from the image
+   stops `planner.checkpoint_standoff` (0.30 m) from the block centre, straight out from the image
    face, turned so the **camera** faces the image (its direction is read from the URDF: left in
    task 1). Snapped to a cell centre. An obstacle
    whose checkpoint the car cannot fit into is skipped as unreachable.
@@ -39,6 +40,30 @@ mdp_algorithm/
    once. Reeds-Shepp ignores obstacles - a known simplification.
 3. **Legs** (`hybrid_astar.py`, via `plan_leg()`): the runner plans every leg back to back in a
    background thread while the car already drives the first one.
+
+### `visit.mode: anchors` (`visit_plan.py`, 2026-10-17)
+
+Fewer stops. Steps 1 and 2 change; step 3 is the same.
+
+| Kind | What | Position fix |
+| --- | --- | --- |
+| **Anchor** | Square-on stop, as above | IR pair |
+| **Drive-by** | The image is in view (`visit.view_*`: ≤ 50 cm, ≤ 25° off the camera's axis, face ≤ 45° turned) for ≥ `visit.drive_by_min_view` (15 cm) of a path between two stops - read while driving at `visit.drive_by_speed`. If the plain path does not see it, the leg is bent through a **via** point that does (passed through in one gear) | - |
+| **Last** | Angled stop (≤ 35° off square): nothing is driven after it | - |
+
+How it is chosen (Reeds-Shepp estimates only, ~0.2-0.5 s for 8 images):
+
+1. every image an anchor; order = shortest tour over the anchors (Held-Karp);
+2. try turning each anchor into a drive-by; keep the one that saves the most time; repeat until
+   none saves time. At most `visit.max_drive_bys_per_leg` (2) drive-bys between two stops, so the
+   position fixes stay close;
+3. the last stop angled, if that is quicker.
+
+The runner plans the legs with Hybrid A* (a via = two legs joined into one), drives slower while a
+drive-by image is in view, and matches each YOLO box (`/yolo_detections`) to the image the camera
+expects in that direction. A drive-by not read on its leg is visited square after the last stop.
+Offline on the 2026-10-14 tablet layout: 8 stops → 4 (3 anchors + the last), 4 drive-bys. Not yet
+timed in Gazebo or on the car.
 
 ## The costmap (`costmap.py`)
 
