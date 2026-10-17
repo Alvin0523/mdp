@@ -22,7 +22,7 @@ mdp_algorithm/
 │   ├── hybrid_astar.py       Hybrid A* on the costmap
 │   ├── visiting_order.py     one checkpoint per obstacle + the visit order
 │   ├── reeds_shepp.py        Reeds-Shepp curves (heuristic, final "shot", order distances)
-│   └── spline_planner.py     (unused since task 2 moved to Hybrid A*)
+│   └── task2_paths.py        task 2's clean shapes (straight, smooth S, half circle)
 └── control/
     └── path_follower.py      PathFollower (pure pursuit / feedback / LQR steering)
 ```
@@ -123,7 +123,7 @@ the front ultrasonic and reads the arrows and the bar's width with YOLO. Four ch
 | CP2 → CP3 (round the bar's back) | Half a circle, clean geometry |
 | CP3 → home | An S onto the centre line, straight in; finishes on the ultrasonic at the back wall (15 cm) |
 
-Hybrid A* (on the laptop's `task1_planner`, on the Pi if it does not answer in
+Hybrid A* (on the laptop's `leg_planner`, on the Pi if it does not answer in
 `remote_plan_timeout`) only plans what none of that covers. The costmap is the task 2 course
 (5 × 2.4 m: carpark walls, both blocks, and the side walls that may stand 50 cm out from the bar).
 Settings: `navigation.yaml` (`task2_runner`); course rules: `tasks.yaml` (`task2`). Details:

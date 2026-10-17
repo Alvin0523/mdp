@@ -111,7 +111,7 @@ time-critical crosses the WiFi.
 | Machine | Command | Runs |
 | --- | --- | --- |
 | Pi (`role:=pi`, the default) | `pixi run pi task:=1` | Everything that touches the car: STM32, tablet, camera (sends JPEG frames), EKF, the task runner |
-| Laptop (`role:=laptop`) | `pixi run laptop task:=1` | YOLO on those frames → `/yolo_result` back to the Pi; the legs' Hybrid A* (`task1_planner`, both tasks) → back to the Pi once, each as soon as it is found; `/setup_obstacles` (`pixi run setup`, from the laptop's `tasks.yaml`); `health_monitor` + `bt_monitor` (they only read topics); Foxglove REC bags and task 1 scan snapshots (saved on the laptop) |
+| Laptop (`role:=laptop`) | `pixi run laptop task:=1` | YOLO on those frames → `/yolo_result` back to the Pi; the legs' Hybrid A* (`leg_planner`, both tasks) → back to the Pi once, each as soon as it is found; `/setup_obstacles` (`pixi run setup`, from the laptop's `tasks.yaml`); `health_monitor` + `bt_monitor` (they only read topics); Foxglove REC bags and task 1 scan snapshots (saved on the laptop) |
 | Sim, the same split on one laptop | `pixi run sim task:=1` + `pixi run laptop sim:=true task:=1` | YOLO reads Gazebo's camera directly |
 
 - The Pi still works out the visiting order and checkpoints itself (milliseconds); only
@@ -371,7 +371,7 @@ Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.
 | --- | --- | --- | --- |
 | `task:=` | `0` `1` `2` | `0` | `0` bare car (manual drive, calibration) · `1` explore + recognise · `2` fastest car |
 | `vision:=` | `true` `false` | `true` | Camera + YOLO |
-| `model:=` | model file | `best_v5.pt`; `task:=2`: `task2_yolo26s.pt` | YOLO model under `mdp_vision/models/` (`best_v4.pt` = previous), or a full path to a `.pt`. On a Mac its `.mlpackage` (CoreML) is used when there (`pixi run export-coreml`). Give the laptop the same `task:=` |
+| `model:=` | model file | `best_v5.pt`; `task:=2`: `task2_yolo26s.pt` | YOLO model under `mdp_vision/models/`, or a full path to a `.pt`. On a Mac its `.mlpackage` (CoreML) is used when there (`pixi run export-coreml`). Give the laptop the same `task:=` |
 | `obstacles:=` | `tablet` `yaml` | sim `yaml`, real `tablet` | `yaml` also sends `layout` once at start. The tablet link is on either way. |
 | `layout:=` | path | `config/tasks.yaml` | Obstacle layouts (task 1 in cells, task 2 in metres); in sim also Gazebo's blocks |
 | `start_cell:=` | `COL,ROW` | `1,1` | Cell under the middle of the rear axle at start |

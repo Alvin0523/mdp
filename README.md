@@ -22,7 +22,7 @@ This repository serves as the central meta-workspace for the **Mini Ackermann Ro
 
 | Component / Submodule | Role & Description | Submodule / Repository Link |
 |---|---|---|
-| [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: `ackermann_steering_controller`, `mdp_bridge` (STM32 serial + Android Bluetooth bridge), `mdp_algorithm` (Reeds-Shepp/Dubins TSP planning, spline planning, Pure Pursuit), `mdp_vision` (YOLO26 detection), Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
+| [`mdp_ros/`](mdp_ros) | ROS 2 Jazzy autonomy suite: `ackermann_steering_controller`, `mdp_bridge` (STM32 serial + Android Bluetooth bridge), `mdp_algorithm` (costmap, Hybrid A*, Reeds-Shepp visit order, path follower), `mdp_vision` (YOLO26 detection), Gazebo Sim & Foxglove bridge | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) |
 | [`mdp_stm32/`](mdp_stm32) | STM32 bare-metal (STM32Cube HAL via PlatformIO) firmware: 100 Hz wheel-speed PI control with AT8236 drivers, calibrated HWZ020 steering, Hall encoder feedback, ICM-20948 IMU, analog IR sensing, and a custom binary serial protocol over `USART3` (debug on `USART1`) | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) |
 | `docs/` | Comprehensive technical documentation site managed via [Zensical](https://zensical.org) | Built with Zensical |
 
@@ -34,7 +34,7 @@ This repository serves as the central meta-workspace for the **Mini Ackermann Ro
 |---|---|
 | **Host (`mdp_ros`)** | ROS 2 Jazzy, `ros2_control` / `ackermann_steering_controller`, `topic_based_ros2_control`, `robot_localization` (EKF), Gazebo Sim (`gz_ros2_control`), Foxglove Bridge |
 | **Firmware (`mdp_stm32`)** | STM32F407VET6, bare-metal STM32Cube HAL via PlatformIO, custom binary serial protocol |
-| **Vision & Planning** | Ultralytics YOLO26 (`mdp_vision`), Reeds-Shepp/Dubins TSP solver, spline planning, Pure Pursuit (`mdp_algorithm`) |
+| **Vision & Planning** | Ultralytics YOLO26 (`mdp_vision`), Hybrid A*, Reeds-Shepp visit order, LQR / pure pursuit follower (`mdp_algorithm`) |
 | **Tooling** | [Pixi](https://pixi.sh) (`robostack-jazzy`), [Zensical](https://zensical.org) docs site |
 
 See [System Architecture](https://alvin0523.github.io/mdp/) for the full breakdown.

@@ -47,7 +47,7 @@ are in [Quickstart → Launch arguments](../quickstart.md#launch-arguments).
 | `camera_relay` (real only) | Takes the Pi's JPEG frames over the link once, for YOLO and the bullseye matcher |
 | `yolo_detector` | YOLO on the car's camera (`model:=`; `task:=2`: `task2_yolo26s`) → `/yolo_result` |
 | `bullseye_matcher` | Task 2 bullseyes by template matching (`bullseye_matcher:=true`, default) |
-| `task1_planner` | The legs' Hybrid A* for both runners (the car plans a leg itself after `remote_plan_timeout`, 2 s); serves `/setup_obstacles` from the laptop's `tasks.yaml` |
+| `leg_planner` | The legs' Hybrid A* for both runners (the car plans a leg itself after `remote_plan_timeout`, 2 s); serves `/setup_obstacles` from the laptop's `tasks.yaml` |
 | `health_monitor` | `/diagnostics`: links, sensors, Pi load, camera/YOLO, runner |
 | `bt_monitor` | Tablet traffic as log lines (`pixi run btlog`, Foxglove's tablet log panel) |
 | `bag_recorder` | Foxglove REC / `pixi run bag`: bags land on the laptop |

@@ -11,8 +11,8 @@ Reads the symbols on the blocks: image IDs in task 1, left/right arrows in task 
 | `rpi_cam_publisher` | Pi Camera V2 (IMX219) via `rpicam-vid`, 640 × 480 @ 10 fps on `/image_raw` (plus a JPEG copy on `/image_raw/compressed` while something watches it, e.g. Foxglove). Real car only; in sim Gazebo's camera publishes `/camera/image_raw`. |
 | `yolo_detector` | YOLO (PyTorch, on the laptop's GPU: `pixi run laptop`) on the camera's JPEG stream → the symbol ID on `/yolo_result` (e.g. `20`; arrows `38` right / `39` left), and boxes drawn on `/yolo_result/image_annotated` |
 
-**Models** (`mdp_vision/models/`): `best_v5.pt` (YOLO26m trained at 640, task 1 default), `task2_yolo26s.pt` (Arrow Left / Right + Bullseye, task 2 default), `best_v4.pt` and `best.pt` (older). On a Mac the detector uses `<name>.mlpackage` (CoreML) next to the `.pt` when it is there (`pixi run export-coreml`).
-Pick one with `model:=best_v4.pt`, or a full path to any `.pt`. YOLO runs on the laptop only: PyTorch
+**Models** (`mdp_vision/models/`): `best_v5.pt` (YOLO26m trained at 640, task 1 default), `task2_yolo26s.pt` (Arrow Left / Right + Bullseye, task 2 default). The older `best_v4.pt` / `best.pt` were removed on 2026-10-17 (git history has them). On a Mac the detector uses `<name>.mlpackage` (CoreML) next to the `.pt` when it is there (`pixi run export-coreml`).
+Pick one with `model:=task2_yolo26s.pt`, or a full path to any `.pt`. YOLO runs on the laptop only: PyTorch
 crashed on the Pi, and the Pi's NCNN exports were removed (2026-10-08).
 
 **Settings:** `mdp_bringup/config/vision.yaml` (image size, frame rate, JPEG quality, topics).
@@ -33,7 +33,7 @@ crashed on the Pi, and the Pi's NCNN exports were removed (2026-10-08).
   checkpoint 1. Near checkpoint 1 the gap between arrow 2 and the bar's near bullseye in one frame
   × the ultrasonic's distance gives the bar's width (`bar_gap_scale` 1.065 on the real car; no such
   frame: the usual 60 cm) - [Quickstart → Bar width](../quickstart.md#bar-width).
-- **Known problem (task 1 models):** `best_v4` / `best_v5` often read a LEFT arrow as RIGHT (sim
+- **Known problem (task 1 models):** `best_v5` (and the older `best_v4`) often read a LEFT arrow as RIGHT (sim
   camera frame). Likely cause: left-right flip augmentation (Ultralytics' default `fliplr=0.5`);
   retrain with `fliplr=0.0`.
 
