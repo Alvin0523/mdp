@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:gravity="center"
+        android:text="TASK"
+        android:textColor="@color/colorBlack"
+        android:textStyle="bold"
+        android:background="@drawable/control_red_box" />
+
+    <TextView
+        android:id="@+id/chatTaskTimerTextView"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:layout_marginTop="2dp"
+        android:gravity="center"
+        android:text="00:00"
+        android:textColor="@color/black"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:background="@drawable/control_white_box" />
+
+    <Button
+        android:id="@+id/chatTaskStartButton"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:layout_marginTop="6dp"
+        android:text="START"
+        android:textColor="@color/black"
+        android:backgroundTint="@color/colorYellow" />
+
+    <Button
+        android:id="@+id/chatTaskStopButton"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:text="STOP"
+        android:textColor="@color/black"
+        android:backgroundTint="@color/lightRed" />
+
+    <Button android:id="@+id/chatSendObstaclesButton" android:layout_width="match_parent" android:layout_height="38dp" android:layout_marginTop="6dp" android:text="SEND OBSTACLES" android:textSize="10sp" android:textColor="@color/black" android:backgroundTint="@color/colorYellow" />
+    <Button android:id="@+id/chatResetPostButton" android:layout_width="match_parent" android:layout_height="38dp" android:text="RESET POST" android:textColor="@color/black" android:backgroundTint="@color/lightRed" />
+</LinearLayout>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="8dp"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:text="ROBOT CONTROLS"
+        android:textColor="@color/white"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="50dp"
+        android:orientation="horizontal">
+        <ImageButton android:id="@+id/leftBtn" android:layout_width="42dp" android:layout_height="42dp" android:background="@color/transparent" android:contentDescription="Turn left" android:foreground="@drawable/poke_left" />
+        <ImageButton android:id="@+id/upBtn" android:layout_width="42dp" android:layout_height="42dp" android:layout_marginStart="4dp" android:background="@color/transparent" android:contentDescription="Move forward" android:foreground="@drawable/poke_up" />
+        <ImageButton android:id="@+id/rightBtn" android:layout_width="42dp" android:layout_height="42dp" android:layout_marginStart="4dp" android:background="@color/transparent" android:contentDescription="Turn right" android:foreground="@drawable/poke_right" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="50dp"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+        <ImageButton android:id="@+id/bleftBtn" android:layout_width="42dp" android:layout_height="42dp" android:background="@color/transparent" android:contentDescription="Turn back left" android:foreground="@drawable/back_turn_left_arrow_icon" />
+        <ImageButton android:id="@+id/downBtn" android:layout_width="42dp" android:layout_height="42dp" android:layout_marginStart="4dp" android:background="@color/transparent" android:contentDescription="Move backward" android:foreground="@drawable/poke_down" />
+        <ImageButton android:id="@+id/brightBtn" android:layout_width="42dp" android:layout_height="42dp" android:layout_marginStart="4dp" android:background="@color/transparent" android:contentDescription="Turn back right" android:foreground="@drawable/back_turn_right_arrow_icon" />
+    </LinearLayout>
+</LinearLayout>
