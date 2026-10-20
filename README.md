@@ -18,16 +18,23 @@
 
 ## 📖 About
 
-This repository is the workspace for the whole robot: the code repositories as submodules, the
-Android app, the 3D-printed parts and the documentation site, all set up with [Pixi](https://pixi.sh).
+This repository is the workspace for the whole robot, set up with [Pixi](https://pixi.sh). The code
+lives in three **git submodules** (each its own repository); the rest is in this repository.
 
-| Part | Role | Repository |
-| --- | --- | --- |
-| [`mdp_ros/`](https://github.com/Alvin0523/mdp_ros) | ROS 2 Jazzy on the Pi (and the laptop): task runners, Hybrid A* / Reeds-Shepp planning, LQR path following, EKF localisation, YOLO26 vision, the STM32 and tablet bridges, Gazebo sim, Foxglove | [Alvin0523/mdp_ros](https://github.com/Alvin0523/mdp_ros) (submodule) |
-| [`mdp_stm32/`](https://github.com/Alvin0523/mdp_stm32) | STM32F407 firmware (STM32Cube HAL, PlatformIO): 100 Hz wheel-speed PI control, Ackermann steering servo, encoders, ICM-20948 IMU, IR and ultrasonic sensors, binary serial protocol to the Pi | [Alvin0523/mdp_stm32](https://github.com/Alvin0523/mdp_stm32) (submodule) |
-| [`mdp_android/`](https://github.com/RashI0192/MDP-APP) | Tablet app (Java): obstacle setup on a 20 × 20 map, Bluetooth link to the Pi, task timers and practice-run analyser | [RashI0192/MDP-APP](https://github.com/RashI0192/MDP-APP) (submodule) |
-| [`hardware/`](hardware) | 3D-print files (STL): camera mounts and stands, the "halo" | - |
-| [`docs/`](docs) | The [documentation site](https://alvin0523.github.io/mdp/) ([Zensical](https://zensical.org)) | - |
+**Submodules** (`git clone --recurse-submodules` fetches them):
+
+| Folder | What |
+| --- | --- |
+| [`mdp_ros/`](https://github.com/Alvin0523/mdp_ros) | ROS 2 Jazzy on the Pi (and the laptop): task runners, Hybrid A* / Reeds-Shepp planning, LQR path following, EKF localisation, YOLO26 vision, the STM32 and tablet bridges, Gazebo sim, Foxglove |
+| [`mdp_stm32/`](https://github.com/Alvin0523/mdp_stm32) | STM32F407 firmware (STM32Cube HAL, PlatformIO): 100 Hz wheel-speed PI control, Ackermann steering servo, encoders, ICM-20948 IMU, IR and ultrasonic sensors, binary serial protocol to the Pi |
+| [`mdp_android/`](https://github.com/RashI0192/MDP-APP) | Android tablet app (Java): obstacle setup on a 20 × 20 map, Bluetooth link to the Pi, task timers and practice-run analyser |
+
+**In this repository:**
+
+| Folder | What |
+| --- | --- |
+| [`docs/`](docs) | The [documentation site](https://alvin0523.github.io/mdp/) ([Zensical](https://zensical.org)) |
+| [`hardware/`](hardware) | 3D-print files (STL): camera mounts and stands, the "halo" |
 
 ## 🏗️ System Architecture
 

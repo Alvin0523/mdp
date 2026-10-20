@@ -1,3 +1,7 @@
+---
+icon: lucide/bluetooth
+---
+
 # Tablet link (Bluetooth)
 
 The Android tablet talks to the Pi over Bluetooth Classic, as a serial port (RFCOMM). On the Pi,

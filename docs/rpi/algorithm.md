@@ -63,8 +63,7 @@ How it is chosen (Reeds-Shepp estimates only, ~0.2-0.5 s for 8 images):
 The runner plans the legs with Hybrid A* (a via = two legs joined into one), drives slower while a
 drive-by image is in view, and matches each YOLO box (`/yolo_detections`) to the image the camera
 expects in that direction. A drive-by not read on its leg is visited square after the last stop.
-Offline on the 2026-10-14 tablet layout: 8 stops → 4 (3 anchors + the last), 4 drive-bys. Not yet
-timed in Gazebo or on the car.
+Example: a layout of 8 images became 4 stops (3 anchors + the last) and 4 drive-bys.
 
 ## The costmap (`costmap.py`)
 

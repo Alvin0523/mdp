@@ -41,6 +41,15 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
 
 ## :robot: ROS2 (`mdp_ros`)
 
+??? question "Mac: nodes using `mdp_interfaces` die with `invalid allocator`"
+
+    ROS loads the `RunStatus` message's library by name (`dlopen`) through `DYLD_LIBRARY_PATH`.
+    macOS (SIP) strips every `DYLD_*` variable from `install/setup.bash` and from pixi's
+    `[activation.env]` alike - only a task's own `env` gets through. So every task in
+    `mdp_ros/pixi.toml` that starts ROS nodes sets `DYLD_LIBRARY_PATH` itself (2026-10-14). Unused on
+    Linux. A command run with plain `pixi run -- ros2 …` on a Mac needs it too:
+    `DYLD_LIBRARY_PATH=$PWD/install/mdp_interfaces/lib pixi run -- ros2 …`.
+
 ??? question "`pixi run pi`: `serial_bridge_node` dies with `Failed to open serial port /dev/stm32_serial` (or `cannot open`)"
 
     `/dev/stm32_serial` comes from the udev rule in `mdp_stm32/udev/` (the board's USB-serial chip,
@@ -93,6 +102,37 @@ Real gotchas we've actually hit, so nobody has to rediscover them. Click a title
       colcon build --symlink-install --packages-select libcamera --meson-args -Dsoftisp-gpu=disabled
       ```
       Run this once to get `libcamera` built, then `pixi run build` again for the remaining packages — colcon should skip recompiling `libcamera` incrementally after that.
+
+## :globe_with_meridians: Network (Pi ↔ laptop)
+
+??? question "Topics arrive late or in bursts"
+
+    Check `tailscale status` on the laptop: `relay "sin"` means no direct path - every packet goes
+    through Tailscale's Singapore server (NTUSECURE blocks the direct one). Put both machines on a
+    router you control; Tailscale switches to `direct` by itself. See [Network](rpi/network.md).
+
+??? question "Try Fast DDS instead of Cyclone DDS? (not recommended)"
+
+    Possible - `MDP_RMW=fastdds pixi run …` on **both** machines - but slower: it took seconds to
+    discover the other machine over Tailscale's relay and dropped camera frames like Cyclone. Cyclone
+    DDS is the default for that reason.
+
+??? question "Try the Pi's own WiFi hotspot instead of Tailscale? (had issues)"
+
+    We moved off it: the Pi's one WiFi chip cannot run a hotspot and join NTUSECURE at once, so the
+    Pi had no internet (no `git pull` / `pixi install`), and the link was unreliable. To try it
+    anyway:
+
+    ```bash
+    sudo nmcli con add type wifi ifname wlan0 con-name MDP-Hotspot ssid MDP-Grp14 \
+      802-11-wireless.mode ap 802-11-wireless.band a 802-11-wireless.channel 36 \
+      wifi-sec.key-mgmt wpa-psk wifi-sec.psk "<password>" ipv4.method shared ipv4.addresses 10.43.0.1/24
+    sudo nmcli con up MDP-Hotspot          # back: sudo nmcli con up NTUSECURE
+    ```
+
+    Then on both machines: Tailscale off, `ROS_STATIC_PEERS = "10.43.0.1;<laptop's address>"` in
+    `mdp_ros/pixi.toml`, `pixi run ros2 daemon stop`. The Pi has no clock without internet - its
+    time drifts, so sync it to the laptop (chrony) if timestamps matter.
 
 ## :twisted_rightwards_arrows: Git / submodules
 

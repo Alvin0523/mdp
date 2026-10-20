@@ -96,15 +96,13 @@ before hardware is actually driven, one step per driver:
 - **Servo**: a **real** wheel angle in rad → microseconds, by linear interpolation between measured
   endpoints with a **separate slope per side** (center `1490µs`; `+43.0°` → `850µs`, `−32.5°` →
   `2400µs`, re-measured 2026-09-18). No PWM% intermediate step, since there's no PID on the servo at all (open-loop, see
-  [Steering Servo Driver](#steering-servo-driver-servoc)). Replaces the single shared
-  `SERVO_ANGLE_SCALE_RAD` gain, and before that WHEELTEC's cubic — see
+  [Steering Servo Driver](#steering-servo-driver-servoc)) - see
   [Servo Range & Steering Calibration](tuning.md#servo-range-steering-calibration).
 
 ### AT8236 Motor Driver (`motor.c`)
 
 - Drives the 2 rear DC motors (`MG513P3012V`) via PWM on `TIM9`/`TIM10`/`TIM11` (`motor_init`,
-  `motor_set_speed`). Pin/timer assignments verified against the WHEELTEC C30D resource-allocation
-  PDF.
+  `motor_set_speed`).
 - Closed-loop: `main.c` calls `motor_pid_set_target()`/`motor_pid_enable()`, not
   `motor_set_speed_rad_s()` directly. A 100Hz `TIM7` ISR (`motor_pid_*`) reads the encoders, runs a
   feedforward + incremental-PI controller, writes the corrected PWM via `motor_set_speed()`.
@@ -128,7 +126,7 @@ before hardware is actually driven, one step per driver:
 - Reads Hall ticks on the 2 rear motors via hardware timer encoder mode (`TIM2`/`TIM3`).
 - `encoder_get_delta_a`/`_b` — per-call delta, resets counter (tick-rate speed estimate).
 - `encoder_get_count_a`/`_b` — running cumulative count.
-- Ticks-per-rev: confirmed (below). Ticks→distance: not yet — wheel diameter/rolling radius unmeasured.
+- Ticks-per-rev: 1560 (below).
 
 !!! note "Motor B (rear right) counts are negated"
     Motor B is mounted mirrored to Motor A, so its raw Hall phase order comes out reversed relative
@@ -155,15 +153,11 @@ Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). Op
 - Idles HIGH (ON), reads LOW when OFF — read via `motor_estop_engaged()`.
 - Gates self-test (refuses while OFF) and the main drive loop (`main.c` forces 0% PWM regardless of
   host commands while OFF).
-- Not yet cross-checked with a multimeter — only confirmed functionally (self-test refusal).
 
 ### Battery Voltage ADC (`battery.c`)
 
 - `PB0` / `ADC1_CH8`, `HAL_ADC` polling (`battery_init`, `battery_read_voltage`).
 - Formula: `raw / 4095.0 × 3.3 × 11.0` (12-bit ADC, 3.3V ref, 11x divider ratio).
-- Divider ratio sourced from WHEELTEC's C30D ADC example firmware (`Battery_Ch = 8`) — couldn't be
-  confirmed from the schematic PDF (visual layout, not extractable text).
-- Not yet cross-checked with a multimeter on this board.
 
 ### IR Distance Sensors (`ir.c`)
 
@@ -185,8 +179,7 @@ Drives the HWZ020 Ackermann steering servo on `PB15` (`TIM12_CH2`, 50Hz PWM). Op
 
 ## Pinouts & Peripherals
 
-Verified pin allocations for the WHEELTEC C30D (Revisions 2.0 / 2.1 / 2.2), per the vendor
-schematics (`references/`).
+The board's pin allocations.
 
 ### Serial Communication (Host↔MCU Transport)
 

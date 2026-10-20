@@ -48,4 +48,3 @@ In the URDF (`camera_joint`, measured on the car):
 
 The runner reads the position from the URDF, so moving the camera needs no code change.
 
-Still to write up: training data and model accuracy.

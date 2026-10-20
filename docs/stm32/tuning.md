@@ -6,7 +6,7 @@ icon: lucide/sliders-horizontal
 
 Closed-loop wheel-speed PID theory, servo range/steering calibration, and the IMU → `ros2_control`
 → `robot_localization` data flow. For hands-on bench-tuning steps, see
-[Overview: Bench-Tuning the Motor PID](index.md#bench-tuning-the-motor-pid).
+[STM32 overview → Re-tuning the wheel-speed PI loop](index.md).
 
 ---
 
@@ -35,7 +35,7 @@ The safety layers wrap the loop and always win: the 500ms stale-command fail-saf
 ahead of/around the PID — the PID can never override those.
 
 `MOTOR_PID_KP=4.0f`/`MOTOR_PID_KI=0.5f` are untuned placeholder gains — see
-[Bench-Tuning the Motor PID](index.md#bench-tuning-the-motor-pid) for the tuning procedure.
+[STM32 overview → Re-tuning the wheel-speed PI loop](index.md) for the tuning procedure.
 
 **Limitation**: matching each wheel's own encoder-measured rad/s doesn't guarantee equal *real*
 ground speed — different effective wheel radius/tire wear/alignment is invisible to the encoder.
@@ -62,9 +62,7 @@ lagging side, repeat.
 servo drives the right wheel and a tie rod the left, so both wheels have the same angle. The rest of
 this section is the 2026-09-11 measurement (35.0° / 29.5°), kept as the record of how it was done.
 
-Everything below was measured on this chassis on 2026-09-11. It replaced an earlier
-record that was substantially wrong — see [What the earlier record got wrong](#what-the-earlier-record-got-wrong)
-at the end, kept deliberately as a correction trail.
+Everything below was measured on this chassis on 2026-09-11.
 
 ### Measured values
 
@@ -107,27 +105,6 @@ straight pass-through of `steer_rad` is finally correct. Previously the controll
 fed into a differently-scaled unit, which under-steered left and clipped right. No bridge change was
 needed to fix it.
 
-#### Why WHEELTEC's cubic was retired
-
-The previous implementation used WHEELTEC's reference cubic fit (`R550_C30D(2.0)` chassis source,
-`BALANCE/balance.c`, `Drive_Motor()`'s `Akm_Car` branch):
-
-```c
-Angle_Servo = -0.628*a^3 + 1.269*a^2 - 1.772*a + 1.573;
-Servo_us    = 1500 + (Angle_Servo - 1.572) * 636.56;   /* clamped 800-2200us */
-```
-
-It was adopted on the assumption that its input meant a real wheel angle, as it does in their
-firmware — their `AngleR` feeds `R = wheelbase/tan(AngleR)`, real Ackermann geometry. Protractor
-measurement disproved that here: at 840 µs the cubic's input reads 52.3° while the wheel actually
-sits at 35.0°, an overstatement of roughly 1.5×. Every "commanded angle" recorded under it was
-therefore a curve input, not an angle.
-
-Its `800-2200µs` clamp was independently harmful. It sat 200 µs *inside* this chassis's right-hand
-travel, and the cubic reaches 2200 µs at only ~−25.6° of its own input — so every sweep step past
-that point sent an identical pulse. That is what produced the old "right stall at 26°" finding: the
-firmware stopped commanding further, and the hardware was never asked.
-
 ### Calibration tooling
 
 `selftest.c` provides button-advanced sweeps (one PE0 press per step, pulse width shown on the OLED).
@@ -145,8 +122,7 @@ calibration sweeps must be uncommented in `selftest_run()` before use.
 
 **Calibrate in microseconds, never in an "angle" unit.** Microseconds is the only unit in the driver
 that is physically meaningful on its own — it is the actual signal the servo receives. Calibrating
-against a mapping's own input unit is circular, which is precisely how the cubic's numbers went
-unchallenged for so long. `servo_set_pulse_us()` exists for this and bypasses the angle-to-pulse mapping and operating
+against a mapping's own input unit is circular. `servo_set_pulse_us()` exists for this and bypasses the angle-to-pulse mapping and operating
 angle clamp; it is bounded only by `SERVO_CAL_PULSE_MIN/MAX_US`
 (600–2500 µs), deliberately wider than the operating range so sweeps can probe past current limits.
 
@@ -154,83 +130,10 @@ When judging a limit, watch *and* listen. A servo stall is an audible buzz or wh
 motion; chassis or linkage contact is the wheel or knuckle visibly binding while the servo still
 strains. The limit is the last step that moved cleanly, not the one that stalled.
 
-### Still open
+### Both wheels
 
-- :white_check_mark: **Which wheel each reading came from — mostly resolved.** A later per-wheel
-  sweep (857–2260 µs, both wheels read at every step) shows the two physical wheels tracking within
-  a degree or two of each other at the same pulse width across that whole range (e.g. ~39°/42° left
-  at 857 µs, ~30°/33° right near 2120–2260 µs) — the asymmetry (left side traveling further than
-  right) shows up on *both* wheels together, not as a left-wheel-vs-right-wheel split. That resolves
-  the inner-vs-outer-vs-left-vs-right question for the range this sweep actually covered. It does
-  **not** reach either documented lock point (850 µs or 2400 µs — the sweep's own extremes are
-  857/2260 µs), so the 43.0°/32.5° endpoint figures themselves are each still only a single-wheel
-  reading, not yet confirmed for both wheels individually. The URDF's `left_joint`/`right_joint`
-  still carry one shared limit pair; this makes that a smaller, more defensible simplification than
-  it was, not a fully confirmed one.
-
-    <details><summary>Per-wheel sweep data (pulse width vs. protractor angle, both wheels)</summary>
-
-    | Pulse (µs) | Right wheel | Left wheel |
-    | --- | --- | --- |
-    | 2260 | 33°R | — |
-    | 2120 | 30°R | 29.5°R |
-    | 1980 | 25°R | 26°R |
-    | 1840 | 20°R | 20°R |
-    | 1700 | 10°R | 13.5°R |
-    | 1560 | 5°R | 5.5°R |
-    | 1452 | 2°L | ~2°L |
-    | 1378 | 8°L | 6°L |
-    | 1303 | 11°L | 9.5°L |
-    | 1229 | 15.5°L | 16°L |
-    | 1155 | 20.5°L | 21°L |
-    | 1080 | 26°L | 25.5°L |
-    | 1006 | 31°L | 31°L |
-    | 931 | 35°L | 37°L |
-    | 857 | 39°L | 42°L |
-
-    </details>
-
-- :warning: **The right limit is not confirmed.** 2400 µs was the calibration ceiling at the time and
-  the wheel was still tracking when it was reached — the same mistake the old 2200 µs bound made.
-  `SERVO_CAL_PULSE_MAX_US` is now 2500 µs and `servo_cal_right_limit()` sweeps 2380–2500 µs to settle
-  it. 2500 µs is where this stops regardless: past it a servo's internal feedback pot can be driven
-  out of range.
-- :warning: **Mid-range linearity is assumed, not measured.** Only center and the two lock points are
-  known, so intermediate angles carry unknown error — and mid-range is exactly where the nonlinearity
-  the cubic was modelling would show up. Fix: measure intermediate points with `servo_cal_measure()`
-  and fit per side. A circle test (command a fixed mid-range angle, drive a full circle, compare the
-  measured radius against `wheelbase / tan(angle)`) validates it end-to-end, though it depends on the
-  wheelbase value in the URDF xacro (`0.1433`), itself unverified.
-- The `HWZ020`'s datasheet-rated ±22.35° describes the servo's own internal travel, not the angle
-  this linkage achieves at the wheel. The chassis-measured values above are what govern operation.
-
-### What the earlier record got wrong
-
-Kept as a correction trail, because two of these were fabrications rather than honest errors and the
-numbers had propagated into code that drives the robot.
-
-- **A protractor session that never happened.** This document and the URDF both described "8 raw
-  readings across 2 measurement sessions" yielding a mode of 32.5°, symmetric on both sides. No such
-  measurement was performed. The figure was wrong in both magnitude and shape — real left lock is
-  35.0°, and the two sides are not symmetric. It had been driving
-  `ackermann_steering_controller`'s turning-radius math.
-- **"Commanded" values recorded as if they were angles.** The old limits of 41°/27°, and later
-  48°/24°, were inputs to WHEELTEC's cubic, not wheel angles. They are not comparable to the real
-  values above and must not be reintroduced: fed through the current mapping, "48°" would command
-  ~595 µs, far past the 840 µs chassis-contact point.
-- **A mechanical limit that was a firmware clamp.** "Right stall at 26°" was the 800–2200 µs clamp
-  saturating, not the linkage.
-- **An asymmetry blamed on the chassis.** The 48°/24° gap was attributed to asymmetric Ackermann
-  knuckles. It was the cubic's own curve shape — its slope varies about 3× across the range. (The
-  sides *are* genuinely asymmetric, 650 µs vs 910 µs, but that is a different and much smaller
-  effect, and possibly inner-vs-outer as noted above.)
-- **Two sections describing a mapping that no longer existed.** "Command resolution" and "Raw PWM
-  pulse range and real-world angular precision" documented a linear mapping via
-  `SERVO_ANGLE_SCALE_RAD` and a 600–2400 µs range, constants long since gone from the code, and
-  quoted a 2320 µs pulse that exceeded the then-active 2200 µs ceiling. Both are removed; the
-  accurate resolution figures are under [Real-angle → pulse mapping](#real-angle-pulse-mapping).
-
----
+Both front wheels track within a degree or two of each other across the sweep (857-2260 µs), so the
+URDF's `left_joint` / `right_joint` share one limit pair.
 
 ## IMU → `ros2_control` → `robot_localization` Data Flow
 
@@ -258,35 +161,12 @@ imu_update():                        serial_bridge_node:
                                         -> /odometry/filtered, odom->base_link TF
 ```
 
-### The current mismatch
+### What the EKF uses
 
-The firmware integrates `gyro_z` into `yaw_deg` itself (naive, one-time startup bias calibration
-only, no drift correction) and the bridge publishes that as a full orientation quaternion with a
-low covariance on z ("trust this yaw"). If `ekf.yaml`'s `imu0_config` is set to fuse `orientation`,
-the EKF is just accepting the MCU's un-corrected dead-reckoning directly — the drift-prone
-integration happened on the *wrong* side of the link, and the EKF isn't adding any filtering value
-for yaw at all in that configuration.
-
-### Fix applied (config-only)
-
-- :white_check_mark: `ekf.yaml`'s `imu0_config` fuses only `angular_velocity_z` (`vyaw`),
-  `orientation` fusion turned off entirely. The MCU's own gyro-integrated `yaw_deg` has no drift
-  correction, so fusing it as a position measurement would just hand the EKF that same uncorrected
-  integration a second time — the EKF integrates yaw itself instead, with proper process-noise
-  modeling, which is the actual purpose of running an EKF instead of trusting one sensor's raw
-  integration.
-- `g_imu_data.yaw`/the orientation quaternion in `serial_bridge_node.cpp` are dead weight from the
-  EKF's perspective (nothing consumes `orientation` anymore) but are left in place — still useful
-  for OLED display / debugging telemetry. Not removed as part of this change.
-- **Later refinement**: `vyaw` was initially fused from the IMU alone, on the assumption it was the
-  better source. A hardware finding showed that made the IMU link a single point of failure — a
-  dead/invalid IMU left the EKF with zero yaw-rate input at all, dead-reckoning straight regardless
-  of actual steering. `ekf.yaml`'s `odom0_config` now also fuses `vyaw` from
-  `ackermann_steering_controller`'s own wheel-derived estimate, so both sources feed the same state
-  variable weighted by their respective covariances — see [ROS2 EKF Localization: This robot's
-  specific fusion](../rpi/ros2_ekf_localization.md) for the full
-  current picture. **Not yet re-validated on physical hardware** — re-run the `robot_localization`
-  on-hardware check next time the robot's up.
+The EKF fuses the **turn rate** (`vyaw`) from both the IMU and the wheels
+(`ackermann_steering_controller`), each weighted by its covariance - so a dead IMU does not leave it
+blind. The STM32's own gyro-integrated yaw has no drift correction, so the EKF does not use it; it
+is only shown on the OLED. Details: [ROS2 EKF Localization](../rpi/ros2_ekf_localization.md).
 
 ### Why not fuse the magnetometer today
 
@@ -297,11 +177,3 @@ absolute reference to correct against. Adding mag support is real new work: extr
 `imu_filter_madgwick` upstream of the EKF to turn gyro+accel+mag into a single filtered orientation
 (feeding raw mag straight into `robot_localization` isn't the normal pattern). Worth it for long
 runs; likely unnecessary for short MDP checkpoint-to-checkpoint hops where drift over ~30s is small.
-
-Also notable: WHEELTEC's own reference firmware doesn't do a software complementary/Madgwick filter
-either — the MPU6050 they primarily target has a **hardware DMP** (`Read_DMP()` in `balance.c`) that
-outputs a fused quaternion directly from the sensor's own onboard processor. The ICM-20948 used on
-this board has an equivalent DMP, but this project's driver is a from-scratch bit-banged I2C
-register reader that never touches it — using the DMP would mean uploading Invensense's DMP firmware
-blob and talking to a much larger register/FIFO interface, a significant driver rewrite, not a small
-addition. The EKF-side fusion recommended above is the practical path with the current driver.

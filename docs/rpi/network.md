@@ -4,162 +4,58 @@ icon: lucide/wifi
 
 # Network (Pi ↔ laptop)
 
-For the [Pi + laptop split](../quickstart.md#pi-laptop-yolo-and-planning-on-the-laptop): the
-Pi drives, the laptop runs YOLO and plans. They talk over a direct link: the Ethernet cable
-on the bench, the Pi's own 5 GHz hotspot on the arena. The laptop is the clock both go by.
+For the [Pi + laptop split](../quickstart.md): the
+Pi drives, the laptop runs YOLO and plans. **They talk over [Tailscale](https://tailscale.com/)**:
+both join a WiFi with internet (NTUSECURE, or any router), and Tailscale gives each a fixed
+address that works on any network.
 
-| | Pi | Laptop |
+| | Pi (`mdp-g14`) | Laptop |
 | --- | --- | --- |
-| Ethernet cable (bench, debugging) | `10.42.0.1` | `10.42.0.10` |
-| Hotspot `MDP-Grp14` (5 GHz, channel 36) | `10.43.0.1` | `10.43.0.10` |
-| Internet | none while the hotspot is on | its own WiFi |
-| Clock | follows the laptop (chrony) | chrony server |
+| Tailscale address | `100.102.151.31` | `100.87.142.86` |
+| SSH | `ssh grp14@100.102.151.31` | - |
+| Clock | from the internet (NTP) | from the internet |
 
-!!! warning "The Pi has no internet once the hotspot is on"
-    Its one WiFi chip can't be a hotspot and join NTUSECURE at the same time. Do everything
-    that needs internet first (`git pull`, `pixi install`, `apt install`). To get it back for
-    a while: `sudo nmcli con up NTUSECURE` (the hotspot goes off until the next reboot or
-    `sudo nmcli con up MDP-Hotspot`).
+## 1. Tailscale
 
-## SSH
-
-| Link | Command |
-| --- | --- |
-| Ethernet cable | `ssh grp14@10.42.0.1` |
-| Hotspot | `ssh grp14@10.43.0.1` |
-
-Tailscale is off and does not start at boot: on the hotspot the Pi has no internet for it, and
-an SSH session through it cost ~25% of the Pi's CPU (2026-10-02). For remote access while the
-Pi is on a WiFi with internet:
+Both machines log in to the same Tailscale account once; after that the addresses above stay
+the same. On the Pi:
 
 ```bash
 sudo systemctl enable --now tailscaled     # on, and at every boot
 sudo systemctl disable --now tailscaled    # off again
 ```
 
-## 1. Ethernet cable
+Check from the laptop: `tailscale status` lists `mdp-g14` as `active`, and
+`ssh grp14@100.102.151.31` logs in.
 
-Both sides have a fixed address and no gateway, so the laptop keeps its internet on its WiFi.
+!!! warning "On NTUSECURE the link is often relayed"
+    `tailscale status` showing `relay "sin"` means no direct path: every packet goes through
+    Tailscale's Singapore server. It works, but with the camera stream on it topics arrived in
+    bursts 0.1-0.7 s late (bags, 2026-10-15). A router both machines join (e.g. "scott1") gives a
+    direct path - Tailscale finds it by itself, `tailscale status` then shows `direct`.
 
-=== "Pi"
+## 2. ROS discovery
 
-    ```bash
-    sudo nmcli con mod "Wired connection 1" ipv4.method manual ipv4.addresses 10.42.0.1/24
-    sudo nmcli con up "Wired connection 1"
-    ```
-
-=== "Laptop"
-
-    ```bash
-    nmcli con show                    # find the wired connection's name
-    sudo nmcli con mod "<wired>" ipv4.method manual ipv4.addresses 10.42.0.10/24 ipv4.never-default yes
-    sudo nmcli con up "<wired>"
-    ```
-
-Check: `ssh grp14@10.42.0.1` from the laptop.
-
-## 2. Clock sync (chrony)
-
-The Pi 4 has no real-time clock: without internet it boots with the wrong time. Camera frames,
-YOLO results and sensor data carry timestamps, so the Pi follows the laptop's clock.
-
-=== "Laptop (server)"
-
-    ```bash
-    sudo apt install -y chrony
-    sudo nano /etc/chrony/conf.d/mdp.conf
-    ```
-    ```
-    allow 10.42.0.0/24
-    allow 10.43.0.0/24
-    local stratum 10
-    ```
-    ```bash
-    sudo systemctl restart chrony
-    sudo ufw allow from 10.42.0.0/24    # only if `sudo ufw status` is active
-    sudo ufw allow from 10.43.0.0/24
-    ```
-    `allow`: serve time to the Pi on the cable and the hotspot. `local stratum 10`: keep
-    serving when the laptop itself is offline.
-
-=== "Pi (client)"
-
-    ```bash
-    sudo apt install -y chrony          # replaces systemd-timesyncd
-    sudo nano /etc/chrony/sources.d/laptop.sources
-    ```
-    ```
-    server 10.42.0.10 iburst prefer
-    server 10.43.0.10 iburst prefer
-    ```
-    ```bash
-    sudo nano /etc/chrony/conf.d/mdp.conf
-    ```
-    ```
-    makestep 1 -1
-    ```
-    ```bash
-    sudo systemctl restart chrony
-    ```
-    Both laptop addresses (cable, hotspot): chrony uses whichever answers. `makestep 1 -1`:
-    jump the clock whenever it is more than 1 s off, not only at boot.
-
-Check on the Pi:
-
-| Command | Good |
-| --- | --- |
-| `chronyc sources` | `^*` in front of `10.42.0.10` (or `10.43.0.10` on the hotspot) |
-| `chronyc tracking` | `Reference ID` = the laptop, `System time` < 0.005 s |
-
-`^?` with Reach `0` = no answer yet. chrony then waits up to minutes between tries; after
-fixing the laptop, `sudo chronyc burst 4/4` asks again straight away.
-
-## 3. ROS discovery
+**Middleware: Cyclone DDS**, set by `mdp_ros/scripts/activate_rmw.sh` on every `pixi run`.
+Fast DDS and the Pi's own hotspot were tried and are slower / unreliable:
+[Troubleshooting → Network](../troubleshooting.md#network-pi-laptop).
 
 No multicast discovery (unreliable over WiFi, and it would find other groups' robots on campus
-WiFi): each machine reaches the other directly. In `mdp_ros/pixi.toml`, the same on both:
+WiFi): each machine reaches the other directly, at its Tailscale address. In `mdp_ros/pixi.toml`,
+the same on both:
 
 ```toml
 [activation.env]
 ROS_DOMAIN_ID = "14"
 ROS_AUTOMATIC_DISCOVERY_RANGE = "LOCALHOST"
-ROS_STATIC_PEERS = "10.42.0.1;10.42.0.10"     # Ethernet cable
-# ROS_STATIC_PEERS = "10.43.0.1;10.43.0.10"   # Pi's WiFi hotspot MDP-Grp14
+ROS_STATIC_PEERS = "100.102.151.31;100.87.142.86"   # Pi; laptop (listing yourself is harmless)
 ```
 
-Moving to the hotspot: swap which `ROS_STATIC_PEERS` line is commented, on both machines. After
-any change: `pixi run ros2 daemon stop`.
+Cyclone sends on one network interface, picked "arbitrarily" when left alone - on the Pi that was
+`wlan0`, which the laptop cannot reach over NTUSECURE. So `activate_rmw.sh` binds it to this
+machine's Tailscale address (`100.64.0.0/10`), and only that (with loopback as well it flooded
+`ddsi_udp_conn_write … failed`, 2026-10-15). With Tailscale off, Cyclone picks an interface itself:
+the robot still runs on its own, without the laptop.
 
-Check on the laptop: `pixi run ros2 topic list` shows the Pi's topics (with `pixi run pi` on the Pi).
-
-## 4. Pi hotspot
-
-Do this last: the Pi loses its internet here.
-
-```bash
-sudo raspi-config nonint do_wifi_country SG     # 5 GHz needs the country set
-sudo nmcli con add type wifi ifname wlan0 con-name MDP-Hotspot ssid MDP-Grp14 \
-  802-11-wireless.mode ap 802-11-wireless.band a 802-11-wireless.channel 36 \
-  wifi-sec.key-mgmt wpa-psk wifi-sec.psk "<password>" \
-  ipv4.method shared ipv4.addresses 10.43.0.1/24 \
-  connection.autoconnect yes connection.autoconnect-priority 100
-sudo nmcli con mod NTUSECURE connection.autoconnect no   # don't take wlan0 back at boot
-sudo nmcli con up MDP-Hotspot
-```
-
-| Setting | Why |
-| --- | --- |
-| `band a`, channel 36 | 5 GHz: faster, and away from the tablet's Bluetooth (2.4 GHz). 36 is not a radar (DFS) channel, so a hotspot may use it |
-| `ipv4.method shared` | The Pi hands out addresses (DHCP) on `10.43.0.x` |
-| `autoconnect-priority 100` | The hotspot comes up on every boot |
-
-## 5. Moving the laptop to the hotspot
-
-1. Laptop: join `MDP-Grp14`, then give it a fixed address on it:
-   ```bash
-   sudo nmcli con mod MDP-Grp14 ipv4.method manual ipv4.addresses 10.43.0.10/24 ipv4.never-default yes
-   sudo nmcli con up MDP-Grp14
-   ```
-2. Both machines: switch `ROS_STATIC_PEERS` to the hotspot line ([3](#3-ros-discovery)).
-3. Unplug the cable. Check: `ping 10.43.0.1` from the laptop < 20 ms, also with the car at the
-   far side of the arena; `chronyc sources` on the Pi shows `^*` on `10.43.0.10`.
+After any change: `pixi run ros2 daemon stop`. Check on the laptop: `pixi run ros2 topic list`
+shows the Pi's topics (with `pixi run pi` on the Pi).

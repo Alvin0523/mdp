@@ -49,6 +49,7 @@ nav = [
     { "Home" = "index.md" },
   ] },
   { "Quickstart" = "quickstart.md" },
+  { "How the tasks are solved" = "tasks.md" },
   { "Assessment & Checklist" = "assessment_checklist.md" },
   { "Android" = [
     { "Overview" = "android/index.md" },

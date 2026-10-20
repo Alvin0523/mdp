@@ -24,11 +24,11 @@ graph LR
 
 | Subsystem | Code |
 | --- | --- |
-| 📱 [**Android**](android/index.md) | `mdp_android/` ([RashI0192/MDP-APP](https://github.com/RashI0192/MDP-APP)) |
-| 🖥️ [**Raspberry Pi**](rpi/index.md) | `mdp_ros/` |
+| 📱 [**Android**](android/index.md) | `mdp_android/` (submodule) |
+| 🖥️ [**Raspberry Pi**](rpi/index.md) | `mdp_ros/` (submodule) |
 | 👁️ [**Vision**](rpi/vision.md) | `mdp_ros/src/mdp_vision/` |
 | 🧭 [**Algorithm**](rpi/algorithm.md) | `mdp_ros/src/mdp_algorithm/` |
-| ⚡ [**STM32**](stm32/index.md) | `mdp_stm32/` |
+| ⚡ [**STM32**](stm32/index.md) | `mdp_stm32/` (submodule) |
 
 ---
 
@@ -41,4 +41,4 @@ graph LR
 | 🔧 [**Hardware Components**](hardware.md) | Component list, physical specs, and drivetrain parameters. |
 | 🔄 [**Dev Workflow & Setup**](dev_workflow.md) | Branch/commit conventions, the dev loop, and the optional OpenSpec workflow. |
 | 🚨 [**Troubleshooting**](troubleshooting.md) | Known issues and git submodule help. |
-| 📖 [**References**](references.md) | External tool documentation links and WHEELTEC vendor file directory map. |
+| 📖 [**References**](references.md) | Links to the tools' documentation and the course documents. |

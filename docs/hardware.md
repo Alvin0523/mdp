@@ -4,13 +4,13 @@ icon: lucide/list
 
 # Hardware Components & Physics Specifications
 
-This page documents the verified hardware components and physical specifications for the **MDP Course (Semester 1 AY26/27)** based on the official course component list (`docs/attachments/MDP student component list_ Sem1_2627.pdf`) and WHEELTEC C30D Rev 2.1 schematics.
+This page documents the verified hardware components and physical specifications for the **MDP Course (Semester 1 AY26/27)** based on the official course component list (`docs/attachments/MDP student component list_ Sem1_2627.pdf`).
 
 ## MDP Course Hardware Specifications
 
 | Component | Course Specification | Physical & URDF Physics Details |
 | --- | --- | --- |
-| **Control Board** | **WHEELTEC C30D V2.1** | STM32F407VET6 MCU mounted on acrylic protector plate |
+| **Control Board** | **STM32F407VET6 board** | Mounted on an acrylic protector plate |
 | **Drive Motors** | `MG513P3012V` (×2) | 12V DC geared motors (1:30 reduction ratio), 330 RPM max speed, driving rear wheels (`lb_joint`, `rb_joint`) |
 | **Wheel Encoders** | **Hall Encoders** (2.54mm pitch, 6-pin) | 2 units mounted on drive motors (Model: `MG513P3012V`) |
 | **Steering Servo** | Model `HWZ020` (4.8V – 7.4V) | Front Ackermann steering servo (`left_joint`, `right_joint`). **Stall Torque:** 1.96 N·m (20 kg·cm). **Max Speed:** 6.54 rad/s (0.16s / 60°). **Datasheet travel:** $\pm 22.35^\circ$ ($\pm 0.39\text{ rad}$) — the servo's own internal range, *not* the angle this chassis's linkage achieves at the wheel (measured: left $43.0^\circ$, right $32.5^\circ$, both wheels the same angle) |
@@ -32,18 +32,3 @@ Wheelbase, tracks, tyre size, steering limits, body outline, turning circles and
 as measured on our car, with where each lives and how to re-measure it:
 [Quickstart → Measured car numbers](quickstart.md#7-measured-car-numbers). That table is the one
 kept up to date; it is not repeated here.
-
----
-
-## Key Differences from Standard WHEELTEC Stock Models
-
-1. **Hall Encoders vs. GMR Encoders**:
-   - The official MDP course kit uses **Hall Encoders** on `MG513P3012V` motors (6-pin 2.54mm pitch connector).
-   - Firmware encoder decode logic (`src/encoder.c`) uses Hall encoder pulse resolution.
-
-2. **Drivetrain Layout**:
-   - **2 Driven Rear Wheels** (Left Motor A, Right Motor B) + **1 Steering Servo** (`HWZ020`) controlling front wheels in an Ackermann geometry.
-
-3. **Onboard Computing & Perception**:
-   - **Raspberry Pi 4B (4GB)** serves as the main host computer running ROS2 Jazzy and the `mdp_bridge` serial bridge node over USB serial (`USART3`).
-   - Perception hardware includes **RPi Camera V2**, **2× Sharp GP2Y0A21YK IR sensors**, and **1× HC-SR04 Ultrasonic sensor**.

@@ -13,7 +13,7 @@ Always two halves, sim and real alike (since 2026-10-16), nothing runs alone:
 | The car (Gazebo) | `pixi run sim` (`sim:=true`) | `pi` (default) |
 | The laptop | `pixi run laptop` (+ `sim:=true` next to `pixi run sim`) | `laptop` |
 
-Task 2 in one zellij window: `pixi run car` (real) / `pixi run sim-car` (sim). The other arguments
+Both halves + Foxglove in one zellij window, any task: `pixi run car` (real) / `pixi run sim-car` (sim), with the same launch arguments. The other arguments
 are in [Quickstart → Launch arguments](../quickstart.md#launch-arguments).
 
 ## What gets started
