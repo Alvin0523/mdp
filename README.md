@@ -1,5 +1,7 @@
 # 🏎️ MDP: Autonomous Mini Ackermann Robot (Group 14)
 
+**🏆 First approved ROS2 Team in MDP**
+
 [![Docs](https://img.shields.io/badge/Docs-Zensical-blue?logo=readthedocs)](https://alvin0523.github.io/mdp/)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Raspberry%20Pi-blue)](https://pixi.sh)
 [![Pixi](https://img.shields.io/badge/Pixi-Package%20Manager-brightgreen?logo=conda-forge)](https://pixi.sh)
@@ -134,12 +136,20 @@ mdp/
 
 **Group 14** - NTU College of Computing & Data Science, Multidisciplinary Project, AY2026/27 Semester 1
 
-| Name | Area |
-| --- | --- |
-| Wong Wei Ming | Raspberry Pi, Algorithm |
-| Wang Li Ling, Katie | Raspberry Pi |
-| Ojha Rashi | Algorithm, Android |
-| Lin Lihong Albert | Android |
-| Keagan Kong Kai Yi | Vision |
-| Cheong Hoi Chun | STM32 |
-| Seah Song Li | STM32 |
+[<img src="https://github.com/Alvin0523.png" width="80" style="border-radius:50%" alt="Wong Wei Ming">](https://github.com/Alvin0523)
+[<img src="https://github.com/ymkatie.png" width="80" style="border-radius:50%" alt="Wang Li Ling, Katie">](https://github.com/ymkatie)
+[<img src="https://github.com/RashI0192.png" width="80" style="border-radius:50%" alt="Ojha Rashi">](https://github.com/RashI0192)
+[<img src="https://github.com/Albert-Lin227.png" width="80" style="border-radius:50%" alt="Lin Lihong Albert">](https://github.com/Albert-Lin227)
+[<img src="https://github.com/kekgan.png" width="80" style="border-radius:50%" alt="Keagan Kong Kai Yi">](https://github.com/kekgan)
+[<img src="https://github.com/Yeet94.png" width="80" style="border-radius:50%" alt="Cheong Hoi Chun">](https://github.com/Yeet94)
+[<img src="https://github.com/seahsongli.png" width="80" style="border-radius:50%" alt="Seah Song Li">](https://github.com/seahsongli)
+
+| Name | Area | GitHub |
+| --- | --- | --- |
+| Wong Wei Ming | Raspberry Pi, Algorithm | [@Alvin0523](https://github.com/Alvin0523) |
+| Wang Li Ling, Katie | Raspberry Pi | [@ymkatie](https://github.com/ymkatie) |
+| Ojha Rashi | Algorithm, Android | [@RashI0192](https://github.com/RashI0192) |
+| Lin Lihong Albert | Android | [@Albert-Lin227](https://github.com/Albert-Lin227) |
+| Keagan Kong Kai Yi | Vision | [@kekgan](https://github.com/kekgan) |
+| Cheong Hoi Chun | STM32 | [@Yeet94](https://github.com/Yeet94) |
+| Seah Song Li | STM32 | [@seahsongli](https://github.com/seahsongli) |

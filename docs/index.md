@@ -5,7 +5,8 @@ icon: lucide/rocket
 # 🏎️ Multi-Disciplinary Project (MDP)
 
 > **Group 14**  
-> *College of Computing & Data Science (CCDS) — AY2026/2027 Semester 1*
+> *College of Computing & Data Science (CCDS) — AY2026/2027 Semester 1*  
+> 🏆 **First approved ROS2 Team in MDP**
 
 !!! note "Docs may lag the car"
     While task 2 was being tuned, some parts of the car may have been adjusted (a sensor moved, a
