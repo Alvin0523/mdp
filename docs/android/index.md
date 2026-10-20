@@ -1,52 +1,16 @@
 # Android (Remote Controller App)
 
-Link : https://github.com/RashI0192/MDP-APP 
+Source: [RashI0192/MDP-APP](https://github.com/RashI0192/MDP-APP), the `mdp_android/` submodule
+of this repo.
 
-## Interface contract (per [Assessment & Checklist](https://github.com/Alvin0523/mdp/blob/main/docs/assessment_checklist.md), Module C)
+## Protocol with the RPi
 
-**App → Robot** (over Bluetooth RFCOMM serial):
-
-- Interactive movement commands (buttons/gestures/tilt — manual text entry is explicitly disallowed by the rubric).
-- Obstacle placement: `(x, y)` + assigned obstacle number, sent on touch-drag release.
-- Obstacle delete: `OBSTACLE_DELETE, <Obstacle Number>`
-- Target face orientation per obstacle (`N`/`S`/`E`/`W`).
-- end of set up signal: `SETUP_COMPLETE`
-- Begin the run: `START, <task_id>` - task 1 (image recognition), task 2 (fastest car)
-
-Movement commands
-
-- move forward: `f`
-- turn forward right `fr`
-- turn back right `br`
-- move back `b`
-- turn forward left `f1`
-- turn back left `b1`
-- invalid move forward: `obstacle`
-- start `START`
-- clear map `CLEAR`
-- robot coordinate update `ROBOT, ,x>, <y>, <DIR>`
-- obstacle report `OBSTACLE, ,id>, <x>, <y>, <BEARING>`
-
-**Robot → App** (over the same link):
-
-- `TARGET, <Obstacle_ID>, <Target_ID>` — sent when a target symbol is identified (Task 1).
-- `ROBOT, <x>, <y>, <direction>` — robot position/heading updates for the app's live 2D map.
-- `FINISHED` — the run is complete and its timer stopped (task 1 and 2; not sent after an emergency STOP).
-- Status text updates (e.g. `"ready to start"`, `"looking for target 2"`) — must be selective/formatted, not raw log streaming (rubric C.4).
-- Acknowledge command: `ACK, <original_command>`
-
-message from robot to app
-
-- robot status string `STATUS: <text>`
-- live position `ROBOT| <row>, <col>, <DIRECTION>`
-- detected obstacle `TARGET, <obstacleid>, <imagevalue>`
-- direction of arrow (task 2) `ARROW, ,obstacleID>, <arrowValue>`
-- movement executed (passed to `PathTranslator`) `MOVE, <distance_cm>, <direction>`
-- stop `stop`
+The lines both ways, setup and testing: [Tablet link (Bluetooth)](../rpi/bluetooth.md). Rubric
+requirements: [Assessment & Checklist](../assessment_checklist.md), Module C.
 
 ## How it fits into the system
 
-See [Subsystems](https://github.com/Alvin0523/mdp/blob/main/docs/index.md#subsystems) for where this sits relative to the RPi. The RPi is the only subsystem that talks to the Android app directly — STM32, Vision, and Algorithm never see Bluetooth traffic, they only see the RPi's own ROS topics.
+See [Subsystems](../index.md#subsystems) for where this sits relative to the RPi. The RPi is the only subsystem that talks to the Android app directly — STM32, Vision, and Algorithm never see Bluetooth traffic, they only see the RPi's own ROS topics.
 
 ## Features implemented in the app
 

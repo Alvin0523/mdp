@@ -12,7 +12,7 @@ icon: lucide/rocket
 ```mermaid
 graph LR
   ANDROID["<b><u>📱 Android</u></b><br/>Tablet Remote App"]
-  RPI["<b><u>🖥️ Raspberry Pi</u></b><br/>ROS2 Jazzy · ros2_control · Gazebo Sim · robot_localization<br/><br/><b>Vision</b><br/>Camera (YOLO runs on the laptop)<br/><br/><b>Algorithm</b><br/>Costmap · Hybrid A* · Reeds-Shepp · Pure Pursuit"]
+  RPI["<b><u>🖥️ Raspberry Pi</u></b><br/>ROS2 Jazzy · ros2_control · Gazebo Sim · robot_localization<br/><br/><b>Vision</b><br/>Camera (YOLO runs on the laptop)<br/><br/><b>Algorithm</b><br/>Costmap · Hybrid A* · Reeds-Shepp · LQR"]
   STM32["<b><u>⚡ STM32</u></b><br/>PlatformIO<br/>STM32Cube HAL"]
 
   ANDROID <-->|"RFCOMM"| RPI
@@ -24,7 +24,7 @@ graph LR
 
 | Subsystem | Code |
 | --- | --- |
-| 📱 [**Android**](android/index.md) | separate repo, not part of this monorepo |
+| 📱 [**Android**](android/index.md) | `mdp_android/` ([RashI0192/MDP-APP](https://github.com/RashI0192/MDP-APP)) |
 | 🖥️ [**Raspberry Pi**](rpi/index.md) | `mdp_ros/` |
 | 👁️ [**Vision**](rpi/vision.md) | `mdp_ros/src/mdp_vision/` |
 | 🧭 [**Algorithm**](rpi/algorithm.md) | `mdp_ros/src/mdp_algorithm/` |

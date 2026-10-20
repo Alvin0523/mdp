@@ -134,6 +134,8 @@ sudo rfcomm listen /dev/rfcomm0 1
 ```
 
 The app connects; `LINK UP` shows in `pixi run btlog` and the tablet gets the car's position.
+First time on a Pi (pairing, Serial Port service), the protocol and troubleshooting:
+[Tablet link (Bluetooth)](rpi/bluetooth.md).
 
 ---
 
