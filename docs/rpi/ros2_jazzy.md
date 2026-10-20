@@ -89,7 +89,7 @@ Camera and YOLO come from `launch/vision.launch.py`, included (also runs alone: 
 
 | Service | Called by | Does |
 | --- | --- | --- |
-| `/start_run` | tablet START, `pixi run start`, Foxglove START | Start the run |
+| `/start_run` | tablet START, `pixi run start`, Foxglove GO | Start the run |
 | `/stop_run` | tablet STOP, `pixi run stop` | Stop, hold zero speed |
 | `/reset_pose` | tablet RESET, `pixi run reset`, Foxglove RESET | Real car: re-measures the gyro bias (`gyro_zero_s`, 5 s, keep the car still), then the pose back to the start pose, once (stops a run first) |
 | `/setup_obstacles` | Foxglove SETUP, `pixi run setup` | Task 1: the `layout:=` file's obstacles (default `config/tasks.yaml`), as the tablet's DONE |

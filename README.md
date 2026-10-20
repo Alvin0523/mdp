@@ -36,6 +36,20 @@ lives in three **git submodules** (each its own repository); the rest is in this
 | [`docs/`](docs) | The [documentation site](https://alvin0523.github.io/mdp/) ([Zensical](https://zensical.org)) |
 | [`hardware/`](hardware) | 3D-print files (STL): camera mounts and stands, the "halo" |
 
+## 📷 The Car
+
+| Task 1 setup | Task 2 setup |
+| :---: | :---: |
+| <img src="docs/images/car-task1.jpg" width="320" alt="The car set up for task 1: camera looking left"> | <img src="docs/images/car-task2.jpg" width="320" alt="The car set up for task 2: camera and ultrasonic forward"> |
+| Camera on a mast, looking left - reads the images while parked beside or driving past them | Camera forward at the arrows, ultrasonic at the front for the distances |
+
+## 🏁 Results
+
+| Task | Goal | Result | Time | Video |
+| --- | --- | --- | --- | --- |
+| **Task 1** - image recognition | Read every image on the obstacles | _TBD_ / 8 images | _TBD_ | _TBD_ |
+| **Task 2** - fastest car | Round both obstacles and back to the carpark | _TBD_ | _TBD_ | _TBD_ |
+
 ## 🏗️ System Architecture
 
 ```mermaid

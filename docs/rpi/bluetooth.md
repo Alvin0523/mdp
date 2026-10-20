@@ -38,7 +38,7 @@ The app itself: [Android](../android/index.md).
 | --- | --- |
 | `OBSTACLE,<n>,<col>,<row>,<N\|E\|S\|W>` | Collects obstacle `n` (image side `N/E/S/W`). An `OBSTACLE` after a `DONE` starts a new set |
 | `DONE` | Publishes the set on `/obstacle_setup` - task 1 plans it |
-| `START` | Calls `/start_run` (= `pixi run start`, Foxglove START). Rejected unless Ready. `START` only - `BEGIN` / `go` are no longer accepted |
+| `START` | Calls `/start_run` (= `pixi run start`, Foxglove GO). Rejected unless Ready. `START` only - `BEGIN` / `go` are no longer accepted |
 | `STOP` | Calls `/stop_run`: emergency stop, zero velocity, reset before the next run |
 | `RESET` | Calls `/reset_pose`: the car is at the start pose |
 | `CLEAR` | Resends the current `ROBOT` line (the tablet cleared its map; the Pi keeps obstacles and plan) |

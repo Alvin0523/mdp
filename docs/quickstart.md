@@ -12,7 +12,7 @@ graph LR
     YOLO["YOLO"]
     ASTAR["Hybrid A* paths"]
   end
-  FOX["🦊 Foxglove<br/>watch · START"]
+  FOX["🦊 Foxglove<br/>watch · GO"]
   TAB["📱 Tablet<br/>(optional)"]
   subgraph CAR["🚗 The car · pixi run pi (real) or pixi run sim (simulation)"]
     RUN["task runner"] -->|"speed, steering"| RC["ros2_control"]
@@ -106,16 +106,18 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
 
     === "Task 1"
 
+        ![Gazebo: the task 1 arena, obstacles from tasks.yaml, the car in the start box](images/gazebo-task1.webp)
+
         ```bash
         pixi run sim task:=1                  # terminal 1: Gazebo, obstacles from config/tasks.yaml
         pixi run laptop sim:=true task:=1     # terminal 2: YOLO + path planning
         pixi run foxglove                     # terminal 3: then open Foxglove, tab Task 1
         ```
 
-        The obstacles are sent by themselves; once Foxglove shows the plan, press **START** in
+        The obstacles are sent by themselves; once Foxglove shows the plan, press **GO** in
         Foxglove (or `pixi run start`).
 
-        Run again: **RESET** (also puts the Gazebo car back), then **START**.
+        Run again: **RESET POSE** (also puts the Gazebo car back), then **GO**.
 
         | Optional | How |
         | --- | --- |
@@ -126,14 +128,16 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
 
     === "Task 2"
 
+        ![Gazebo: the task 2 course - carpark, obstacle 1, the bar, side walls](images/gazebo-task2.png)
+
         ```bash
         pixi run sim task:=2                  # terminal 1: Gazebo, the course from tasks.yaml (task2 -> sim)
         pixi run laptop sim:=true task:=2     # terminal 2: YOLO + path planning
         pixi run foxglove                     # terminal 3: then open Foxglove, tab Task 2
         ```
 
-        Once the path to checkpoint 1 shows, press **START** in Foxglove (or `pixi run start`).
-        Run again: **RESET**, then **START**.
+        Once the path to checkpoint 1 shows, press **GO** in Foxglove (or `pixi run start`).
+        Run again: **RESET POSE**, then **GO**.
 
         | Optional | How |
         | --- | --- |
@@ -171,7 +175,7 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
         **START**. **STOP** = emergency stop.
 
         **Without the tablet:** start the Pi with `pixi run pi task:=1 obstacles:=yaml` (the
-        obstacles from `config/tasks.yaml`), then **RESET** and **START** in Foxglove.
+        obstacles from `config/tasks.yaml`), then **RESET POSE** and **GO** in Foxglove.
 
         | Optional | How |
         | --- | --- |
@@ -186,8 +190,8 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
         pixi run foxglove                     # on the laptop: then open Foxglove, tab Task 2
         ```
 
-        Car in the carpark, facing out. Once the path to checkpoint 1 shows: **START** in Foxglove
-        or on the tablet.
+        Car in the carpark, facing out. Once the path to checkpoint 1 shows: **GO** in Foxglove,
+        or **START** on the tablet.
 
         | Optional | How |
         | --- | --- |
@@ -216,10 +220,27 @@ Every run is watched and driven from [Foxglove](https://foxglove.dev/download). 
 on the laptop, then in the app: **Open connection** → `ws://localhost:8765`, and import the layout
 `mdp_ros/foxglove/MDP_Grp14.json` once (again after it changes).
 
-| Tab | Shows |
-| --- | --- |
-| **Task 1** / **Task 2** | 3D arena with the obstacles, costmap, checkpoints and path; the camera; the state timeline; lights (STM32, motors, tablet, **● REC**); battery; the run's log and the tablet traffic. Buttons **RESET · SETUP · START · E-STOP · REC** |
-| **Health & tuning** | Diagnostics (incl. the Pi's CPU / memory / temperature), all logs, speed / steering / yaw-rate / range plots |
+=== "Task 1"
+
+    ![Foxglove, Task 1 tab: arena, planned path, checkpoints, camera, buttons, log](images/foxglove-task1.webp)
+
+    3D arena with the obstacles, costmap, checkpoints and path; the camera; state timeline; lights
+    (STM32, motors, tablet, **● REC**); battery; the run's log and the tablet traffic. Buttons
+    **RESET POSE · SETUP · GO · STOP · REC**.
+
+=== "Task 2"
+
+    ![Foxglove, Task 2 tab: the course, the route round the bar, camera on the arrows](images/foxglove-task2.webp)
+
+    The same for task 2: the course and walls, checkpoints 1-4 and the route round the bar, the
+    camera on the arrows, the ultrasonic.
+
+=== "Health & tuning"
+
+    ![Foxglove, Health & tuning tab: diagnostics, log, speed / steering / yaw-rate / range / Pi plots](images/foxglove-health.webp)
+
+    Diagnostics (incl. the Pi's CPU / memory / temperature), all logs, `/run_status`, and speed /
+    steering / yaw-rate / range plots.
 
 **REC** records a bag on the laptop (`mdp_ros/bags/`); **SETUP** sends `tasks.yaml`'s obstacles
 like the tablet's DONE.
@@ -252,7 +273,7 @@ Steps are the same in sim and real; the **tablet** and **no-tablet** columns do 
 | 1. Obstacles | Place them, press **DONE** | nothing (`tasks.yaml` is sent at start), or `pixi run setup` to send it again | `OBSTACLES #1 (5,10)S …` |
 | 2. Wait for the plan | tablet **PLAN: DONE** | | `PLAN      done, 4 legs - waiting for START` |
 | 3. Car in the start box, reset | **RESET** | `pixi run reset` | `RESET     done - at the start`, tablet **RESET: DONE** |
-| 4. Start | **START** (needs STATUS *Ready*) | `pixi run start` (Foxglove **START**) | `START     1 -> 2 -> 4 -> 3` |
+| 4. Start | **START** (needs STATUS *Ready*) | `pixi run start` (Foxglove **GO**) | `START     1 -> 2 -> 4 -> 3` |
 | 5. Stop any time | **STOP** | `pixi run stop` | `STOP      at (9,5)E - reset before the next run` |
 
 What the launch terminal prints during a run (one line per event, cells not metres):

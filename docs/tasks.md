@@ -10,6 +10,15 @@ them: [Quickstart](quickstart.md). The algorithms in detail: [Algorithm](rpi/alg
 
 ## Sensors per task
 
+=== "Task 1 setup"
+
+    ![The car set up for task 1: camera on a mast looking left](images/car-task1.jpg){ width="420" }
+
+=== "Task 2 setup"
+
+    ![The car set up for task 2: camera forward, ultrasonic at the front](images/car-task2.jpg){ width="420" }
+
+
 | Sensor | Task 1 | Task 2 |
 | --- | --- | --- |
 | Wheel encoders + IMU (fused by the EKF) | The pose, all the time | The pose, all the time |
