@@ -14,6 +14,11 @@
 
 ### [📖 Read the Docs →](https://alvin0523.github.io/mdp/) · [🚀 Quickstart →](https://alvin0523.github.io/mdp/quickstart/)
 
+> [!NOTE]
+> While task 2 was being tuned, some parts of the car may have been adjusted (a sensor moved, a
+> setting changed) without the docs catching up. If something does not match what you see, contact
+> **Wei Ming** ([@Alvin0523](https://github.com/Alvin0523)).
+
 ---
 
 ## 📖 About

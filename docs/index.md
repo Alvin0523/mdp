@@ -7,6 +7,11 @@ icon: lucide/rocket
 > **Group 14**  
 > *College of Computing & Data Science (CCDS) — AY2026/2027 Semester 1*
 
+!!! note "Docs may lag the car"
+    While task 2 was being tuned, some parts of the car may have been adjusted (a sensor moved, a
+    setting changed) without the docs catching up. If something does not match what you see,
+    contact **Wei Ming** ([@Alvin0523](https://github.com/Alvin0523)).
+
 ---
 
 ```mermaid
