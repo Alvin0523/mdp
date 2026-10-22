@@ -72,6 +72,17 @@ lives in three **git submodules** (each its own repository); the rest is in this
 | **Task 1** - image recognition | Read every image on the obstacles | 7 / 8 images (rank 6, fastest in the top 10) | 52 s | _TBD_ |
 | **Task 2** - fastest car | Round both obstacles and back to the carpark | Rank 1 | 8 s | _TBD_ |
 
+## 🎬 Videos
+
+The same code in Gazebo and on the real car, both watched in Foxglove (the real runs played back from
+their bags). Sim and real are example runs, not the same obstacle layout. Previews sped up; click for
+the full video.
+
+| | Simulation (Gazebo) | Real car (bag playback) |
+| :---: | :---: | :---: |
+| **Task 1** - every image (4x) | [<img src="docs/images/sim-task1.gif" width="400" alt="Task 1 in Gazebo and Foxglove: the car stops at each obstacle and reads its image">](docs/images/sim-task1.mp4) | [<img src="docs/images/real-task1.gif" width="400" alt="Task 1 on the real car, played back in Foxglove: the car stops at each obstacle and reads its image">](docs/images/real-task1.mp4) |
+| **Task 2** - fastest car (1.5x) | [<img src="docs/images/sim-task2.gif" width="400" alt="Task 2 in Gazebo and Foxglove: out of the carpark, round both obstacles and back">](docs/images/sim-task2.mp4) | [<img src="docs/images/real-task2.gif" width="400" alt="Task 2 on the real car, played back in Foxglove: out of the carpark, round both obstacles and back">](docs/images/real-task2.mp4) |
+
 ## 🏗️ System Architecture
 
 ```mermaid
