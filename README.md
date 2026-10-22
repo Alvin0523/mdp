@@ -3,12 +3,27 @@
 **🏆 First approved ROS2 Team in MDP**
 
 [![Docs](https://img.shields.io/badge/Docs-Zensical-blue?logo=readthedocs)](https://alvin0523.github.io/mdp/)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Raspberry%20Pi-blue)](https://pixi.sh)
-[![Pixi](https://img.shields.io/badge/Pixi-Package%20Manager-brightgreen?logo=conda-forge)](https://pixi.sh)
-[![ROS2](https://img.shields.io/badge/ROS2-Jazzy-22314E?logo=ros)](https://docs.ros.org/en/jazzy/)
-[![STM32](https://img.shields.io/badge/Embedded-STM32F407-03234C?logo=stmicroelectronics)](https://github.com/Alvin0523/mdp_stm32)
-[![YOLO](https://img.shields.io/badge/Vision-YOLO26-111F68)](https://docs.ultralytics.com/)
 [![Course](https://img.shields.io/badge/NTU%20CCDS-MDP%20AY26%2F27%20S1-c8102e)](https://alvin0523.github.io/mdp/)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Raspberry%20Pi%204-blue?logo=raspberrypi)](https://pixi.sh)
+[![Pixi](https://img.shields.io/badge/Pixi-Package%20Manager-brightgreen?logo=conda-forge)](https://pixi.sh)
+
+[![ROS2](https://img.shields.io/badge/ROS2-Jazzy-22314E?logo=ros)](https://docs.ros.org/en/jazzy/)
+[![ros2_control](https://img.shields.io/badge/ros2__control-Ackermann%20controller-22314E?logo=ros)](https://control.ros.org/jazzy/)
+[![robot_localization](https://img.shields.io/badge/robot__localization-EKF%20(wheels%20%2B%20IMU)-22314E?logo=ros)](https://docs.ros.org/en/jazzy/p/robot_localization/)
+[![Cyclone DDS](https://img.shields.io/badge/Middleware-Cyclone%20DDS-22314E)](https://cyclonedds.io/)
+[![Gazebo](https://img.shields.io/badge/Sim-Gazebo%20Harmonic-F58113)](https://gazebosim.org/)
+[![Foxglove](https://img.shields.io/badge/Viz-Foxglove-6F3BE8)](https://foxglove.dev/)
+[![Planning](https://img.shields.io/badge/Planning-Hybrid%20A*%20%C2%B7%20Reeds--Shepp%20%C2%B7%20LQR-informational)](https://alvin0523.github.io/mdp/rpi/algorithm/)
+
+[![YOLO](https://img.shields.io/badge/Vision-YOLO26%20(Ultralytics)-111F68)](https://docs.ultralytics.com/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-CUDA%20%7C%20CoreML-EE4C2C?logo=pytorch)](https://pytorch.org/)
+[![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Tailscale](https://img.shields.io/badge/Network-Tailscale-242424?logo=tailscale)](https://tailscale.com/)
+
+[![STM32](https://img.shields.io/badge/Embedded-STM32F407-03234C?logo=stmicroelectronics)](https://github.com/Alvin0523/mdp_stm32)
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-STM32Cube%20HAL-F5822A?logo=platformio)](https://platformio.org/)
+[![C](https://img.shields.io/badge/Firmware-C-A8B9CC?logo=c)](https://github.com/Alvin0523/mdp_stm32)
+[![Android](https://img.shields.io/badge/Tablet-Android%20(Java)-3DDC84?logo=android&logoColor=white)](https://github.com/RashI0192/MDP-APP)
 
 > An Ackermann-steered robot car that finds and reads image cards around an arena (task 1) and races
 > round two obstacles and back to its carpark (task 2), with ROS 2 Jazzy on a Raspberry Pi, STM32
