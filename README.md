@@ -54,8 +54,8 @@ lives in three **git submodules** (each its own repository); the rest is in this
 
 | Task | Goal | Result | Time | Video |
 | --- | --- | --- | --- | --- |
-| **Task 1** - image recognition | Read every image on the obstacles | _TBD_ / 8 images | _TBD_ | _TBD_ |
-| **Task 2** - fastest car | Round both obstacles and back to the carpark | _TBD_ | _TBD_ | _TBD_ |
+| **Task 1** - image recognition | Read every image on the obstacles | 7 / 8 images (rank 6, fastest in the top 10) | 52 s | _TBD_ |
+| **Task 2** - fastest car | Round both obstacles and back to the carpark | Rank 1 | 8 s | _TBD_ |
 
 ## 🏗️ System Architecture
 
