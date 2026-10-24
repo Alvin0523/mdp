@@ -40,6 +40,20 @@ Commands run **from `mdp_ros/`**. Positions are **tablet cells**: column, row `0
 
 ## 1. Install
 
+!!! info "Everything runs with pixi"
+    [Pixi](https://pixi.sh) installs the whole stack (ROS 2, Gazebo, YOLO, the STM32 toolchain)
+    per project, from one lock file - like uv, but for conda and PyPI packages together. No
+    `sudo apt`, no system ROS: `pixi install`, then `pixi run <task>`.
+
+    | Platform | |
+    | --- | --- |
+    | macOS (Apple silicon) · Linux (x86 or ARM, e.g. the Pi) | Supported: the repos are locked for `osx-arm64`, `linux-64`, `linux-aarch64` |
+    | Windows | Use **WSL** (Linux): only the scripts differ from macOS and Linux. Native Windows could work with minor changes, untested |
+
+    **Docker** is not recommended for a stack that changes this fast across platforms. Use it
+    for deployment, or when you need CUDA or a specific kernel or driver - pixi runs inside Docker
+    too.
+
 === "💻 Simulation"
 
     Everything runs on the laptop.
