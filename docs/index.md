@@ -13,6 +13,10 @@ icon: lucide/rocket
     setting changed) without the docs catching up. If something does not match what you see,
     contact **Wei Ming** ([@Alvin0523](https://github.com/Alvin0523)).
 
+!!! tip "Who this repo needs"
+    At least one team member familiar with **ROS 2** is recommended: everything on the Raspberry
+    Pi (the task runners, planning, vision, the simulation) is ROS 2.
+
 ---
 
 ```mermaid

@@ -30,5 +30,5 @@ This page documents the verified hardware components and physical specifications
 
 Wheelbase, tracks, tyre size, steering limits, body outline, turning circles and sensor positions
 as measured on our car, with where each lives and how to re-measure it:
-[Quickstart → Measured car numbers](quickstart.md#7-measured-car-numbers). That table is the one
+[Quickstart → Measured car numbers](quickstart.md#8-measured-car-numbers). That table is the one
 kept up to date; it is not repeated here.

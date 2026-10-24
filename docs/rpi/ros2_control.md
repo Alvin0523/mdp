@@ -42,7 +42,7 @@ so they exist once.
 
 The URDF steering joints are limited to the measured **43.0° left / 32.5° right** (`steer_left` /
 `steer_right`), the same values as the STM32's clamp (`mdp_stm32/include/servo.h`) and the planner.
-Positive = left (REP-103). Measured values and how: [Quickstart → Measured car numbers](../quickstart.md#7-measured-car-numbers).
+Positive = left (REP-103). Measured values and how: [Quickstart → Measured car numbers](../quickstart.md#8-measured-car-numbers).
 
 Because both wheels turn to the same angle, the tyres scrub, and the car turns **wider** than
 wheelbase ÷ tan(angle). The planner therefore uses the *measured* turning circle

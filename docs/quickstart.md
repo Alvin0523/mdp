@@ -121,7 +121,7 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
 
         | Optional | How |
         | --- | --- |
-        | Tablet | Add `obstacles:=tablet` to terminal 1 and [connect the tablet](#connecting-the-tablet) to the laptop (Linux). Place the obstacles → **DONE** → **RESET** → **START**. Gazebo's blocks move to match |
+        | Tablet | Add `obstacles:=tablet` to terminal 1 and [connect the tablet](#connecting-the-tablet) to the laptop (Linux or macOS). Place the obstacles → **DONE** → **RESET** → **START**. Gazebo's blocks move to match |
         | Step-through | Add `step:=true` to terminal 1; then `pixi run step` instead of `start` - SPACE drives to the next stop |
         | One window | `pixi run sim-car task:=1` (zellij) instead of terminals 1-3, same options |
         | No Gazebo window | Add `gui:=false` to terminal 1 |
@@ -141,8 +141,8 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
 
         | Optional | How |
         | --- | --- |
-        | Tablet | [Connect it](#connecting-the-tablet) to the laptop (Linux); **START** / **STOP** from the app |
-        | Step-through | Add `step:=true` to terminal 1; then `pixi run step` - one checkpoint per SPACE, with a live preview ([Task 2](#4-task-2-fastest-car)) |
+        | Tablet | [Connect it](#connecting-the-tablet) to the laptop (Linux or macOS); **START** / **STOP** from the app |
+        | Step-through | Add `step:=true` to terminal 1; then `pixi run step` - one checkpoint per SPACE, with a live preview ([Task 2](#5-task-2-fastest-car)) |
         | One window | `pixi run sim-car task:=2` (zellij) instead of terminals 1-3 |
         | Another course | Edit `task2` → `sim` in `config/tasks.yaml` (d1, d2, arrows, bar width), restart terminal 1 |
 
@@ -154,7 +154,7 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
         pixi run sim                          # terminal 1
         pixi run laptop sim:=true             # terminal 2
         pixi run foxglove                     # terminal 3
-        pixi run teleop                       # or pixi run calib ... (section 6)
+        pixi run teleop                       # or pixi run calib ... (section 7)
         ```
 
 === "🤖 Real deployment"
@@ -204,7 +204,7 @@ Three terminals: **the car**, **the laptop**, **Foxglove** (the diagram above).
         pixi run pi                           # on the Pi
         pixi run laptop                       # on the laptop
         pixi run foxglove                     # on the laptop
-        pixi run teleop                       # or pixi run calib ... (section 6), on the laptop
+        pixi run teleop                       # or pixi run calib ... (section 7), on the laptop
         ```
 
 - **The tablet link is always on**: a tablet can connect to any run and send obstacles, START,
@@ -251,8 +251,8 @@ The car plans its paths itself after 2 s without an answer; image scans report `
 
 ### Connecting the tablet
 
-Pair the tablet with the machine running the car's half (the Pi; for the simulation a Linux
-laptop) once in Bluetooth settings, then open the link before starting (keep this terminal open):
+Pair the tablet with the machine running the car's half (the Pi; for the simulation the
+laptop, Linux or macOS) once in Bluetooth settings, then open the link before starting (keep this terminal open):
 
 ```bash
 sudo rfcomm listen /dev/rfcomm0 1
@@ -264,7 +264,18 @@ First time on a Pi (pairing, Serial Port service), the messages and troubleshoot
 
 ---
 
-## 3. Task 1 (explore + recognise)
+## 3. Before a real run (checklist)
+
+1. **Battery**: OLED page 1 `B:xx.xV`; charge if low.
+2. **Motor switch** (`PD3`) **ON**: OLED `ES:RDY`; Foxglove light *Motors ON*.
+3. **STM32 plugged in**: the Foxglove light *STM32 OK* once running.
+4. **Tablet connected**: *Tablet OK* light, `LINK UP` in `pixi run btlog`.
+5. **Car in the start box**, cell (1,1) facing N → RESET → tablet **RESET: DONE**.
+6. **Obstacles sent** → **PLAN: DONE** → tablet status **Ready** → START.
+
+---
+
+## 4. Task 1 (explore + recognise)
 
 Steps are the same in sim and real; the **tablet** and **no-tablet** columns do the same thing.
 
@@ -293,13 +304,13 @@ FINISHED  all obstacles visited
 
     | `visit.mode` | Stops | Position fix |
     | --- | --- | --- |
-    | `anchors` (default) | **Anchors** (square-on stops) + **drive-bys** (images read while driving past, at `visit.drive_by_speed`) + **angled** stops where no square stop fits + an angled **last** stop | IR at every anchor |
-    | `square` (the old way) | A square-on stop at every image; an image no square stop fits is skipped | IR at every stop |
+    | `square` (default) | A square-on stop at every image; where it does not fit, the stop slides along the face (up to 10 cm) or back (up to 13 cm); no spot at all: skipped | IR at every stop that stays within 3 cm of the block's centre |
+    | `anchors` (faster, [future work](#task-1-stop-less-drive-bys)) | **Anchors** (square-on stops) + **drive-bys** (images read while driving past, at `visit.drive_by_speed`) + **angled** stops where no square stop fits + an angled **last** stop | IR at every anchor |
 
     In `anchors` mode the plan picks the anchors (log `PLAN      #13 anchor, drive-by #16 on the
     way`); a drive-by not read by the end is visited square after the last stop
     (`DRIVE-BY  #16 not read - a stop for it now`). Change it with `ros2 param set /task1_runner
-    visit.mode square`; it takes effect at the next obstacle set (DONE / `pixi run setup`).
+    visit.mode anchors`; it takes effect at the next obstacle set (DONE / `pixi run setup`).
 - **Run again:** put the car back in the start box → RESET → START. The obstacles and plan are kept.
   A reset during a run stops the run first.
 - **Step through** (testing): add `step:=true` to `pixi run pi` / `sim`, then `pixi run step`. SPACE
@@ -309,7 +320,9 @@ FINISHED  all obstacles visited
 - **In sim, reset also puts the Gazebo car back at the start** (it teleports it), so you can run
   again without restarting the sim: `pixi run reset`, then `pixi run start`.
 
-## 4. Task 2 (fastest car)
+---
+
+## 5. Task 2 (fastest car)
 
 How to start it: [Run](#2-run). No obstacles to send and no reset needed. The distances are unknown (d1, d2 each 0.60–1.50 m), so
 the car measures them on the way. Four checkpoints: **1** beside obstacle 1 (arrow 1's side),
@@ -374,7 +387,9 @@ every 5 s and re-plans checkpoints 2-4 (`LIVE      arrow LEFT, 47 cm -> 45 (gap)
 anything changed; `LIVE      no …` if a reading is missing - the last plan stays). Move or swap the obstacles and watch Foxglove.
 SPACE commits the latest plan and drives on; nothing is re-planned after that.
 
-## 5. Bare car: manual driving
+---
+
+## 6. Bare car: manual driving
 
 Start the bare car (`pixi run sim` / `pixi run pi`, no `task:=`, + `pixi run laptop`). Then:
 
@@ -383,7 +398,12 @@ Start the bare car (`pixi run sim` / `pixi run pi`, no `task:=`, + `pixi run lap
 
 ---
 
-## 6. Calibration: `pixi run calib`
+## 7. Calibration: `pixi run calib`
+
+!!! warning "Calibrate your own car"
+    Every car is different, even the same model: wheel size, servo centre, steering limits,
+    turning circles and sensor mounts all vary. The numbers in this repo (§8) are **our** car's.
+    Measure yours with the commands below before trusting a run.
 
 The driving ones run on the **bare car** (`pixi run sim` / `pi` + `laptop`, no `task:=`); `calib`
 refuses to drive while task 1 or 2 is running. `pixi run calib <what> -h` lists each one's options.
@@ -407,7 +427,7 @@ In sim, `calib turn` agrees with Gazebo's true circle to within 3 mm (18.0 / 18.
 
 ---
 
-## 7. Measured car numbers
+## 8. Measured car numbers
 
 Every number measured on the car, where it lives, and how to re-measure it. Each lives in **one**
 file only; the launch copies the URDF's numbers into the controller and planner.
@@ -436,7 +456,9 @@ is wider than wheelbase ÷ tan(angle) (tyre scrub): **measure it**, don't calcul
     The 43.0° / 32.5° limits must also be in the firmware on the car (`mdp_stm32/include/servo.h`).
     After changing them, [flash it again](#1-install).
 
-### Settings you'll tune: `config/navigation.yaml`
+---
+
+## 9. Settings you'll tune: `config/navigation.yaml`
 
 Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.yaml`.
 
@@ -446,7 +468,7 @@ Everything that drives the car is in `mdp_ros/src/mdp_bringup/config/navigation.
 | `task1_runner` `planner.checkpoint_standoff` | 0.30 m | Rear axle this far from the block centre at each stop |
 | `task1_runner` `costmap.footprint_padding` | 0.06 m | Safety margin round the car (blocks) |
 | `task1_runner` `follower.xy_goal_tolerance` | 0.03 m | "Arrived" |
-| `task1_runner` `visit.mode` · `visit.drive_by_speed` | `anchors` · 0.2 m/s | How images are visited (above) · speed while a drive-by image is in view |
+| `task1_runner` `visit.mode` · `visit.drive_by_speed` | `square` · 0.2 m/s | How images are visited (above) · speed while a drive-by image is in view |
 | `task1_runner` `visit.view_max_dist` · `view_max_bearing` · `view_max_incidence` | 0.50 m · 25° · 45° | "In view" for a drive-by (anchors mode) |
 | `manual_speed_mps` | 0.15 m/s | Tablet arrow buttons |
 
@@ -480,7 +502,7 @@ The other config files, all in the same folder: `tasks.yaml` (obstacle layouts, 
 
 ---
 
-## 8. More tools
+## 10. More tools
 
 Next to a running car, from `mdp_ros/`. [Foxglove](#foxglove) covers most of this; these are for
 the terminal.
@@ -499,18 +521,95 @@ Every other task: [All pixi tasks](#all-pixi-tasks-mdp_ros).
 
 ---
 
-## 9. Before a real run (checklist)
+## 11. Doing it better
 
-1. **Battery**: OLED page 1 `B:xx.xV`; charge if low.
-2. **Motor switch** (`PD3`) **ON**: OLED `ES:RDY`; Foxglove light *Motors ON*.
-3. **STM32 plugged in**: the Foxglove light *STM32 OK* once running.
-4. **Tablet connected**: *Tablet OK* light, `LINK UP` in `pixi run btlog`.
-5. **Car in the start box**, cell (1,1) facing N → RESET → tablet **RESET: DONE**.
-6. **Obstacles sent** → **PLAN: DONE** → tablet status **Ready** → START.
+What we would do next, and what to watch out for.
+
+| Area | Do | Why |
+| --- | --- | --- |
+| Testing | [Test in Gazebo first](#test-in-the-sim-first) | Same code as the car; only calibration and the firmware need the real car |
+| Compute | [Plan on the laptop, not the Pi](#the-pi) | Hybrid A\* is slow on the Pi's CPU |
+| Task 1 | [Drive-bys: stop less](#task-1-stop-less-drive-bys) | 8 stops → ~4; ~30-35 s for 8 obstacles on the real car |
+| Task 1 | [Calibrate the start pose](#task-1-other-ideas) | Every leg builds on it; errors grow |
+| Speed | [Drive task 1 nearer task 2's speeds](#speed) | The stops limit task 1, not the car |
+| Pi | [Heatsink or fan, below ~60 °C](#the-pi) | A hot Pi throttles and everything gets late |
+| Car | [Calibrate your own car](#7-calibration-pixi-run-calib) | Every car is different, even the same model |
+
+### Test in the sim first
+
+| Part | Tested in the sim by |
+| --- | --- |
+| Algorithm (planning, following, the task runners) | `pixi run sim task:=1` (or `2`): the same runners drive Gazebo's car |
+| Vision | `pixi run laptop sim:=true`: YOLO reads Gazebo's camera; the blocks carry the real image symbols |
+| Tablet | `obstacles:=tablet`, the tablet paired with the laptop (Linux or macOS): Gazebo's blocks follow the tablet's layout; START / STOP as on the car |
+| STM32 | Gazebo stands in for it (wheels, servo, IMU, IR, ultrasonic) |
+
+### Task 1: stop less (drive-bys)
+
+We had no time left to improve task 1's logic: the car stops at **every** image. The safest
+improvement is to stop only where needed and read the rest **driving by**.
+
+```mermaid
+graph TB
+  subgraph SQ["square (default): a stop at every image"]
+    direction LR
+    A1["Drive"] --> A2["Stop square-on<br/>camera ⟂ image"] --> A3["IR fix<br/>+ read"]
+  end
+  subgraph DB["drive-by (anchors mode): no stop"]
+    direction LR
+    B1["Drive"] --> B2["Image in view<br/>over a stretch of path"] --> B3["Read while<br/>moving slowly"]
+  end
+  SQ ~~~ DB
+```
+
+| | `square` (default) | `anchors` (built, not the default) |
+| --- | --- | --- |
+| Stops | One at every image | Only where needed (**anchors**); the rest driving by |
+| Camera | Perpendicular to the image, at the stop | Any angle in view (≤ 50 cm, ≤ 25° off its axis) over a stretch of the leg |
+| Position fix (IR) | At every stop | At the anchors only |
+| 8 obstacles | - | ~30-35 s in our real-car tests, but risky |
+
+Switch with `visit.mode` ([Task 1](#4-task-1-explore-recognise)). While an image is in view, drive
+slowly (`visit.drive_by_speed`): **motion blur** lowers YOLO's accuracy.
+
+### Task 1: other ideas
+
+| Idea | Verdict |
+| --- | --- |
+| Calibrate the pose at the start | **Do it.** Every leg builds on it |
+| Steadier, faster-processed IR readings (read at 100 Hz) | **Helps**: a quicker, better fix at each stop |
+| The ultrasonic for the position fix | **Careful**: its ~15° cone sees blocks to the side - it may make the fix worse |
+| Work out which obstacle a label belongs to from its box size (camera intrinsics + known label size) | **Not recommended**: task 1's background varies, so it misreads |
+
+### Speed
+
+| | Task 1 (ours) | Task 2 (ours) | Encoder still accurate | Motor top speed |
+| --- | --- | --- | --- | --- |
+| Straight | **0.3 m/s** | **0.9 m/s** | up to ~1.0 m/s | ~1.15 m/s |
+| Curves | ~0.2 m/s (`max_lateral_accel` 0.25 m/s²) | `max_lateral_accel` 1.0 m/s² | | |
+| Stopping | slows over the last 12 cm | brakes at `brake_decel` 1.2 m/s², planned ahead | | |
+| Tried faster | 0.4 m/s: rolled ~20 cm past the stops | 1.05 m/s: cut 12-18 cm inside checkpoint 2 | | |
+
+- **Encoder still accurate:** the STM32's wheel-speed loop, tested up to 30 rad/s, within ±6 ticks
+  ([STM32](stm32/index.md)).
+- **Motor top speed:** how fast the motor can spin, 34.56 rad/s × the 33.3 mm wheel
+  ([STM32 → Firmware](stm32/architecture.md)).
+
+Task 1 is limited by its stops, not the car: braking planned ahead (as task 2) and fewer stops.
+
+### The Pi
+
+| Do | Why |
+| --- | --- |
+| Plan the paths on the laptop (`pixi run laptop`), not the Pi | Hybrid A\* is slow on the Pi. The Pi only follows, and plans a leg itself only if the laptop does not answer within 2 s |
+| A heatsink or fan; keep it below ~60 °C | A hot Pi throttles: following and the bridges get late |
+| Overclock only with better cooling | More heat, sooner throttling |
 
 ---
 
-## Launch arguments
+## Reference
+
+### Launch arguments
 
 Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.launch.py`).
 
@@ -530,7 +629,7 @@ Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.
 | `role:=` | `pi` `laptop` | `pi` | The car's half (real or Gazebo) / the laptop's half. Set by `pi` / `sim` / `laptop`; always both |
 | `step:=` | `true` `false` | `false` | Task 1 / 2 testing: stop at every checkpoint, `pixi run step` (SPACE) drives on |
 
-## All pixi tasks (`mdp_ros/`)
+### All pixi tasks (`mdp_ros/`)
 
 `pixi task list` shows these with one line each. Every task that starts ROS nodes also sets
 `DYLD_LIBRARY_PATH` - needed on a Mac only ([Troubleshooting](troubleshooting.md)).
@@ -548,7 +647,7 @@ Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.
 | `pixi run reset` / `start` / `stop` | Reset to the start pose (any task) / start the run / **emergency stop**: zero velocity, reset before the next run. Same as the tablet's and Foxglove's buttons (the motor switch cuts the motors in hardware) |
 | `pixi run step` | With `step:=true`: SPACE = next checkpoint (the first = START; task 1: after each stop's IR fix + scan), `s` = E-STOP, `q` = quit |
 | `pixi run task2-table` | Rebuild task 2's route table (`config/task2_routes.json.gz`) after changing the car or a setting it depends on. `[--no-hybrid] [--out FILE]` |
-| `pixi run calib …` | [Calibration](#6-calibration-pixi-run-calib), rows to `calibration_log.csv`: `straight 2.0 [--speed 0.9]` · `rotate 90` · `turn left\|right [--speed 0.35]` · `goto COL ROW N\|E\|S\|W` · `ultrasonic CM` · `ir` (`-h` for options) |
+| `pixi run calib …` | [Calibration](#7-calibration-pixi-run-calib), rows to `calibration_log.csv`: `straight 2.0 [--speed 0.9]` · `rotate 90` · `turn left\|right [--speed 0.35]` · `goto COL ROW N\|E\|S\|W` · `ultrasonic CM` · `ir` (`-h` for options) |
 | `pixi run around-obstacle` | Checklist: approach a block on the ultrasonic and drive a square round it `[--direction right]` |
 | `pixi run teleop` | Keyboard driving |
 | `pixi run foxglove` | Foxglove bridge: `ws://<pi or localhost>:8765`, display frame `map` |
@@ -559,7 +658,7 @@ Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.
 | `pixi run export-coreml` | Mac, once per model: `best_v5.pt` → `best_v5.mlpackage` (CoreML, the Neural Engine) and install it. `[model.pt] [--int8]`. The detector uses the `.mlpackage` next to the `.pt` by itself |
 | `pixi run bench-yolo` | Time YOLO on every backend here (CUDA / CoreML / MPS / CPU). `[model.pt] [--frames N] [--images DIR]` |
 
-## STM32 pixi tasks (`mdp_stm32/`)
+### STM32 pixi tasks (`mdp_stm32/`)
 
 | Task | What |
 | --- | --- |
@@ -570,6 +669,6 @@ Added after `pixi run sim`, `pi` or `laptop` (all start `mdp_bringup/launch/mdp.
 | `pixi run monitor` | Debug `printf` on UART1 |
 | `pixi run udev` | Once per machine, board plugged in: `/dev/stm32_serial` (UART3, the car link) and `/dev/stm32_flash` (UART1, flashing). Asks for sudo |
 
-## Tablet ↔ Pi messages
+### Tablet ↔ Pi messages
 
 Every line both ways, Pi setup, testing and troubleshooting: [Tablet link (Bluetooth)](rpi/bluetooth.md).

@@ -105,7 +105,7 @@ From pixi, not in `src/`: `ros2_control` + `ackermann_steering_controller`,
 | `config/controller.yaml` · `ekf.yaml` | ros2_control · localisation |
 | `config/bridges.yaml` · `vision.yaml` | Serial / Bluetooth devices · camera and YOLO |
 
-All measured values, and how to re-measure them: [Quickstart → Measured car numbers](../quickstart.md#7-measured-car-numbers).
+All measured values, and how to re-measure them: [Quickstart → Measured car numbers](../quickstart.md#8-measured-car-numbers).
 
 ## The pixi environment (`mdp_ros/pixi.toml`)
 

@@ -33,15 +33,16 @@ mdp_algorithm/
 1. **Checkpoints** (`visiting_order.py`): for each obstacle, the car's `base_link` (rear-axle centre)
    stops `planner.checkpoint_standoff` (0.30 m) from the block centre, straight out from the image
    face, turned so the **camera** faces the image (its direction is read from the URDF: left in
-   task 1). Snapped to a cell centre. An obstacle
-   whose checkpoint the car cannot fit into is skipped as unreachable.
+   task 1). Snapped to a cell centre. Where the car does not fit, the stop slides along the face
+   (up to 10 cm either way), then back along the car's heading (up to 13 cm, as far as the image
+   stays whole in the camera's view). No spot at all: skipped as unreachable.
 2. **Order** (`visiting_order.py`): every permutation of the reachable obstacles, scored by
    Reeds-Shepp distance between checkpoints (exact for ≤ 8 obstacles). Cheap, so the route shows at
    once. Reeds-Shepp ignores obstacles - a known simplification.
 3. **Legs** (`hybrid_astar.py`, via `plan_leg()`): the runner plans every leg back to back in a
    background thread while the car already drives the first one.
 
-### `visit.mode: anchors` (`visit_plan.py`, 2026-10-17, the default)
+### `visit.mode: anchors` (`visit_plan.py`, not the default)
 
 Fewer stops, and every image visited. Steps 1 and 2 change; step 3 is the same.
 
@@ -152,4 +153,4 @@ Hybrid A* (on the laptop's `leg_planner`, on the Pi if it does not answer in
 `remote_plan_timeout`) only plans what none of that covers. The costmap is the task 2 course
 (5 × 2.4 m: carpark walls, both blocks, and the side walls that may stand 50 cm out from the bar).
 Settings: `navigation.yaml` (`task2_runner`); course rules: `tasks.yaml` (`task2`). Details:
-[Quickstart → Task 2](../quickstart.md#4-task-2-fastest-car).
+[Quickstart → Task 2](../quickstart.md#5-task-2-fastest-car).
