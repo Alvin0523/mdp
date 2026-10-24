@@ -36,6 +36,11 @@ Commands run **from `mdp_ros/`**. Positions are **tablet cells**: column, row `0
 !!! tip "This docs site locally"
     From the `mdp` repo root: `pixi install`, then `pixi run serve` → `http://127.0.0.1:8000`.
 
+!!! tip "Using an AI coding assistant"
+    `AGENTS.md` (the `mdp` repo root) and `mdp_ros/AGENTS.md` tell it how this repo works: pixi
+    only, where each setting lives, how to test in its own sim, what never to run on the real car,
+    and the order to get started in. Ask it to read them first.
+
 ---
 
 ## 1. Install

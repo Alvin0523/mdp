@@ -26,6 +26,23 @@ Everything runs through **pixi**, from the folder whose `pixi.toml` it is. Never
 | `mdp_ros/` | `pixi run build` · `pixi run test` · the runs: `docs/quickstart.md`, `mdp_ros/AGENTS.md` |
 | `mdp_stm32/` | `pixi run build` · `flash` · `monitor` · `probe` · `udev` - flash **only when asked** |
 
+The repos are locked for `osx-arm64`, `linux-64` and `linux-aarch64` (the Pi). Windows: WSL.
+
+## Helping someone get started
+
+New to the project? Walk them through `docs/quickstart.md` in this order:
+
+| Step | What | Where |
+| --- | --- | --- |
+| 1 | Install pixi, clone with submodules, `pixi install` + `pixi run build` in `mdp_ros/` | Quickstart §1 |
+| 2 | Run task 1 in the **sim** (no car needed): Gazebo + the laptop's half + Foxglove | Quickstart §2, §4 |
+| 3 | ROS 2 basics: at least one team member should know ROS 2 | `docs/index.md`, `docs/rpi/` |
+| 4 | Their **own car**: calibrate it, then put the numbers in the URDF / `navigation.yaml` - every car differs, even the same model | Quickstart §7, §8, §9 |
+| 5 | The real car: network, flash the STM32, the checklist | `docs/rpi/network.md`, Quickstart §1, §3 |
+| 6 | What to improve next | Quickstart §11 |
+
+Our measured numbers are for our car only: never tell someone to trust them on theirs.
+
 ## How a run works (one picture)
 
 Every run = **the car** (`pixi run pi` on the Pi, or `pixi run sim` = Gazebo on the laptop) +
@@ -42,7 +59,8 @@ to the Pi (`docs/rpi/bluetooth.md`).
   paragraphs, no history, no dates in prose (dates only on measurements), no TODO lists, no vendor
   (WHEELTEC) references.
 - One fact in one place: commands in `quickstart.md`, how the tasks work in `tasks.md`, the tablet
-  protocol in `rpi/bluetooth.md`, the network in `rpi/network.md`, problems in `troubleshooting.md`.
+  protocol in `rpi/bluetooth.md`, the network in `rpi/network.md`, problems in `troubleshooting.md`,
+  what to improve next in `quickstart.md` §11.
 - Check what you write against the code (and the app's code in `mdp_android/`) - not against older
   docs.
 - Images go in `docs/images/`. Build (`pixi run build`) before committing.
@@ -63,7 +81,7 @@ to the Pi (`docs/rpi/bluetooth.md`).
 - Test sims must be isolated from the user's (separate `ROS_DOMAIN_ID` and `GZ_PARTITION`, see
   `mdp_ros/AGENTS.md`); never `pkill ros2` / `gz`.
 
-## Working with the user (Wei Ming)
+## Working with the user
 
 - Agree the design before implementing or running sims; small fixes inside the task are fine.
 - Answer with tables and diagrams, short. When sim and real (or two options) differ, list the
